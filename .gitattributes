@@ -1,0 +1,24 @@
+# すべてのテキストファイルを LF に正規化
+* text=auto eol=lf
+
+# 代表拡張子の明示（任意だが可読差分に有効）
+*.py      text eol=lf
+*.json    text eol=lf
+*.xml     text eol=lf
+*.csv     text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.toml    text eol=lf
+*.bat     text eol=crlf
+*.ps1     text eol=crlf
+
+# バイナリ（差分しない）
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.zip -text
+*.7z  -text
+*.exe -text
+*.dll -text

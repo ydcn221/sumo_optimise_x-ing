@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.venv*/
+env/
+venv/
+
+# Editors/IDEs
+.vscode/
+.idea/
+
+# OS / Windows
+Thumbs.db
+Desktop.ini
+
+# Build / Dist / Logs
+build/
+dist/
+*.log
+
+# SUMO / 本プロジェクト固有
+plainXML_out/
+**/base.net.xml
+**/network.net.xml
+**/*.edg.xml
+**/*.nod.xml
+**/*.con.xml
+# ↑ 生成する PlainXML を Git に含めたい場合は、上の3行を削除する
+
+# Jupyter等（使わないなら不要）
+.ipynb_checkpoints/
