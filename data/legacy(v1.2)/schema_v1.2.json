@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "$id": "https://example.org/sumo-linear-corridor.v1_2.schema.json",
+  "title": "SUMO Linear Corridor Network Specification (v1.2)",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "単一の一直線の路線に、T字路/十字路と単路部横断を配置する指示書の仕様。",
+  "$comment": "LHT(左側通行)が前提。pos_mの上限（main_road.length_m以内）や交差点と横断歩道の衝突など、指示書の内容が正しい(valid)かどうか、指示書を受け取った側で確認すること。",
+  "properties": {
+    "version": { "type": "string", "const": "1.2"},
+
+    "snap": {
+      "type": "object",
+      "description": "交差点や横断歩道といったイベントの位置 pos_m は、一定の間隔の点状に丸める。その丸めの規則。",
+      "additionalProperties": false,
+      "properties": {
+        "step_m": { "type": "integer", "minimum": 1, "description": "丸め単位[m]" },
+        "tie_break": {
+          "type": "string",
+          "enum": ["toward_west", "toward_east"],
+          "description": "丸めがちょうど真ん中になったときに優先する方向。丸め以外でも、位置が衝突したときの検査などで使用する"
+        }
+      },
+      "required": ["step_m", "tie_break"]
+    },
+
+    "defaults": {
+      "type": "object",
+      "description": "既定値",
+      "additionalProperties": false,
+      "properties": {
+        "minor_road_length_m": { "type": "integer", "minimum": 1, "description": "従道路を交差点中心から伸ばす長さ[m]" },
+        "ped_crossing_width_m": { "type": "number", "minimum": 1, "description": "横断歩道の幅[m]" },
+        "sidewalk_width_m": { "type": "number", "minimum": 0, "description": "道路脇の歩道の幅[m]" },
+        "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" }
+      },
+      "required": ["minor_road_length_m", "ped_crossing_width_m", "speed_kmh"]
+    },
+
+    "main_road": {
+      "type": "object",
+      "description": "主道路は東西に走る2本の一方通行のペア。うち北側がEB(East Bound)、南側がWB(West Bound)。設定は両方向共通。",
+      "additionalProperties": false,
+      "properties": {
+        "length_m": { "type": "integer", "exclusiveMinimum": 0, "description": "主道路の延長[m]" },
+        "center_gap_m": { "type": "number", "minimum": 0, "description": "EBとWBの間隔[m]" },
+        "lanes": { "type": "integer", "minimum": 1, "description": "レーン数" }
+      },
+      "required": ["length_m", "center_gap_m", "lanes"]
+    },
+
+    "junction_templates": {
+      "type": "object",
+      "description": "交差点テンプレート集合（tee=T字路 / cross=十字路 は別集合）",
+      "additionalProperties": false,
+      "properties": {
+        "tee": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/junctionTemplate" },
+          "description": "T字路向けテンプレート配列"
+        },
+        "cross": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/junctionTemplate" },
+          "description": "十字路向けテンプレート配列"
+        }
+      },
+      "required": ["tee", "cross"]
+    },
+
+    "signal_profiles": {
+      "type": "object",
+      "description": "定周期の信号プロファイル（種別別の集合）。",
+      "additionalProperties": false,
+      "properties": {
+        "tee": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/signalProfile" },
+          "description": "T字路用プロファイル"
+        },
+        "cross": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/signalProfile" },
+          "description": "十字路用プロファイル"
+        },
+        "xwalk_midblock": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/signalProfile" },
+          "description": "単路部横断用プロファイル"
+        }
+      },
+      "required": ["tee", "cross", "xwalk_midblock"]
+    },
+
+    "layout": {
+      "type": "array",
+      "description": "主道路上のイベント列（起点=西端=0m）。各要素は tee / cross / xwalk_midblock のいずれか。",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/layoutXwalkMidblock" },
+          { "$ref": "#/definitions/layoutTee" },
+          { "$ref": "#/definitions/layoutCross" }
+        ]
+      }
+    }
+  },
+
+  "required": [
+    "version",
+    "snap",
+    "defaults",
+    "main_road",
+    "junction_templates",
+    "signal_profiles",
+    "layout"
+  ],
+
+  "definitions": {
+    "idString": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "英数・._- のみ"
+    },
+
+    "movementString": {
+      "type": "string",
+      "pattern": "^(pedestrian|(?:main|minor)_(?:L|T|R))$",
+      "description": "車両: main/minor と L/T/R の組合せ。歩行者: pedestrian。"
+    },
+
+    "signalRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": { "$ref": "#/definitions/idString", "description": "適用する信号プロファイルID（種別に対応）" },
+        "offset_s": { "type": "integer", "minimum": 0, "description": "交差点ローカルの時差[秒]（<tlLogic offset>に相当）" }
+      },
+      "required": ["profile_id", "offset_s"]
+    },
+
+    "mainPedCrossingPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "west": { "type": "boolean", "description": "交差点の西側の主道路を渡る横断歩道を設置するか" },
+        "east": { "type": "boolean", "description": "交差点の東側の主道路を渡る横断歩道を設置するか" }
+      },
+      "required": ["west", "east"],
+      "description": "交差点における主道路横断歩道の設置有無（東西）。"
+    },
+
+    "junctionTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/idString", "description": "テンプレートID" },
+        "main_approach_begin_m": { "type": "integer", "minimum": 0, "description": "交差点手前でレーン数変更を開始する（アプローチを開始する）交差点から上流への距離[m]。0=変更区間なし。" },
+        "main_approach_lanes": { "type": "integer", "minimum": 0, "description": "アプローチ区間の主道路のレーン数。0=変更なし（元のレーン数を維持）。指示書を受け取った側の処理：複数のアプローチ区間が重なるときは、最も多いレーン数を採用する。" },
+        "minor_lanes_to_main": { "type": "integer", "minimum": 1, "description": "従道路→主道路（主道路へ向かう向き）のレーン数" },
+        "minor_lanes_from_main": { "type": "integer", "minimum": 1, "description": "主道路→従道路（主道路から離れる向き）のレーン数" },
+        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路を渡る横断歩道の中央に対流空間（refuge island）を作るか" },
+        "median_continuous": { "type": "boolean", "description": "中央帯が交差点の中まで連続しているか（主道路で右折できなくなるなど、接続制限を伴う）" }
+      },
+      "required": [
+        "id",
+        "main_approach_begin_m",
+        "main_approach_lanes",
+        "minor_lanes_to_main",
+        "minor_lanes_from_main",
+        "split_ped_crossing_on_main",
+        "median_continuous"
+      ],
+      "description": "交差点アプローチ形状・従道路レーン構成の定義。"
+    },
+
+    "signalProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/idString", "description": "信号プロファイルID" },
+        "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]" },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "description": "フェーズ名（任意の識別用）" },
+              "duration_s": { "type": "integer", "minimum": 1, "description": "フェーズ長[秒]" },
+              "allow_movements": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/movementString" },
+                "uniqueItems": true,
+                "description": "当該フェーズで許可する動作の集合。車両: main/minor の L/T/R。歩行者: pedestrian。未指定時は空配列=全赤扱い。"
+              }
+            },
+            "required": ["name", "duration_s", "allow_movements"]
+          },
+          "description": "固定時間フェーズ列。黄色相はJSONでは表現しない。"
+        }
+      },
+      "required": ["id", "cycle_s", "phases"],
+      "description": "固定時間信号の定義。"
+    },
+
+    "layoutTee": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "tee", "description": "イベント種別＝T字路" },
+        "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
+        "branch": { "type": "string", "enum": ["north", "south"], "description": "従道路の方向" },
+        "template": { "$ref": "#/definitions/idString", "description": "適用する tee テンプレートID" },
+        "signalized": { "type": "boolean", "description": "信号の有無" },
+        "signal": { "$ref": "#/definitions/signalRef" },
+        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
+      },
+      "required": ["type", "pos_m", "branch", "template", "signalized", "main_ped_crossing_placement"],
+      "allOf": [
+        { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+      ],
+      "description": "T字路イベント。ここでは split/median を指定しない（テンプレート側で管理）。"
+    },
+
+    "layoutCross": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "cross", "description": "イベント種別＝十字路" },
+        "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
+        "template": { "$ref": "#/definitions/idString", "description": "適用する cross テンプレートID" },
+        "signalized": { "type": "boolean", "description": "信号の有無" },
+        "signal": { "$ref": "#/definitions/signalRef" },
+        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
+      },
+      "required": ["type", "pos_m", "template", "signalized", "main_ped_crossing_placement"],
+      "allOf": [
+        { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+      ],
+      "description": "十字路イベント。※ここでは split/median を指定しない（テンプレート側で管理）。"
+    },
+
+    "layoutXwalkMidblock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "xwalk_midblock", "description": "イベント種別＝単路部歩行者横断" },
+        "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
+        "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
+        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路横断を二段横断にするか（箇所ごとに設定）" },
+        "signal": { "$ref": "#/definitions/signalRef" }
+      },
+      "required": ["type", "pos_m", "signalized", "split_ped_crossing_on_main"],
+      "allOf": [
+        { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+      ],
+      "description": "単路部横断イベント。東西どちらのエッジを横断するかは snap.tie_break に従う。テンプレートはない。"
+    }
+  }
+}
