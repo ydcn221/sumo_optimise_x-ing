@@ -1,0 +1,36 @@
+# .gitattributes（改行と差分の安定化）
+@'
+* text=auto
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.xml  text eol=lf
+*.bat  text eol=crlf
+'@ | Out-File -Encoding utf8 .gitattributes
+
+# .gitignore（生成物を除外）
+@'
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.vscode/
+plainXML_out/
+*.net.xml
+*.sumocfg
+*.rou.xml
+*.tripinfo.xml
+*.edg.xml
+*.nod.xml
+*.con.xml
+'@ | Out-File -Encoding utf8 .gitignore
+
+# README.md（最小の説明）
+@'
+# sumo_optimise_x-ing
+
+JSON → SUMO PlainXML 変換と SUMO 連携のプロジェクト。初回コミット。
+'@ | Out-File -Encoding utf8 README.md
