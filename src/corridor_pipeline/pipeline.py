@@ -1,0 +1,98 @@
+"""High-level orchestration for building PlainXML artefacts."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from .checks.semantics import validate_semantics
+from .domain.models import BuildOptions, BuildResult
+from .emitters.connections import render_connections_xml
+from .emitters.edges import render_edges_xml
+from .emitters.nodes import render_nodes_xml
+from .parser.spec_loader import (
+    build_clusters,
+    load_json_file,
+    load_schema_file,
+    parse_defaults,
+    parse_junction_templates,
+    parse_layout_events,
+    parse_main_road,
+    parse_signal_profiles,
+    parse_snap_rule,
+    validate_json_schema,
+)
+from .planner.lanes import collect_breakpoints_and_reasons, compute_lane_overrides
+from .sumo_integration.netconvert import run_two_step_netconvert
+from .utils.io import ensure_output_directory, persist_xml, write_manifest
+from .utils.logging import configure_logger, get_logger
+
+LOG = get_logger()
+
+
+def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildResult:
+    spec_json = load_json_file(spec_path)
+    schema_json = load_schema_file(options.schema_path)
+    validate_json_schema(spec_json, schema_json)
+
+    snap_rule = parse_snap_rule(spec_json)
+    defaults = parse_defaults(spec_json)
+    main_road = parse_main_road(spec_json)
+    junction_template_by_id = parse_junction_templates(spec_json)
+    signal_profiles_by_kind = parse_signal_profiles(spec_json)
+
+    validate_semantics(
+        spec_json=spec_json,
+        snap_rule=snap_rule,
+        main_road=main_road,
+        junction_template_by_id=junction_template_by_id,
+        signal_profiles_by_kind=signal_profiles_by_kind,
+    )
+
+    layout_events = parse_layout_events(spec_json, snap_rule, main_road)
+    clusters = build_clusters(layout_events)
+    lane_overrides = compute_lane_overrides(main_road, clusters, junction_template_by_id, snap_rule)
+    breakpoints, reason_by_pos = collect_breakpoints_and_reasons(main_road, clusters, lane_overrides, snap_rule)
+
+    nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
+    edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
+    connections_xml = render_connections_xml(
+        defaults,
+        clusters,
+        breakpoints,
+        junction_template_by_id,
+        snap_rule,
+        main_road,
+        lane_overrides,
+    )
+
+    return BuildResult(nodes_xml=nodes_xml, edges_xml=edges_xml, connections_xml=connections_xml)
+
+
+def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
+    result = build_corridor_artifacts(spec_path, options)
+    artifacts = ensure_output_directory()
+    configure_logger(artifacts.log_path, console=options.console_log)
+    LOG.info("outdir: %s", artifacts.outdir.resolve())
+
+    persist_xml(
+        artifacts,
+        nodes=result.nodes_xml,
+        edges=result.edges_xml,
+        connections=result.connections_xml,
+    )
+
+    manifest = {
+        "source": str(spec_path.resolve()),
+        "schema": str(options.schema_path.resolve()),
+    }
+    manifest_path = write_manifest(artifacts, manifest)
+    result.manifest_path = manifest_path
+
+    if options.run_netconvert:
+        run_two_step_netconvert(
+            artifacts.outdir,
+            artifacts.nodes_path,
+            artifacts.edges_path,
+            artifacts.connections_path,
+        )
+
+    return result
