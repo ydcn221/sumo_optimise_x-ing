@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "corridor-rewrite"
-version = "0.1.0"
-description = "Modular rewrite of the SUMO corridor PlainXML converter"
+version = "0.2.0"
+description = "Wrapper that reuses the legacy SUMO corridor PlainXML converter"
 authors = [{name = "Auto Generated"}]
 readme = "README.md"
 requires-python = ">=3.11"

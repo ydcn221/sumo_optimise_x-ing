@@ -1,25 +1,18 @@
-"""Runtime options that control corridor building behaviour."""
-
+"""Configuration object for the wrapper pipeline."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-
-def _default_workdir() -> Path:
-    return Path("build").absolute()
 
 
 @dataclass(slots=True)
 class BuildOptions:
-    """Configuration for the corridor build pipeline."""
+    """Options controlling how the legacy builder is executed."""
 
-    run_netconvert: bool = False
-    schema_path: Optional[Path] = None
-    workdir: Path = field(default_factory=_default_workdir)
-    log_level: str = "INFO"
+    schema_path: Path | None = None
+    output_dir: Path | None = None
+    keep_output: bool = False
 
-    def ensure_workdir(self) -> Path:
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        return self.workdir
+    @property
+    def default_schema_path(self) -> Path:
+        return Path("data/legacy(v1.2)/schema_v1.2.json")
