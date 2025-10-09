@@ -5,9 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from corridor_rewrite import build_corridor_artifacts
-from corridor_rewrite.options import BuildOptions
-from corridor_rewrite.bridge import LEGACY_SCRIPT_PATH
+from sumo_optimise.legacy import build_corridor_artifacts
+from sumo_optimise.legacy.options import BuildOptions
+from sumo_optimise.legacy.bridge import LEGACY_SCRIPT_PATH
 
 
 SPEC_SRC = Path("data/legacy(v1.2)/schema_v1.2_sample.json")

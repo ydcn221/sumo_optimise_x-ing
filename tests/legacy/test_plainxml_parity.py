@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from corridor_pipeline import BuildOptions, build_corridor_artifacts
+from sumo_optimise.conversion import BuildOptions, build_corridor_artifacts
 
 SAMPLE_JSON = Path("data/legacy(v1.2)/schema_v1.2_sample.json")
 SAMPLE_SCHEMA = Path("data/legacy(v1.2)/schema_v1.2.json")

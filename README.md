@@ -1,17 +1,36 @@
-# SUMO PlainXML Converter (JSON v1.2)
+# SUMO PlainXML Converter
 
-## Overview
-- 自前 JSON 仕様 (v1.2) から SUMO PlainXML (nodes/edges/connections) を生成するツール。
+A cleaned up Python package that converts corridor JSON specifications into SUMO PlainXML artefacts. The
+repository now ships with a modern `src/` layout and a clear separation between the maintained
+implementation and the backwards-compatible legacy bridge.
 
-## Getting Started
-1. Python 3.11+ を用意
-2. `pip install -r requirements.txt`（必要に応じて）
-3. `python plainXML_converter.py --input path/to/input.json --out outdir/`
+## Package layout
 
-## Repository Layout
-- `parser/` `planner/` `builder/` `emitters/` `sumo_integration/` など（将来分割予定）
-- `tests/`：ゴールデン比較とユニットテスト
+```
+src/sumo_optimise/
+    conversion/   # Modern, fully modular converter implementation
+    legacy/       # Wrapper around the legacy v1.2.11 converter
+```
 
-## Notes
-- Windows 11 前提
-- CSV を出力する場合のエンコーディングは `utf-8-sig`
+The `sumo_optimise.conversion` package exposes the public API for building PlainXML artefacts, while
+`sumo_optimise.legacy` contains an opt-in compatibility layer for invoking the original
+`plainXML_converter_0927_1.2.11.py` script from Python.
+
+## Running the converter
+
+```bash
+pip install -e .[test]
+python -m sumo_optimise.conversion.cli.main path/to/spec.json --schema path/to/schema.json
+```
+
+The legacy bridge can be executed via:
+
+```bash
+python -m sumo_optimise.legacy.cli path/to/spec.json --output-dir out/
+```
+
+## Tests
+
+All regression tests that rely on the legacy converter now live under `tests/legacy/`. Removing that
+single directory will skip the compatibility suite altogether. The remaining tests (if any) continue
+working without touching the legacy assets.
