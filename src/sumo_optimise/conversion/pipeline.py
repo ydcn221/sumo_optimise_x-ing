@@ -22,6 +22,8 @@ from .parser.spec_loader import (
 )
 from .planner.lanes import collect_breakpoints_and_reasons, compute_lane_overrides
 from .sumo_integration.netconvert import run_two_step_netconvert
+from .sumo_integration.netedit import launch_netedit
+from .utils.constants import NETWORK_FILE_NAME
 from .utils.io import ensure_output_directory, persist_xml, write_manifest
 from .utils.logging import configure_logger, get_logger
 
@@ -94,5 +96,12 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
             artifacts.edges_path,
             artifacts.connections_path,
         )
+
+    if options.run_netedit:
+        network_path = artifacts.outdir / NETWORK_FILE_NAME
+        if network_path.exists():
+            launch_netedit(network_path)
+        else:
+            LOG.warning("network file %s not found. Skip launching netedit.", network_path)
 
     return result

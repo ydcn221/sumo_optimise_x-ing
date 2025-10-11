@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sumo_optimise.conversion.cli.main import _resolve_output_template, parse_args
+from sumo_optimise.conversion.cli.main import _build_options, _resolve_output_template, parse_args
 from sumo_optimise.conversion.domain.models import OutputDirectoryTemplate
 
 
@@ -9,6 +9,21 @@ def test_cli_defaults_to_standard_output_template() -> None:
     template = _resolve_output_template(args)
 
     assert template == OutputDirectoryTemplate()
+
+
+def test_cli_run_netedit_flag_defaults_to_false() -> None:
+    args = parse_args(["spec.json"])
+
+    assert args.run_netedit is False
+
+
+def test_cli_run_netedit_enables_netconvert() -> None:
+    args = parse_args(["spec.json", "--run-netedit"])
+    template = _resolve_output_template(args)
+    options = _build_options(args, template)
+
+    assert options.run_netedit is True
+    assert options.run_netconvert is True
 
 
 def test_cli_accepts_output_template_overrides() -> None:
