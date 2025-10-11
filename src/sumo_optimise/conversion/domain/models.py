@@ -1,10 +1,21 @@
 """Domain models representing the JSON specification and derived artefacts."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+from ..utils.constants import OUTPUT_DIR_PREFIX
+
+
+@dataclass(frozen=True)
+class OutputDirectoryTemplate:
+    """Templates used to materialise output directories for each build run."""
+
+    root: str = OUTPUT_DIR_PREFIX
+    run: str = "{month}{day}_{seq:03}"
+    seq_digits: int = 3
 
 
 class DirectionMain(str, Enum):
@@ -142,6 +153,7 @@ class BuildOptions:
     schema_path: Path
     run_netconvert: bool = False
     console_log: bool = False
+    output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
 
 
 @dataclass

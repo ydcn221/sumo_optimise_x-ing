@@ -69,7 +69,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
     result = build_corridor_artifacts(spec_path, options)
-    artifacts = ensure_output_directory()
+    artifacts = ensure_output_directory(options.output_template)
     configure_logger(artifacts.log_path, console=options.console_log)
     LOG.info("outdir: %s", artifacts.outdir.resolve())
 
