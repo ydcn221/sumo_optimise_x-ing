@@ -99,7 +99,9 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
 
     if options.run_netedit:
         network_path = artifacts.outdir / NETWORK_FILE_NAME
+        LOG.info("netedit requested. Looking for network file at %s", network_path.resolve())
         if network_path.exists():
+            LOG.info("network file found. Launching netedit.")
             launch_netedit(network_path)
         else:
             LOG.warning("network file %s not found. Skip launching netedit.", network_path)
