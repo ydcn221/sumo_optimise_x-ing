@@ -1,4 +1,5 @@
 """Public API for the modular corridor pipeline implementation."""
+from .domain.models import OutputDirectoryTemplate
 from .pipeline import build_and_persist, build_corridor_artifacts, BuildOptions, BuildResult
 
 __all__ = [
@@ -6,4 +7,5 @@ __all__ = [
     "build_and_persist",
     "BuildOptions",
     "BuildResult",
+    "OutputDirectoryTemplate",
 ]

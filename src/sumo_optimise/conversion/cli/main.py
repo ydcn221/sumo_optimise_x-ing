@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..domain.models import BuildOptions
+from ..domain.models import BuildOptions, OutputDirectoryTemplate
 from ..pipeline import build_and_persist
 from ..utils.constants import SCHEMA_JSON_PATH
 
@@ -20,15 +20,48 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--run-netconvert", action="store_true", help="Run two-step netconvert after emission")
     parser.add_argument("--no-console-log", action="store_true", help="Disable console logging")
+    parser.add_argument(
+        "--output-root",
+        dest="output_root_template",
+        help=(
+            "Template for the root output directory (default: plainXML_out). "
+            "Supports placeholders such as {year}, {month}, {day}, {seq}, and {uid}."
+        ),
+    )
+    parser.add_argument(
+        "--output-run",
+        dest="output_run_template",
+        help=(
+            "Template for the per-run directory relative to the root (default: {month}{day}_{seq:03}). "
+            "Supports placeholders such as {hour}, {minute}, {second}, {seq}, and {uid}."
+        ),
+    )
+    parser.add_argument(
+        "--output-seq-digits",
+        dest="output_seq_digits",
+        type=int,
+        help="Number of digits for the zero-padded {seq} placeholder (default: 3)",
+    )
     return parser.parse_args(argv)
+
+
+def _resolve_output_template(args: argparse.Namespace) -> OutputDirectoryTemplate:
+    default_template = OutputDirectoryTemplate()
+    return OutputDirectoryTemplate(
+        root=args.output_root_template if args.output_root_template is not None else default_template.root,
+        run=args.output_run_template if args.output_run_template is not None else default_template.run,
+        seq_digits=args.output_seq_digits if args.output_seq_digits is not None else default_template.seq_digits,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    output_template = _resolve_output_template(args)
     options = BuildOptions(
         schema_path=args.schema,
         run_netconvert=args.run_netconvert,
         console_log=not args.no_console_log,
+        output_template=output_template,
     )
     result = build_and_persist(args.spec, options)
     print(result.manifest_path)
