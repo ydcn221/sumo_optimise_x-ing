@@ -19,6 +19,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to the JSON schema (default: schema_v1.2.json)",
     )
     parser.add_argument("--run-netconvert", action="store_true", help="Run two-step netconvert after emission")
+    parser.add_argument("--run-netedit", action="store_true", help="Launch SUMO netedit with the generated network")
     parser.add_argument("--no-console-log", action="store_true", help="Disable console logging")
     parser.add_argument(
         "--output-root",
@@ -54,15 +55,20 @@ def _resolve_output_template(args: argparse.Namespace) -> OutputDirectoryTemplat
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    output_template = _resolve_output_template(args)
-    options = BuildOptions(
+def _build_options(args: argparse.Namespace, output_template: OutputDirectoryTemplate) -> BuildOptions:
+    return BuildOptions(
         schema_path=args.schema,
-        run_netconvert=args.run_netconvert,
+        run_netconvert=args.run_netconvert or args.run_netedit,
+        run_netedit=args.run_netedit,
         console_log=not args.no_console_log,
         output_template=output_template,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    output_template = _resolve_output_template(args)
+    options = _build_options(args, output_template)
     result = build_and_persist(args.spec, options)
     print(result.manifest_path)
     return 0

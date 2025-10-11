@@ -152,6 +152,7 @@ class CorridorSpec:
 class BuildOptions:
     schema_path: Path
     run_netconvert: bool = False
+    run_netedit: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
 

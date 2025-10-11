@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from ..utils.constants import NETWORK_FILE_NAME
 from ..utils.errors import NetconvertExecutionError
 from ..utils.logging import get_logger
 
@@ -36,7 +37,7 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         connections_file.name,
         "--lefthand",
         "--output-file",
-        "network.net.xml",
+        NETWORK_FILE_NAME,
     ]
 
     for idx, cmd in enumerate((step1, step2), start=1):
