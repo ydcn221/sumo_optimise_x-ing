@@ -19,6 +19,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to the JSON schema (default: schema_v1.2.json)",
     )
     parser.add_argument("--run-netconvert", action="store_true", help="Run two-step netconvert after emission")
+    parser.add_argument("--run-netedit", action="store_true", help="Open the generated network in netedit")
     parser.add_argument("--no-console-log", action="store_true", help="Disable console logging")
     return parser.parse_args(argv)
 
@@ -28,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     options = BuildOptions(
         schema_path=args.schema,
         run_netconvert=args.run_netconvert,
+        run_netedit=args.run_netedit,
         console_log=not args.no_console_log,
     )
     result = build_and_persist(args.spec, options)

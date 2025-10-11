@@ -141,6 +141,7 @@ class CorridorSpec:
 class BuildOptions:
     schema_path: Path
     run_netconvert: bool = False
+    run_netedit: bool = False
     console_log: bool = False
 
 
@@ -150,6 +151,7 @@ class BuildResult:
     edges_xml: str
     connections_xml: str
     manifest_path: Optional[Path] = None
+    network_path: Optional[Path] = None
 
 
 @dataclass

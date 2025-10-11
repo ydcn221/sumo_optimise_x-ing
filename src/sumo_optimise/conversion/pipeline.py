@@ -22,6 +22,8 @@ from .parser.spec_loader import (
 )
 from .planner.lanes import collect_breakpoints_and_reasons, compute_lane_overrides
 from .sumo_integration.netconvert import run_two_step_netconvert
+from .sumo_integration.netedit import launch_netedit
+from .utils.constants import NETWORK_FILE_NAME
 from .utils.io import ensure_output_directory, persist_xml, write_manifest
 from .utils.logging import configure_logger, get_logger
 
@@ -87,6 +89,8 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
     manifest_path = write_manifest(artifacts, manifest)
     result.manifest_path = manifest_path
 
+    network_path = artifacts.outdir / NETWORK_FILE_NAME
+
     if options.run_netconvert:
         run_two_step_netconvert(
             artifacts.outdir,
@@ -94,5 +98,17 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
             artifacts.edges_path,
             artifacts.connections_path,
         )
+
+    if network_path.exists():
+        result.network_path = network_path
+
+    if options.run_netedit:
+        if result.network_path is None:
+            LOG.warning(
+                "network file not found in %s. Ensure --run-netconvert is enabled before launching netedit.",
+                artifacts.outdir,
+            )
+        else:
+            launch_netedit(result.network_path)
 
     return result
