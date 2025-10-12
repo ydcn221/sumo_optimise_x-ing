@@ -13,10 +13,15 @@ LOG = get_logger()
 
 
 def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, connections_file: Path) -> None:
+    """Execute the three-stage netconvert workflow required by SUMO."""
+
     exe = shutil.which("netconvert")
     if exe is None:
-        LOG.warning("netconvert not found in PATH. Skip two-step conversion.")
+        LOG.warning("netconvert not found in PATH. Skip multi-step conversion.")
         return
+
+    base_network = "base_raw.net.xml"
+    plain_prefix = "base_plain"
 
     step1 = [
         exe,
@@ -27,12 +32,21 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         "--lefthand",
         "--sidewalks.guess",
         "--output-file",
-        "base.net.xml",
+        base_network,
     ]
     step2 = [
         exe,
         "--sumo-net-file",
-        "base.net.xml",
+        base_network,
+        "--plain-output-prefix",
+        plain_prefix,
+    ]
+    step3 = [
+        exe,
+        "--node-files",
+        f"{plain_prefix}.nod.xml",
+        "--edge-files",
+        f"{plain_prefix}.edg.xml",
         "--connection-files",
         connections_file.name,
         "--lefthand",
@@ -40,7 +54,7 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         NETWORK_FILE_NAME,
     ]
 
-    for idx, cmd in enumerate((step1, step2), start=1):
+    for idx, cmd in enumerate((step1, step2, step3), start=1):
         LOG.info("netconvert step %d: %s", idx, " ".join(cmd))
         try:
             proc = subprocess.run(
