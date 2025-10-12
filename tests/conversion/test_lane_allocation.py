@@ -21,3 +21,9 @@ def test_allocate_lanes_matches_spec_examples(s, l, t, r, u, expected):
 def test_allocate_lanes_invalid_range():
     with pytest.raises(ValueError):
         allocate_lanes(1, 0, 2, 0, 0)
+
+
+def test_allocate_lanes_counts_shared_u_for_minimums():
+    """When only an ``RU`` lane remains it should satisfy the R minimum."""
+
+    assert allocate_lanes(3, 1, 1, 2, 1) == ["L", "T", "RU"]

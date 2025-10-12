@@ -106,11 +106,18 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
     min_L = 1 if l > 0 else 0
     min_R = 1 if r > 0 else 0
 
-    def count_only(sym: str) -> int:
-        return sum(1 for x in lanes if x == sym)
+    def base_ignoring_u(label: str) -> str:
+        """Return the base movement without the U suffix (e.g. ``'RU'`` → ``'R'``)."""
+
+        return label.replace("U", "")
+
+    def count_effective(sym: str) -> int:
+        """Count lanes that behave as ``sym`` while ignoring any shared U-turn."""
+
+        return sum(1 for x in lanes if base_ignoring_u(x) == sym)
 
     def pop_R_only() -> bool:
-        if count_only("R") <= min_R:
+        if count_effective("R") <= min_R:
             return False
         for i in range(len(lanes) - 1, -1, -1):
             if lanes[i] == "R":
@@ -119,7 +126,7 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
         return False
 
     def pop_L_only() -> bool:
-        if count_only("L") <= min_L:
+        if count_effective("L") <= min_L:
             return False
         for i, val in enumerate(lanes):
             if val == "L":
