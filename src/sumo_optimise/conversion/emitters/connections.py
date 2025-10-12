@@ -147,17 +147,33 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
     lanes = _after_c()
 
     if s in {t, t + 1} and not (base_lb <= s < l + t + r):
+        e_turn = "L"
         while len(lanes) > s:
-            if _drop_exclusive(lanes, "L", from_left=True):
-                _share_to_side(lanes, "L", "L")
-                _ensure_u_on_rightmost(lanes, u)
-                if len(lanes) == s:
-                    break
-            if _drop_exclusive(lanes, "R", from_left=False):
-                _share_to_side(lanes, "R", "R")
-                _ensure_u_on_rightmost(lanes, u)
-                continue
+            if e_turn == "L":
+                if _drop_exclusive(lanes, "L", from_left=True):
+                    _share_to_side(lanes, "L", "L")
+                    _ensure_u_on_rightmost(lanes, u)
+                    e_turn = "R"
+                    continue
+                if _drop_exclusive(lanes, "R", from_left=False):
+                    _share_to_side(lanes, "R", "R")
+                    _ensure_u_on_rightmost(lanes, u)
+                    e_turn = "L"
+                    continue
+            else:
+                if _drop_exclusive(lanes, "R", from_left=False):
+                    _share_to_side(lanes, "R", "R")
+                    _ensure_u_on_rightmost(lanes, u)
+                    e_turn = "L"
+                    continue
+                if _drop_exclusive(lanes, "L", from_left=True):
+                    _share_to_side(lanes, "L", "L")
+                    _ensure_u_on_rightmost(lanes, u)
+                    e_turn = "R"
+                    continue
+
             raise ValueError("Cannot reach s by L/R drop-share at s in {t, t+1}.")
+
         _ensure_u_on_rightmost(lanes, u)
         return lanes
 
