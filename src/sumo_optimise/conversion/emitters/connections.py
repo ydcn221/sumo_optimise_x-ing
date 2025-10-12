@@ -156,12 +156,17 @@ def _emit_vehicle_connections_for_approach(
     L_target: Optional[Tuple[str, int]],
     T_target: Optional[Tuple[str, int]],
     R_target: Optional[Tuple[str, int]],
-    U_target: Optional[Tuple[str, int]] = None,
+    U_target: Optional[Tuple[str, int]],
 ) -> int:
-    l = L_target[1] if L_target else 0
-    t = T_target[1] if T_target else 0
-    r = R_target[1] if R_target else 0
-    u = U_target[1] if U_target else 0
+    l_target = L_target[1] if L_target else 0
+    t_target = T_target[1] if T_target else 0
+    r_target = R_target[1] if R_target else 0
+    u_target = U_target[1] if U_target else 0
+
+    l = min(l_target, s_count)
+    t = min(t_target, s_count)
+    r = min(r_target, s_count)
+    u = min(u_target, s_count)
 
     if s_count > 0 and (l + t + r + u) == 0:
         LOG.error(
@@ -421,11 +426,13 @@ def render_connections_xml(
             R_target = (
                 minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
             ) if exist_south else None
+            u_lanes = pick_main("WB", west, pos)
             U_target = (
-                main_edge_id("WB", west, pos), pick_main("WB", west, pos)
-            )
+                main_edge_id("WB", west, pos), u_lanes
+            ) if u_lanes > 0 else None
             if tpl.median_continuous:
                 R_target = None
+                U_target = None
             _emit_vehicle_connections_for_approach(
                 lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
             )
@@ -442,11 +449,13 @@ def render_connections_xml(
             R_target = (
                 minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
             ) if exist_north else None
+            u_lanes = pick_main("EB", pos, east)
             U_target = (
-                main_edge_id("EB", pos, east), pick_main("EB", pos, east)
-            )
+                main_edge_id("EB", pos, east), u_lanes
+            ) if u_lanes > 0 else None
             if tpl.median_continuous:
                 R_target = None
+                U_target = None
             _emit_vehicle_connections_for_approach(
                 lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
             )
@@ -458,7 +467,7 @@ def render_connections_xml(
                 main_edge_id("EB", pos, east), pick_main("EB", pos, east)
             ) if east is not None else None
             _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, None, None
+                lines, pos, in_edge, s_count, L_target, None, None, None
             )
 
         if exist_south:
@@ -468,7 +477,7 @@ def render_connections_xml(
                 main_edge_id("WB", west, pos), pick_main("WB", west, pos)
             ) if west is not None else None
             _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, None, None
+                lines, pos, in_edge, s_count, L_target, None, None, None
             )
 
     unique_lines: List[str] = []
