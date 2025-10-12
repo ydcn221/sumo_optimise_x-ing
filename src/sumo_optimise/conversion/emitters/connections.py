@@ -58,24 +58,70 @@ def _add(label: str, move: str) -> str:
     return _canon(label + move)
 
 
-def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
-    """Allocate lane permissions for an approach.
+def _ensure_u_on_rightmost(lanes: List[str], u: int) -> None:
+    """Ensure that the rightmost non-U lane carries the shared U-turn when needed."""
 
-    The algorithm mirrors the reference implementation from the product
-    specification.  It assigns left/through/right/U-turn permissions for
-    ``s`` inbound lanes given the dedicated demand counts ``l``, ``t``,
-    ``r`` and ``u``.  See the specification docstring for the exhaustive
-    set of rules (empty-lane placeholders, U-turn sharing, alternating
-    left/right removal, etc.).
-    """
+    if u <= 0 or not lanes:
+        return
+
+    for idx, value in enumerate(lanes):
+        if "U" in value and value != "U":
+            lanes[idx] = value.replace("U", "")
+
+    lanes[-1] = _add(lanes[-1], "U")
+
+
+def _drop_exclusive(lanes: List[str], sym: str, from_left: bool) -> bool:
+    """Remove a lane that is *exactly* ``sym``; return ``True`` on success."""
+
+    indices = range(len(lanes)) if from_left else range(len(lanes) - 1, -1, -1)
+    for idx in indices:
+        if lanes[idx] == sym:
+            lanes.pop(idx)
+            return True
+    return False
+
+
+def _share_to_side(lanes: List[str], sym: str, side: str) -> None:
+    """Attach ``sym`` as a shared movement to the requested side lane."""
+
+    if not lanes:
+        return
+
+    if side == "L":
+        lanes[0] = _add(lanes[0], sym)
+    else:
+        lanes[-1] = _add(lanes[-1], sym)
+
+
+def _count_effective(lanes: List[str], sym: str) -> int:
+    """Count lanes that effectively behave as ``sym`` while ignoring shared ``U``."""
+
+    return sum(1 for lane in lanes if lane.replace("U", "") == sym)
+
+
+def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
+    """Allocate lane permissions according to the detailed specification."""
 
     for name, value in {"s": s, "l": l, "t": t, "r": r, "u": u}.items():
-        if not isinstance(value, int):
-            raise ValueError(f"{name} must be int")
-        if value < 0:
-            raise ValueError(f"{name} must be non-negative")
+        if not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a non-negative int")
+
+    if s == 1:
+        label = ""
+        if l > 0:
+            label = _add(label, "L")
+        if t > 0:
+            label = _add(label, "T")
+        if r > 0:
+            label = _add(label, "R")
+        if u > 0:
+            label = _add(label, "U")
+        return [label]
 
     total = l + t + r + u
+    base_lb = t + (1 if l > 0 else 0) + (1 if r > 0 else 0)
+    side_min = (1 if l > 0 else 0) + (1 if r > 0 else 0)
 
     if s >= total:
         return (
@@ -86,73 +132,85 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
             + ["U"] * u
         )
 
-    if l + t + r < s < l + t + r + u:
+    if l + t + r < s < total:
         keep_u = s - (l + t + r)
         return ["L"] * l + ["T"] * t + ["R"] * r + ["U"] * keep_u
 
+    def _after_c() -> List[str]:
+        lanes0 = ["L"] * l + ["T"] * t + ["R"] * r
+        _ensure_u_on_rightmost(lanes0, u)
+        return lanes0
+
     if s == l + t + r:
-        lanes = ["L"] * l + ["T"] * t + ["R"] * r
-        if u > 0 and lanes:
-            lanes[-1] = _add(lanes[-1], "U")
+        return _after_c()
+
+    lanes = _after_c()
+
+    if s in {t, t + 1} and not (base_lb <= s < l + t + r):
+        while len(lanes) > s:
+            if _drop_exclusive(lanes, "L", from_left=True):
+                _share_to_side(lanes, "L", "L")
+                _ensure_u_on_rightmost(lanes, u)
+                if len(lanes) == s:
+                    break
+            if _drop_exclusive(lanes, "R", from_left=False):
+                _share_to_side(lanes, "R", "R")
+                _ensure_u_on_rightmost(lanes, u)
+                continue
+            raise ValueError("Cannot reach s by L/R drop-share at s in {t, t+1}.")
+        _ensure_u_on_rightmost(lanes, u)
         return lanes
 
-    if s < t + 2:
-        raise ValueError("Case s < t+2 is not defined in the current spec.")
+    if side_min <= s and s < t:
+        target = max(s, base_lb)
+        while len(lanes) > target:
+            progressed = False
+            if _drop_exclusive(lanes, "L", from_left=True):
+                _share_to_side(lanes, "L", "L")
+                _ensure_u_on_rightmost(lanes, u)
+                progressed = True
+            if len(lanes) > target and _drop_exclusive(lanes, "R", from_left=False):
+                _share_to_side(lanes, "R", "R")
+                _ensure_u_on_rightmost(lanes, u)
+                progressed = True
+            if not progressed:
+                break
 
-    lanes: List[str] = ["L"] * l + ["T"] * t + ["R"] * r
-    if u > 0 and lanes:
-        lanes[-1] = _add(lanes[-1], "U")
+        next_side = "L"
+        while len(lanes) > s:
+            if not _drop_exclusive(lanes, "T", from_left=True):
+                raise ValueError("No 'T' to drop while s < t requires removing T.")
+            _share_to_side(lanes, "T", next_side)
+            next_side = "R" if next_side == "L" else "L"
+            _ensure_u_on_rightmost(lanes, u)
+        return lanes
 
-    min_L = 1 if l > 0 else 0
-    min_R = 1 if r > 0 else 0
+    if base_lb <= s < l + t + r:
+        min_l = 1 if l > 0 else 0
+        min_r = 1 if r > 0 else 0
 
-    def base_ignoring_u(label: str) -> str:
-        """Return the base movement without the U suffix (e.g. ``'RU'`` → ``'R'``)."""
+        def _pop_l_only() -> bool:
+            if _count_effective(lanes, "L") <= min_l:
+                return False
+            return _drop_exclusive(lanes, "L", from_left=True)
 
-        return label.replace("U", "")
+        def _pop_r_only() -> bool:
+            if _count_effective(lanes, "R") <= min_r:
+                return False
+            return _drop_exclusive(lanes, "R", from_left=False)
 
-    def count_effective(sym: str) -> int:
-        """Count lanes that behave as ``sym`` while ignoring any shared U-turn."""
+        turn = "L"
+        while len(lanes) > s:
+            removed = _pop_l_only() if turn == "L" else _pop_r_only()
+            if not removed:
+                removed = _pop_r_only() if turn == "L" else _pop_l_only()
+            if not removed:
+                raise ValueError("Cannot reduce lanes to s under D-case constraints.")
+            _ensure_u_on_rightmost(lanes, u)
+            turn = "R" if turn == "L" else "L"
+        return lanes
 
-        return sum(1 for x in lanes if base_ignoring_u(x) == sym)
-
-    def pop_R_only() -> bool:
-        if count_effective("R") <= min_R:
-            return False
-        for i in range(len(lanes) - 1, -1, -1):
-            if lanes[i] == "R":
-                lanes.pop(i)
-                return True
-        return False
-
-    def pop_L_only() -> bool:
-        if count_effective("L") <= min_L:
-            return False
-        for i, val in enumerate(lanes):
-            if val == "L":
-                lanes.pop(i)
-                return True
-        return False
-
-    turn = "L"
-    while len(lanes) > s:
-        if turn == "L":
-            removed = pop_L_only() or pop_R_only()
-        else:
-            removed = pop_R_only() or pop_L_only()
-
-        if not removed:
-            raise ValueError("Cannot reduce lanes to s under the given constraints.")
-
-        if u > 0 and lanes:
-            for i, val in enumerate(lanes):
-                if "U" in val and val != "U":
-                    lanes[i] = val.replace("U", "")
-            lanes[-1] = _add(lanes[-1], "U")
-
-        turn = "R" if turn == "L" else "L"
-
-    return lanes
+    raise ValueError("Configuration not supported by current specification.")
 
 
 def _emit_vehicle_connections_for_approach(

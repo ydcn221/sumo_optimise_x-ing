@@ -18,12 +18,24 @@ def test_allocate_lanes_matches_spec_examples(s, l, t, r, u, expected):
     assert allocate_lanes(s, l, t, r, u) == expected
 
 
-def test_allocate_lanes_invalid_range():
+def test_allocate_lanes_rejects_negative_inputs():
     with pytest.raises(ValueError):
-        allocate_lanes(1, 0, 2, 0, 0)
+        allocate_lanes(2, -1, 0, 0, 0)
 
 
 def test_allocate_lanes_counts_shared_u_for_minimums():
     """When only an ``RU`` lane remains it should satisfy the R minimum."""
 
     assert allocate_lanes(3, 1, 1, 2, 1) == ["L", "T", "RU"]
+
+
+def test_allocate_lanes_single_lane_combines_movements():
+    assert allocate_lanes(1, 1, 1, 1, 1) == ["LTRU"]
+
+
+def test_allocate_lanes_drop_share_case_e():
+    assert allocate_lanes(3, 1, 3, 1, 0) == ["LT", "T", "TR"]
+
+
+def test_allocate_lanes_drop_share_case_f():
+    assert allocate_lanes(3, 1, 5, 1, 0) == ["LT", "T", "TR"]
