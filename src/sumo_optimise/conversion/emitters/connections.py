@@ -549,11 +549,16 @@ def render_connections_xml(
             L_target = (
                 main_edge_id("EB", pos, east), east_lanes
             ) if east is not None and east_lanes > 0 else None
+            T_target = (
+                minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
+            ) if exist_south and tpl.minor_lanes_from_main > 0 else None
             R_target = (
                 main_edge_id("WB", west, pos), west_lanes
             ) if west is not None and west_lanes > 0 else None
-            T_target = None
             U_target = None
+            if tpl.median_continuous:
+                T_target = None
+                R_target = None
             if not (L_target or T_target or R_target or U_target):
                 LOG.error(
                     "[VAL] E401 no main movements available for minor approach: pos=%s branch=%s west=%s east=%s west_lanes=%d east_lanes=%d",
@@ -577,11 +582,16 @@ def render_connections_xml(
             L_target = (
                 main_edge_id("WB", west, pos), west_lanes
             ) if west is not None and west_lanes > 0 else None
+            T_target = (
+                minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
+            ) if exist_north and tpl.minor_lanes_from_main > 0 else None
             R_target = (
                 main_edge_id("EB", pos, east), east_lanes
             ) if east is not None and east_lanes > 0 else None
-            T_target = None
             U_target = None
+            if tpl.median_continuous:
+                T_target = None
+                R_target = None
             if not (L_target or T_target or R_target or U_target):
                 LOG.error(
                     "[VAL] E401 no main movements available for minor approach: pos=%s branch=%s west=%s east=%s west_lanes=%d east_lanes=%d",
