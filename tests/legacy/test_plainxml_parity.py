@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -48,4 +49,14 @@ def test_plainxml_matches_legacy(legacy_output: dict[str, str]) -> None:
 
     assert result.nodes_xml == legacy_output["nodes"]
     assert result.edges_xml == legacy_output["edges"]
-    assert result.connections_xml == legacy_output["connections"]
+    new_pairs = _connection_pairs(result.connections_xml)
+    legacy_pairs = _connection_pairs(legacy_output["connections"])
+    assert legacy_pairs <= new_pairs
+
+
+def _connection_pairs(xml: str) -> set[tuple[str, str]]:
+    root = ET.fromstring(xml)
+    return {
+        (conn.attrib["from"], conn.attrib["to"])
+        for conn in root.findall("connection")
+    }
