@@ -1,10 +1,10 @@
 ## 1) Mission & Contract
 
-This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** (“Main”) with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.2).
+This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** ("Main") with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.2).
 
 **Agent contract:**
 
-* Preserve **output parity** for the same input spec (unless an intentional change is requested).
+* Produce **deterministic outputs** for the same input spec and code version.
 * Keep the pipeline **pure and modular**: parsing → validation → planning → IR → emitters → (optional) SUMO integration.
 * Do not introduce I/O into logic layers; keep file/CLI concerns in adapters.
 * Prefer **small, testable functions** with explicit inputs/outputs over large classes.
