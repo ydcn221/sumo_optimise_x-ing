@@ -544,21 +544,57 @@ def render_connections_xml(
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
             s_count = tpl.minor_lanes_to_main
+            east_lanes = pick_main("EB", pos, east) if east is not None else 0
+            west_lanes = pick_main("WB", west, pos) if west is not None else 0
             L_target = (
-                main_edge_id("EB", pos, east), pick_main("EB", pos, east)
-            ) if east is not None else None
+                main_edge_id("EB", pos, east), east_lanes
+            ) if east is not None and east_lanes > 0 else None
+            R_target = (
+                main_edge_id("WB", west, pos), west_lanes
+            ) if west is not None and west_lanes > 0 else None
+            T_target = None
+            U_target = None
+            if not (L_target or T_target or R_target or U_target):
+                LOG.error(
+                    "[VAL] E401 no main movements available for minor approach: pos=%s branch=%s west=%s east=%s west_lanes=%d east_lanes=%d",
+                    pos,
+                    "north",
+                    west,
+                    east,
+                    west_lanes,
+                    east_lanes,
+                )
+                raise SemanticValidationError("no available movements for approach")
             _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, None, None, None
+                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
             )
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
             s_count = tpl.minor_lanes_to_main
+            west_lanes = pick_main("WB", west, pos) if west is not None else 0
+            east_lanes = pick_main("EB", pos, east) if east is not None else 0
             L_target = (
-                main_edge_id("WB", west, pos), pick_main("WB", west, pos)
-            ) if west is not None else None
+                main_edge_id("WB", west, pos), west_lanes
+            ) if west is not None and west_lanes > 0 else None
+            R_target = (
+                main_edge_id("EB", pos, east), east_lanes
+            ) if east is not None and east_lanes > 0 else None
+            T_target = None
+            U_target = None
+            if not (L_target or T_target or R_target or U_target):
+                LOG.error(
+                    "[VAL] E401 no main movements available for minor approach: pos=%s branch=%s west=%s east=%s west_lanes=%d east_lanes=%d",
+                    pos,
+                    "south",
+                    west,
+                    east,
+                    west_lanes,
+                    east_lanes,
+                )
+                raise SemanticValidationError("no available movements for approach")
             _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, None, None, None
+                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
             )
 
     unique_lines: List[str] = []
