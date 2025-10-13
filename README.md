@@ -14,7 +14,7 @@ Generate a SUMO network (PlainXML) for a **single, straight main road** with ort
 * **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
 * **Vehicle turn connections** (L/T/R) with deterministic lane mapping.
-* **Two-step `netconvert` integration** (optional) and structured build logs.
+* **Three-step `netconvert` integration** (optional) and structured build logs.
 
 ---
 
@@ -105,16 +105,22 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 Some setups run it automatically. If not, you can run manually:
 
 ```bash
-# Step 1: base network
+# Step 1: build an initial SUMO network
 $ netconvert --lefthand \
   --node-files net.nod.xml \
   --edge-files net.edg.xml \
   --sidewalks.guess \
-  --output base.net.xml
+  --output base_raw.net.xml
 
-# Step 2: add connections & crossings
+# Step 2: round-trip to PlainXML
+$ netconvert \
+  --sumo-net-file base_raw.net.xml \
+  --plain-output-prefix base_plain
+
+# Step 3: merge crossings/connections
 $ netconvert --lefthand \
-  --sumo-net-file base.net.xml \
+  --node-files base_plain.nod.xml \
+  --edge-files base_plain.edg.xml \
   --connection-files net.con.xml \
   --output network.net.xml
 ```
@@ -175,7 +181,7 @@ Typical flags (names may vary by release):
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
-  * `base.net.xml` / `network.net.xml` — if `netconvert` runs.
+  * `base_raw.net.xml`, `base_plain.*`, and `network.net.xml` — if `netconvert` runs.
 
 ---
 
