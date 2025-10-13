@@ -172,7 +172,7 @@ Agents must preserve or extend these checks in `conversion/checks/semantics.py`:
 **Connections:**
 
 * For each approach, enumerate allowed L/T/R based on kind and `median_continuous`.
-* Map lane ranges using a deterministic band partition; never produce zero connections where movement is allowed (else error).
+* Map lane ranges deterministically: left turns anchor from the leftmost lane, straights pair left-to-left with the rightmost fan-out, and right turns anchor from the rightmost lane. Never produce zero connections where movement is allowed (else error).
 
 **Crossings:**
 

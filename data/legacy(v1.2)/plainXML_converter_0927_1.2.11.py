@@ -3,7 +3,7 @@
 - ver 1.2.11 (2025-10-01)
   - connections.xml に車両向け <connection> を出力。
     - 各 Cluster.Main.{pos} で流入アプローチ（Main.EB, Main.WB, Minor.N.to, Minor.S.to）を列挙し、L/T/R の行先エッジを確定。
-    - レーン数差へは決定的な帯分割（many-to-many）で対応（s×(l+t+r) の接続行列を構成）。
+    - レーン数差は動作別の決定的割当で対応（左折=左端起点、直進=左詰め＋右端扇出、右折=右端起点）。
     - index=0 は歩道、車道は 1..本数（s, l, t, r）で固定。fromLane/toLane には 1..本数を使用。
     - median_continuous による禁止を強制：主道路流入は右折禁止、従道路流入は直進・右折禁止。
     - T 字路や端点による行先不存在はレーン本数 0 として扱う。
@@ -1078,20 +1078,6 @@ def _build_lane_permissions(s: int, l: int, t: int, r: int) -> List[Tuple[bool, 
     # 到達不能想定だが、防御的に L/T/R のあるものを詰める
     return [(hasL, hasT, hasR)] * max(1, s)
 
-def _band_partition(n_sources: int, m_targets: int) -> List[Tuple[int, int]]:
-    """
-    many-to-many の帯分割。n_sources 本の起点で m_targets 本の行先を [low..high] に帯分割する。
-    返り値は [(low,high)] × n_sources（1始まり）。low>high の場合は割当なしを示す。
-    """
-    if n_sources <= 0 or m_targets <= 0:
-        return [(1, 0)] * max(0, n_sources)  # 空区間
-    bands: List[Tuple[int, int]] = []
-    for k in range(1, n_sources + 1):
-        low = math.floor((k - 1) * m_targets / n_sources) + 1
-        high = math.floor(k * m_targets / n_sources)
-        bands.append((low, high))
-    return bands
-
 def _emit_vehicle_connections_for_approach(
     lines: List[str],
     pos: int,
@@ -1124,37 +1110,41 @@ def _emit_vehicle_connections_for_approach(
     emitted = 0
     # L
     if l > 0 and len(I_L) > 0:
-        bands = _band_partition(len(I_L), l)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = I_L[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{L_target[0]}" fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        for offset, from_lane in enumerate(I_L):
+            to_lane = min(offset + 1, l)
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{L_target[0]}" fromLane="{from_lane}" toLane="{to_lane}"/>'
+            )
+            emitted += 1
     # T
     if t > 0 and len(I_T) > 0:
-        bands = _band_partition(len(I_T), t)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = I_T[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{T_target[0]}" fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        for offset, from_lane in enumerate(I_T):
+            to_lane = min(offset + 1, t)
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{T_target[0]}" fromLane="{from_lane}" toLane="{to_lane}"/>'
+            )
+            emitted += 1
+        if len(I_T) < t:
+            rightmost_source = I_T[-1]
+            for to_lane in range(len(I_T) + 1, t + 1):
+                lines.append(
+                    f'  <connection from="{in_edge_id}" to="{T_target[0]}" fromLane="{rightmost_source}" toLane="{to_lane}"/>'
+                )
+                emitted += 1
     # R
     if r > 0 and len(I_R) > 0:
-        bands = _band_partition(len(I_R), r)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = I_R[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{R_target[0]}" fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        to_lane_map: Dict[int, int] = {}
+        for offset, from_lane in enumerate(reversed(I_R)):
+            if offset < r:
+                to_lane = r - offset
+            else:
+                to_lane = r
+            to_lane_map[from_lane] = to_lane
+        for from_lane in I_R:
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{R_target[0]}" fromLane="{from_lane}" toLane="{to_lane_map[from_lane]}"/>'
+            )
+            emitted += 1
 
     if (l + t + r) > 0 and emitted == 0 and s_count > 0:
         LOG.error("[VAL] E402 zero vehicle connections emitted: pos=%s in_edge=%s s=%d l=%d t=%d r=%d",
@@ -1186,7 +1176,9 @@ def emit_connections_with_crossings(defaults: Defaults,
     - 車両 <connection>:
         * 各 Cluster.Main.{pos} で流入アプローチを列挙し、(s,l,t,r) を決定。
         * レーン index は 1..本数（0 は歩道）を使用。
-        * 帯分割で fromLane→toLane を決定し、<connection> を出力。
+        * 左折: 左端から順に割当（余剰は最右レーン共有）。
+        * 直進: 左詰めで割当し、最右直進レーンが余剰行先を扇出。
+        * 右折: 右端から順に割当（余剰は最右レーン共有）。
         * 禁止規則（median_continuous / T 字路欠側 / 端点）を反映。
     """
     width = defaults.ped_crossing_width_m

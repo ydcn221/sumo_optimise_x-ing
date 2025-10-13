@@ -46,17 +46,6 @@ def _alloc_excess_by_ratio(excess: int, wL: int, wT: int, wR: int) -> Tuple[int,
     return tuple(floors)
 
 
-def _band_partition(n_sources: int, m_targets: int) -> List[Tuple[int, int]]:
-    if n_sources <= 0 or m_targets <= 0:
-        return []
-    bands: List[Tuple[int, int]] = []
-    for k in range(1, n_sources + 1):
-        low = int((k - 1) * m_targets / n_sources) + 1
-        high = int(k * m_targets / n_sources)
-        bands.append((low, high))
-    return bands
-
-
 def _build_lane_permissions(s: int, l: int, t: int, r: int) -> List[Tuple[bool, bool, bool]]:
     has_l, has_t, has_r = (l > 0), (t > 0), (r > 0)
     movements = int(has_l) + int(has_t) + int(has_r)
@@ -121,40 +110,51 @@ def _emit_vehicle_connections_for_approach(
     emitted = 0
 
     if l > 0 and idx_l:
-        bands = _band_partition(len(idx_l), l)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = idx_l[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{L_target[0]}" '
-                        f'fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        # Left turns: align lanes from the leftmost target lane; surplus sources reuse
+        # the last available (rightmost) left-turn lane.
+        for offset, from_lane in enumerate(idx_l):
+            to_lane = min(offset + 1, l)
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{L_target[0]}" '
+                f'fromLane="{from_lane}" toLane="{to_lane}"/>'
+            )
+            emitted += 1
 
     if t > 0 and idx_t:
-        bands = _band_partition(len(idx_t), t)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = idx_t[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{T_target[0]}" '
-                        f'fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        # Straight movements: pair lanes left-to-left, then let the rightmost straight
+        # source lane fan out to any remaining straight target lanes.
+        for offset, from_lane in enumerate(idx_t):
+            to_lane = min(offset + 1, t)
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{T_target[0]}" '
+                f'fromLane="{from_lane}" toLane="{to_lane}"/>'
+            )
+            emitted += 1
+        if len(idx_t) < t:
+            rightmost_source = idx_t[-1]
+            for to_lane in range(len(idx_t) + 1, t + 1):
+                lines.append(
+                    f'  <connection from="{in_edge_id}" to="{T_target[0]}" '
+                    f'fromLane="{rightmost_source}" toLane="{to_lane}"/>'
+                )
+                emitted += 1
 
     if r > 0 and idx_r:
-        bands = _band_partition(len(idx_r), r)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low <= high:
-                from_lane = idx_r[k - 1]
-                for to_lane in range(low, high + 1):
-                    lines.append(
-                        f'  <connection from="{in_edge_id}" to="{R_target[0]}" '
-                        f'fromLane="{from_lane}" toLane="{to_lane}"/>'
-                    )
-                    emitted += 1
+        # Right turns (and U-turns): anchor to the rightmost lanes and walk leftward;
+        # additional sources reuse the rightmost target lane.
+        to_lane_map: Dict[int, int] = {}
+        for offset, from_lane in enumerate(reversed(idx_r)):
+            if offset < r:
+                to_lane = r - offset
+            else:
+                to_lane = r
+            to_lane_map[from_lane] = to_lane
+        for from_lane in idx_r:
+            lines.append(
+                f'  <connection from="{in_edge_id}" to="{R_target[0]}" '
+                f'fromLane="{from_lane}" toLane="{to_lane_map[from_lane]}"/>'
+            )
+            emitted += 1
 
     if (l + t + r) > 0 and emitted == 0 and s_count > 0:
         LOG.error(
