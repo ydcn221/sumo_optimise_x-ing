@@ -31,17 +31,6 @@ from ..utils.logging import get_logger
 LOG = get_logger()
 
 
-def _band_partition(n_sources: int, m_targets: int) -> List[Tuple[int, int]]:
-    if n_sources <= 0 or m_targets <= 0:
-        return []
-    bands: List[Tuple[int, int]] = []
-    for k in range(1, n_sources + 1):
-        low = int((k - 1) * m_targets / n_sources) + 1
-        high = int(k * m_targets / n_sources)
-        bands.append((low, high))
-    return bands
-
-
 _ORDER = ("L", "T", "R", "U")
 
 
@@ -285,33 +274,66 @@ def _emit_vehicle_connections_for_approach(
 
     emitted = 0
 
-    def emit_for(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
+    def append_connection(from_lane: int, to_lane: int, edge_id: str) -> None:
         nonlocal emitted
+        lines.append(
+            f'  <connection from="{in_edge_id}" to="{edge_id}" '
+            f'fromLane="{from_lane}" toLane="{to_lane}"/>'
+        )
+        emitted += 1
+
+    def emit_left(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
+        """Map left turns from the inside out, sharing the last target lane if needed."""
         if not idx or not target:
             return
         edge_id, lane_count = target
         if lane_count <= 0:
             return
-        bands = _band_partition(len(idx), lane_count)
-        for k, (low, high) in enumerate(bands, start=1):
-            if low > high:
-                continue
-            from_lane = idx[k - 1]
-            for to_lane in range(low, high + 1):
-                lines.append(
-                    f'  <connection from="{in_edge_id}" to="{edge_id}" '
-                    f'fromLane="{from_lane}" toLane="{to_lane}"/>'
-                )
-                emitted += 1
+        for offset, from_lane in enumerate(idx):
+            to_lane = min(offset + 1, lane_count)
+            append_connection(from_lane, to_lane, edge_id)
+
+    def emit_straight(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
+        """Assign straight lanes left-to-left, fanning the rightmost lane when required."""
+        if not idx or not target:
+            return
+        edge_id, lane_count = target
+        if lane_count <= 0:
+            return
+        count = len(idx)
+        matched = min(count, lane_count)
+        for offset in range(matched):
+            append_connection(idx[offset], offset + 1, edge_id)
+        if count > lane_count:
+            for from_lane in idx[lane_count:]:
+                append_connection(from_lane, lane_count, edge_id)
+        elif lane_count > count:
+            edge_from = idx[-1]
+            for to_lane in range(count + 1, lane_count + 1):
+                append_connection(edge_from, to_lane, edge_id)
+
+    def emit_right(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
+        """Attach right (and U) turns from the outside in, sharing the edge lane as needed."""
+        if not idx or not target:
+            return
+        edge_id, lane_count = target
+        if lane_count <= 0:
+            return
+        for offset, from_lane in enumerate(reversed(idx)):
+            if offset < lane_count:
+                to_lane = lane_count - offset
+            else:
+                to_lane = lane_count
+            append_connection(from_lane, to_lane, edge_id)
 
     if l > 0:
-        emit_for(idx_l, L_target)
+        emit_left(idx_l, L_target)
     if t > 0:
-        emit_for(idx_t, T_target)
+        emit_straight(idx_t, T_target)
     if r > 0:
-        emit_for(idx_r, R_target)
+        emit_right(idx_r, R_target)
     if u > 0:
-        emit_for(idx_u, U_target)
+        emit_right(idx_u, U_target)
 
     if (l + t + r + u) > 0 and emitted == 0 and s_count > 0:
         LOG.error(

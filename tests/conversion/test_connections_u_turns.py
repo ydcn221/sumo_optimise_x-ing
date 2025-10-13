@@ -63,15 +63,7 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
     eb_back = main_edge_id("EB", 100, 200)
 
     assert (
-        f'  <connection from="{eb_in}" to="{wb_back}" fromLane="4" toLane="1"/>'
-        in xml
-    )
-    assert (
         f'  <connection from="{eb_in}" to="{wb_back}" fromLane="4" toLane="2"/>'
-        in xml
-    )
-    assert (
-        f'  <connection from="{wb_in}" to="{eb_back}" fromLane="4" toLane="1"/>'
         in xml
     )
     assert (

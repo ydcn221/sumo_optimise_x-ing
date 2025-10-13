@@ -13,7 +13,7 @@ Generate a SUMO network (PlainXML) for a **single, straight main road** with ort
 * **Grid snapping** with configurable step and tie-break.
 * **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
-* **Vehicle turn connections** (L/T/R) with deterministic lane mapping.
+* **Vehicle turn connections** (L/T/R) with deterministic lane mapping (left-to-left, straight fan-out, rightmost sharing).
 * **Three-step `netconvert` integration** (optional) and structured build logs.
 
 ---
@@ -177,7 +177,7 @@ Typical flags (names may vary by release):
 
   * `net.nod.xml` — main road endpoints and breakpoints; cluster `<join>` nodes at interior junctions; minor dead-ends.
   * `net.edg.xml` — EB/WB segments per breakpoint; minor “to/from” one-way edges; lane counts with overrides; speeds in m/s.
-  * `net.con.xml` — `<connection>` for vehicle L/T/R movements; `<crossing>` for pedestrians (junction/min-block; single/split).
+  * `net.con.xml` — `<connection>` for vehicle L/T/R movements with left turns mapped from the inside out, straight lanes paired left-to-left (fanning the rightmost lane when targets exceed sources), and right/U turns sharing the outermost lane when needed; `<crossing>` for pedestrians (junction/min-block; single/split).
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
