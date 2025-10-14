@@ -2,7 +2,7 @@
 
 Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.2)**. The converter validates the JSON, plans lanes and crossings, emits `net.nod.xml` / `net.edg.xml` / `net.con.xml`, and can optionally run `netconvert` to build a runnable `network.net.xml`.
 
-> This repository contains a modular rewrite of the legacy monolithic script. Legacy compatibility shims are provided under `sumo_optimise/legacy`.
+> This repository hosts the modular corridor converter introduced for schema v1.2.
 
 ---
 
@@ -31,9 +31,9 @@ sumo_optimise/
     sumo_integration/      # netconvert / netedit wrappers
     domain/                # Dataclasses & enums
     utils/                 # Logging, IO, constants, errors
-    data/schema.json       # Embedded JSON Schema (v1.2)
+    data/schema_v1.2.json  # Embedded JSON Schema (v1.2)
     pipeline.py            # Orchestration
-  legacy/                  # Backward-compatibility interface
+data/reference/             # Sample specifications (e.g., schema_v1.2_sample.json)
 jsonschema/                # (Local namespace; *not* the PyPI package)
 ```
 
@@ -75,7 +75,7 @@ $ python -m pip install -e .
 
 ## Quick start
 
-1. **Prepare input JSON** (v1.2). Use your own file or adapt the provided sample.
+1. **Prepare input JSON** (v1.2). Use your own file or adapt the provided sample under `data/reference/`.
 2. **Run the CLI** to build PlainXML (nodes/edges/connections).
 3. **Optionally run `netconvert`** to produce `network.net.xml`.
 
@@ -91,7 +91,7 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 
 **Default behavior**
 
-* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.2).
+* The converter validates against **`sumo_optimise/conversion/data/schema_v1.2.json`** (v1.2).
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
@@ -164,7 +164,7 @@ $ python -m sumo_optimise.conversion.cli --help
 Typical flags (names may vary by release):
 
 * `--input PATH` — path to spec JSON (required).
-* `--schema PATH` — override schema path (defaults to packaged `data/schema.json`).
+* `--schema PATH` — override schema path (defaults to packaged `data/schema_v1.2.json`).
 * `--out DIR` — output directory root (default `plainXML_out/`).
 * `--keep-output` — keep intermediate files; do not clean on failure.
 * `--skip-netconvert` — generate XML only; do not call `netconvert`.
