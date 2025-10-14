@@ -183,6 +183,12 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
+        ped_red_offset_raw = p.get("ped_red_offset_s")
+        ped_red_offset = int(ped_red_offset_raw) if ped_red_offset_raw is not None else 0
+        yellow_duration_raw = p.get("yellow_duration_s")
+        yellow_duration = 0
+        if yellow_duration_raw is not None:
+            yellow_duration = int(yellow_duration_raw)
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
@@ -222,11 +228,33 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
             phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
-        if sum_dur != cycle:
-            errors.append(f"[VAL] E302 cycle mismatch in profile={pid} kind={kind}: sum(phases)={sum_dur} != cycle_s={cycle}")
+        if ped_red_offset < 0 or ped_red_offset >= cycle:
+            errors.append(
+                "[VAL] E305 ped_red_offset_s must satisfy 0 ≤ value < cycle: "
+                f"profile={pid} kind={kind} cycle_s={cycle} value={ped_red_offset}"
+            )
+        if yellow_duration_raw is not None:
+            if yellow_duration <= 0:
+                errors.append(
+                    "[VAL] E306 yellow_duration_s must be positive when provided: "
+                    f"profile={pid} kind={kind} value={yellow_duration}"
+                )
+        if yellow_duration >= cycle:
+            errors.append(
+                "[VAL] E306 yellow_duration_s must leave room within cycle: "
+                f"profile={pid} kind={kind} cycle_s={cycle} value={yellow_duration}"
+            )
+        effective_cycle = sum_dur + yellow_duration
+        if effective_cycle != cycle:
+            errors.append(
+                "[VAL] E302 cycle mismatch in profile="
+                f"{pid} kind={kind}: sum(phases)={sum_dur} + yellow_duration_s={yellow_duration} != cycle_s={cycle}"
+            )
         prof = SignalProfileDef(
             id=pid,
             cycle_s=cycle,
+            ped_red_offset_s=ped_red_offset,
+            yellow_duration_s=yellow_duration,
             phases=phases,
             kind=EventKind(kind),
             pedestrian_conflicts=conflicts,

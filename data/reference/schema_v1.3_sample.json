@@ -70,7 +70,9 @@
     "tee": [
       {
         "id": "tee_c90_mainW_minor",
-        "cycle_s": 90,
+        "cycle_s": 95,
+        "ped_red_offset_s": 10,
+        "yellow_duration_s": 5,
         "pedestrian_conflicts": {
           "left": true,
           "right": false
@@ -153,7 +155,9 @@
     "cross": [
       {
         "id": "cross_basic90",
-        "cycle_s": 90,
+        "cycle_s": 94,
+        "ped_red_offset_s": 6,
+        "yellow_duration_s": 4,
         "pedestrian_conflicts": {
           "left": true,
           "right": true
