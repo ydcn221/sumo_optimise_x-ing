@@ -18,6 +18,7 @@ from ..domain.models import (
     JunctionTemplate,
     LayoutEvent,
     MainRoadConfig,
+    PedestrianConflictConfig,
     SideMinor,
     SignalPhaseDef,
     SignalProfileDef,
@@ -185,6 +186,34 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
+        conflicts_raw = p.get("pedestrian_conflicts")
+        conflicts = PedestrianConflictConfig(left=False, right=False)
+        if conflicts_raw is not None:
+            if not isinstance(conflicts_raw, dict):
+                errors.append(
+                    f"[VAL] E304 pedestrian_conflicts must be object: profile={pid} kind={kind} value={conflicts_raw!r}"
+                )
+            else:
+                missing = [key for key in ("left", "right") if key not in conflicts_raw]
+                if missing:
+                    errors.append(
+                        f"[VAL] E304 pedestrian_conflicts missing keys={missing}: profile={pid} kind={kind}"
+                    )
+                left_raw = conflicts_raw.get("left")
+                right_raw = conflicts_raw.get("right")
+                type_errors = [
+                    name
+                    for name, val in (("left", left_raw), ("right", right_raw))
+                    if name not in missing and not isinstance(val, bool)
+                ]
+                if type_errors:
+                    errors.append(
+                        f"[VAL] E304 pedestrian_conflicts keys must be boolean: profile={pid} kind={kind} keys={type_errors}"
+                    )
+                conflicts = PedestrianConflictConfig(
+                    left=left_raw if isinstance(left_raw, bool) else False,
+                    right=right_raw if isinstance(right_raw, bool) else False,
+                )
         for j, ph in enumerate(phases_data):
             name = str(ph.get("name", f"phase{j}"))
             dur = int(ph["duration_s"])
@@ -196,7 +225,13 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
             sum_dur += dur
         if sum_dur != cycle:
             errors.append(f"[VAL] E302 cycle mismatch in profile={pid} kind={kind}: sum(phases)={sum_dur} != cycle_s={cycle}")
-        prof = SignalProfileDef(id=pid, cycle_s=cycle, phases=phases, kind=EventKind(kind))
+        prof = SignalProfileDef(
+            id=pid,
+            cycle_s=cycle,
+            phases=phases,
+            kind=EventKind(kind),
+            pedestrian_conflicts=conflicts,
+        )
         if pid in profiles_by_kind[kind]:
             errors.append(f"[VAL] E303 duplicate signal_profile id within kind: id={pid} kind={kind}")
         else:
