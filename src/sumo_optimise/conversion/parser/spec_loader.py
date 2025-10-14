@@ -89,8 +89,8 @@ def validate_json_schema(spec_json: Dict, schema_json: Dict) -> None:
 
 def ensure_supported_version(spec_json: Dict) -> None:
     version = str(spec_json.get("version", ""))
-    if not version.startswith("1.2"):
-        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.2.*)')
+    if not version.startswith("1.3"):
+        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.3.*)')
 
 
 def parse_snap_rule(spec_json: Dict) -> SnapRule:
@@ -169,7 +169,7 @@ def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
 
 
 def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileDef]]:
-    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|minor)_(?:L|T|R))$")
+    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|EB|WB|minor)_(?:L|T|R))$")
 
     profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]] = {
         EventKind.TEE.value: {},
