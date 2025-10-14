@@ -179,6 +179,16 @@
       "properties": {
         "id": { "$ref": "#/definitions/idString", "description": "信号プロファイルID" },
         "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]" },
+        "pedestrian_conflicts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "type": "boolean", "description": "主道路を渡る歩行者が左側(南)の車両と競合するか" },
+            "right": { "type": "boolean", "description": "主道路を渡る歩行者が右側(北)の車両と競合するか" }
+          },
+          "required": ["left", "right"],
+          "description": "歩行者相と左右車両の競合有無。未指定時は両側とも競合なし扱い。"
+        },
         "phases": {
           "type": "array",
           "minItems": 1,
