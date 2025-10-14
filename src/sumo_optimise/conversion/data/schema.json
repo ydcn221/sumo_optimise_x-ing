@@ -179,6 +179,16 @@
       "properties": {
         "id": { "$ref": "#/definitions/idString", "description": "信号プロファイルID" },
         "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]" },
+        "ped_red_offset_s": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "歩行者全赤に入るまでのサイクル先行時間[秒]"
+        },
+        "yellow_duration_s": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "車両の黄信号相の代表時間[秒]"
+        },
         "pedestrian_conflicts": {
           "type": "object",
           "additionalProperties": false,
