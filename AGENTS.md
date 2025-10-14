@@ -1,6 +1,6 @@
 ## 1) Mission & Contract
 
-This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** ("Main") with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.2).
+This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** ("Main") with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.3).
 
 **Agent contract:**
 
@@ -48,10 +48,10 @@ sumo_optimise/
     config/
       __init__.py          # Defaults/paths/version guard (if any)
     data/
-      schema.json          # JSON Schema (v1.2)
+      schema.json          # JSON Schema (v1.3)
 data/
   reference/
-    schema_v1.2_sample.json# Sample specification for smoke tests
+    schema_v1.3_sample.json# Sample specification for smoke tests
 jsonschema/
   __init__.py                      # (Namespace stub; do not confuse with PyPI jsonschema)
 sumo_optimise.egg-info/            # Package metadata (editable install)
@@ -63,7 +63,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 
 ## 3) Supported Input & Outputs
 
-* **Input:** JSON spec validated against `sumo_optimise/conversion/data/schema.json` (v1.2).
+* **Input:** JSON spec validated against `sumo_optimise/conversion/data/schema.json` (v1.3).
 * **Outputs (PlainXML):**
 
   * `net.nod.xml` — nodes (main EB/WB breakpoints; cluster/join nodes at interior breakpoints; minor road dead-ends).
@@ -263,7 +263,7 @@ python - <<'PY'
 from pathlib import Path
 from sumo_optimise.conversion.cli import main  # or call pipeline directly
 # Run a smoke build on the bundled sample if available:
-# main(["--input", "data/reference/schema_v1.2_sample.json"])
+# main(["--input", "data/reference/schema_v1.3_sample.json"])
 PY
 # Optionally: check that plainXML_out was created and files exist.
 ```
