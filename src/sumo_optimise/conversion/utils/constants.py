@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 INPUT_JSON_PATH = Path("v1.2.check.json")
-SCHEMA_JSON_PATH = Path(__file__).resolve().parents[1] / "data" / "schema_v1.2.json"
+SCHEMA_JSON_PATH = Path(__file__).resolve().parents[1] / "data" / "schema.json"
 OUTPUT_DIR_PREFIX = "plainXML_out"
 DATE_DIR_FORMAT = "%m%d"
 

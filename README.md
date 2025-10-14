@@ -31,7 +31,7 @@ sumo_optimise/
     sumo_integration/      # netconvert / netedit wrappers
     domain/                # Dataclasses & enums
     utils/                 # Logging, IO, constants, errors
-    data/schema_v1.2.json  # Embedded JSON Schema (v1.2)
+    data/schema.json       # Embedded JSON Schema (v1.2)
     pipeline.py            # Orchestration
 data/reference/             # Sample specifications (e.g., schema_v1.2_sample.json)
 jsonschema/                # (Local namespace; *not* the PyPI package)
@@ -91,7 +91,7 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 
 **Default behavior**
 
-* The converter validates against **`sumo_optimise/conversion/data/schema_v1.2.json`** (v1.2).
+* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.2).
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
@@ -164,7 +164,7 @@ $ python -m sumo_optimise.conversion.cli --help
 Typical flags (names may vary by release):
 
 * `--input PATH` — path to spec JSON (required).
-* `--schema PATH` — override schema path (defaults to packaged `data/schema_v1.2.json`).
+* `--schema PATH` — override schema path (defaults to packaged `data/schema.json`).
 * `--out DIR` — output directory root (default `plainXML_out/`).
 * `--keep-output` — keep intermediate files; do not clean on failure.
 * `--skip-netconvert` — generate XML only; do not call `netconvert`.

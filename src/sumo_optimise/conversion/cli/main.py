@@ -16,7 +16,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--schema",
         type=Path,
         default=SCHEMA_JSON_PATH,
-        help="Path to the JSON schema (default: schema_v1.2.json)",
+        help="Path to the JSON schema (default: schema.json)",
     )
     parser.add_argument("--run-netconvert", action="store_true", help="Run three-step netconvert after emission")
     parser.add_argument("--run-netedit", action="store_true", help="Launch SUMO netedit with the generated network")
