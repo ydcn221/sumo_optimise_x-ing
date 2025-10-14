@@ -7,14 +7,14 @@
   },
 
   "defaults": {
-    "minor_road_length_m": 120,
+    "minor_road_length_m": 70,
     "ped_crossing_width_m": 3.5,
     "sidewalk_width_m": 2.0,
     "speed_kmh": 50
   },
 
   "main_road": {
-    "length_m": 1500,
+    "length_m": 300,
     "center_gap_m": 6.0,
     "lanes": 3
   },
@@ -22,7 +22,7 @@
   "junction_templates": {
     "tee": [
       {
-        "id": "T_keep_main_generic",
+        "id": "T1",
         "main_approach_begin_m": 0,
         "main_approach_lanes": 0,
         "minor_lanes_to_main": 2,
@@ -33,20 +33,20 @@
     ],
     "cross": [
       {
-        "id": "X_to4_from2_main5",
-        "main_approach_begin_m": 120,
-        "main_approach_lanes": 5,
+        "id": "X1",
+        "main_approach_begin_m": 50,
+        "main_approach_lanes": 4,
         "minor_lanes_to_main": 4,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": false,
+        "split_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
-        "id": "X_to6_from2_main6",
-        "main_approach_begin_m": 150,
-        "main_approach_lanes": 6,
-        "minor_lanes_to_main": 6,
-        "minor_lanes_from_main": 2,
+        "id": "X2",
+        "main_approach_begin_m": 50,
+        "main_approach_lanes": 4,
+        "minor_lanes_to_main": 4,
+        "minor_lanes_from_main": 3,
         "split_ped_crossing_on_main": false,
         "median_continuous": false
       }
@@ -68,22 +68,35 @@
     ],
     "cross": [
       {
-        "id": "cross_basic90",
+        "id": "X_90_1",
         "cycle_s": 90,
         "phases": [
-          { "name": "main_T",  "duration_s": 30, "allow_movements": ["main_T"] },
-          { "name": "peds",    "duration_s": 12, "allow_movements": ["pedestrian"] },
-          { "name": "minor_T", "duration_s": 30, "allow_movements": ["minor_T"] },
-          { "name": "all_red", "duration_s": 18, "allow_movements": [] }
+          { "name": "main_1",  "duration_s": 32, "allow_movements": ["main_T", "main_L", "pedestrian"] },
+          { "name": "main_2",    "duration_s": 15, "allow_movements": ["main_R", "pedestrian"] },
+          { "name": "allred_1",    "duration_s": 3, "allow_movements": [] },
+          { "name": "minor_1",    "duration_s": 27, "allow_movements": ["minor_T", "minor_L", "pedestrian"] },
+          { "name": "minor_2",    "duration_s": 10, "allow_movements": ["minor_R", "pedestrian"] },
+          { "name": "allred_2",    "duration_s": 3, "allow_movements": [] }
+        ]
+      },
+      {
+        "id": "X_90_2",
+        "cycle_s": 90,
+        "phases": [
+          { "name": "1",  "duration_s": 30, "allow_movements": ["main_T", "pedestrian"] },
+          { "name": "2",    "duration_s": 15, "allow_movements": ["main_R", "minor_L"] },
+          { "name": "3",    "duration_s": 30, "allow_movements": ["minor_T", "pedestrian"] },
+          { "name": "4",    "duration_s": 15, "allow_movements": ["minor_R", "main_L"] }
         ]
       }
     ],
     "xwalk_midblock": [
       {
-        "id": "xwalk_veh_only60",
-        "cycle_s": 60,
+        "id": "mid_90",
+        "cycle_s": 90,
         "phases": [
-          { "name": "veh_only", "duration_s": 60, "allow_movements": [] }
+          { "name": "WB", "duration_s": 60, "allow_movements": ["main_T"] },
+          { "name": "ped", "duration_s": 30, "allow_movements": ["pedestrian"] }
         ]
       }
     ]
@@ -92,17 +105,26 @@
   "layout": [
     {
       "type": "cross",
-      "pos_m": 400,
-      "template": "X_to4_from2_main5",
-      "signalized": false,
-      "main_ped_crossing_placement": { "west": true, "east": true }
+      "pos_m": 100,
+      "template": "X1",
+      "signalized": true,
+      "signal": { "profile_id": "X_90_1", "offset_s": 0 },
+      "main_ped_crossing_placement": { "west": true, "east": false }
     },
     {
       "type": "cross",
-      "pos_m": 1000,
-      "template": "X_to6_from2_main6",
-      "signalized": false,
-      "main_ped_crossing_placement": { "west": true, "east": true }
+      "pos_m": 200,
+      "template": "X2",
+      "signalized": true,
+      "signal": { "profile_id": "X_90_2", "offset_s": 45 },
+      "main_ped_crossing_placement": { "west": false, "east": true }
+    },
+    {
+      "type": "xwalk_midblock",
+      "pos_m": 150,
+      "signalized": true,
+      "split_ped_crossing_on_main": true,
+      "signal": { "profile_id": "mid_90", "offset_s": 75 }
     }
   ]
 }
