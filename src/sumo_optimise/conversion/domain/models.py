@@ -86,7 +86,6 @@ class JunctionTemplate:
 
 @dataclass(frozen=True)
 class SignalPhaseDef:
-    name: str
     duration_s: int
     allow_movements: List[str]
 

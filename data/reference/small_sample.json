@@ -59,11 +59,11 @@
         "id": "tee_basic80",
         "cycle_s": 80,
         "phases": [
-          { "name": "main_T",  "duration_s": 18, "allow_movements": ["main_T"] },
-          { "name": "eb_L",    "duration_s": 12, "allow_movements": ["EB_L"] },
-          { "name": "minor_T", "duration_s": 30, "allow_movements": ["minor_T"] },
-          { "name": "peds",    "duration_s": 10, "allow_movements": ["pedestrian"] },
-          { "name": "all_red", "duration_s": 10, "allow_movements": [] }
+          { "duration_s": 18, "allow_movements": ["main_T"] },
+          { "duration_s": 12, "allow_movements": ["EB_L"] },
+          { "duration_s": 30, "allow_movements": ["minor_T"] },
+          { "duration_s": 10, "allow_movements": ["pedestrian"] },
+          { "duration_s": 10, "allow_movements": [] }
         ]
       }
     ],
@@ -72,11 +72,11 @@
         "id": "cross_basic90",
         "cycle_s": 90,
         "phases": [
-          { "name": "wb_T",    "duration_s": 20, "allow_movements": ["WB_T"] },
-          { "name": "main_T",  "duration_s": 18, "allow_movements": ["main_T"] },
-          { "name": "peds",    "duration_s": 12, "allow_movements": ["pedestrian"] },
-          { "name": "minor_T", "duration_s": 30, "allow_movements": ["minor_T"] },
-          { "name": "all_red", "duration_s": 10, "allow_movements": [] }
+          { "duration_s": 20, "allow_movements": ["WB_T"] },
+          { "duration_s": 18, "allow_movements": ["main_T"] },
+          { "duration_s": 12, "allow_movements": ["pedestrian"] },
+          { "duration_s": 30, "allow_movements": ["minor_T"] },
+          { "duration_s": 10, "allow_movements": [] }
         ]
       }
     ],
@@ -85,7 +85,7 @@
         "id": "xwalk_veh_only60",
         "cycle_s": 60,
         "phases": [
-          { "name": "veh_only", "duration_s": 60, "allow_movements": [] }
+          { "duration_s": 60, "allow_movements": [] }
         ]
       }
     ]
