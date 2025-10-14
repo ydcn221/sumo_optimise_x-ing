@@ -214,14 +214,13 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
                     left=left_raw if isinstance(left_raw, bool) else False,
                     right=right_raw if isinstance(right_raw, bool) else False,
                 )
-        for j, ph in enumerate(phases_data):
-            name = str(ph.get("name", f"phase{j}"))
+        for ph in phases_data:
             dur = int(ph["duration_s"])
             amv_list = list(ph.get("allow_movements", []))
             bad = [m for m in amv_list if not MOVEMENT_RE.match(str(m))]
             if bad:
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
-            phases.append(SignalPhaseDef(name=name, duration_s=dur, allow_movements=[str(m) for m in amv_list]))
+            phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
         if sum_dur != cycle:
             errors.append(f"[VAL] E302 cycle mismatch in profile={pid} kind={kind}: sum(phases)={sum_dur} != cycle_s={cycle}")
