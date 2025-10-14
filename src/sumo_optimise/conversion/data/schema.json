@@ -196,7 +196,6 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "name": { "type": "string", "description": "フェーズ名（任意の識別用）" },
               "duration_s": { "type": "integer", "minimum": 1, "description": "フェーズ長[秒]" },
               "allow_movements": {
                 "type": "array",
@@ -205,7 +204,7 @@
                 "description": "当該フェーズで許可する動作の集合。車両: main/minor の L/T/R。歩行者: pedestrian。未指定時は空配列=全赤扱い。"
               }
             },
-            "required": ["name", "duration_s", "allow_movements"]
+            "required": ["duration_s", "allow_movements"]
           },
           "description": "固定時間フェーズ列。黄色相はJSONでは表現しない。"
         }

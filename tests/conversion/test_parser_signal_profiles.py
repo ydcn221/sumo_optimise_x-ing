@@ -4,8 +4,8 @@ from sumo_optimise.conversion.parser.spec_loader import parse_signal_profiles
 
 def _phases(*durations):
     return [
-        {"name": f"p{i}", "duration_s": dur, "allow_movements": []}
-        for i, dur in enumerate(durations, start=1)
+        {"duration_s": dur, "allow_movements": []}
+        for dur in durations
     ]
 
 
