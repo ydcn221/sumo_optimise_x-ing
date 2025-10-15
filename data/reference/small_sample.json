@@ -49,7 +49,7 @@
       {
         "id": "X_90_1",
         "cycle_s": 90,
-        "ped_red_offset_s": "4",
+        "ped_red_offset_s": "7",
         "yellow_duration_s": "3",
         "pedestrian_conflicts": {
           "left": true,
@@ -67,8 +67,8 @@
       {
         "id": "X_90_2",
         "cycle_s": 90,
-        "ped_red_offset_s": "4",
-        "yellow_duration_s": "3",
+        "ped_red_offset_s": "9",
+        "yellow_duration_s": "4",
         "pedestrian_conflicts": {
           "left": true,
           "right": true
