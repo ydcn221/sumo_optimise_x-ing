@@ -20,17 +20,7 @@
   },
 
   "junction_templates": {
-    "tee": [
-      {
-        "id": "T1",
-        "main_approach_begin_m": 0,
-        "main_approach_lanes": 0,
-        "minor_lanes_to_main": 2,
-        "minor_lanes_from_main": 1,
-        "split_ped_crossing_on_main": false,
-        "median_continuous": false
-      }
-    ],
+    "tee": [],
     "cross": [
       {
         "id": "X1",
@@ -54,40 +44,40 @@
   },
 
   "signal_profiles": {
-    "tee": [
-      {
-        "id": "tee_basic80",
-        "cycle_s": 80,
-        "phases": [
-          { "duration_s": 18, "allow_movements": ["main_T"] },
-          { "duration_s": 12, "allow_movements": ["EB_L"] },
-          { "duration_s": 30, "allow_movements": ["minor_T"] },
-          { "duration_s": 10, "allow_movements": ["pedestrian"] },
-          { "duration_s": 10, "allow_movements": [] }
-        ]
-      }
-    ],
+    "tee": [],
     "cross": [
       {
         "id": "X_90_1",
         "cycle_s": 90,
+        "ped_red_offset_s": "$X_90_1_ped_red_offset(integer)$",
+        "yellow_duration_s": "$X_90_1_yellow_duration(integer)$",
+        "pedestrian_conflicts": {
+          "left": "$X_90_1_conflict_left(boolean)$",
+          "right": "$X_90_1_conflict_right(boolean)$"
+        },
         "phases": [
-          { "name": "main_1",  "duration_s": 32, "allow_movements": ["main_T", "main_L", "pedestrian"] },
-          { "name": "main_2",    "duration_s": 15, "allow_movements": ["main_R", "pedestrian"] },
-          { "name": "allred_1",    "duration_s": 3, "allow_movements": [] },
-          { "name": "minor_1",    "duration_s": 27, "allow_movements": ["minor_T", "minor_L", "pedestrian"] },
-          { "name": "minor_2",    "duration_s": 10, "allow_movements": ["minor_R", "pedestrian"] },
-          { "name": "allred_2",    "duration_s": 3, "allow_movements": [] }
+          { "duration_s": 32, "allow_movements": ["main_T", "main_L", "pedestrian"] },
+          { "duration_s": 15, "allow_movements": ["main_R", "pedestrian"] },
+          { "duration_s": 3, "allow_movements": [] },
+          { "duration_s": 27, "allow_movements": ["minor_T", "minor_L", "pedestrian"] },
+          { "duration_s": 10, "allow_movements": ["minor_R", "pedestrian"] },
+          { "duration_s": 3, "allow_movements": [] }
         ]
       },
       {
         "id": "X_90_2",
         "cycle_s": 90,
+        "ped_red_offset_s": "$X_90_2_ped_red_offset(integer)$",
+        "yellow_duration_s": "$X_90_2_yellow_duration(integer)$",
+        "pedestrian_conflicts": {
+          "left": "$X_90_2_conflict_left(boolean)$",
+          "right": "$X_90_2_conflict_right(boolean)$"
+        },
         "phases": [
-          { "name": "1",  "duration_s": 30, "allow_movements": ["main_T", "pedestrian"] },
-          { "name": "2",    "duration_s": 15, "allow_movements": ["main_R", "minor_L"] },
-          { "name": "3",    "duration_s": 30, "allow_movements": ["minor_T", "pedestrian"] },
-          { "name": "4",    "duration_s": 15, "allow_movements": ["minor_R", "main_L"] }
+          { "duration_s": 30, "allow_movements": ["main_T", "pedestrian"] },
+          { "duration_s": 15, "allow_movements": ["main_R", "minor_L"] },
+          { "duration_s": 30, "allow_movements": ["minor_T", "pedestrian"] },
+          { "duration_s": 15, "allow_movements": ["minor_R", "main_L"] }
         ]
       }
     ],
@@ -95,9 +85,10 @@
       {
         "id": "mid_90",
         "cycle_s": 90,
+        "yellow_duration_s": "$mid_90_yellow_duration(integer)$",
         "phases": [
-          { "name": "WB", "duration_s": 60, "allow_movements": ["main_T"] },
-          { "name": "ped", "duration_s": 30, "allow_movements": ["pedestrian"] }
+          { "duration_s": 60, "allow_movements": ["main_T"] },
+          { "duration_s": 30, "allow_movements": ["pedestrian"] }
         ]
       }
     ]

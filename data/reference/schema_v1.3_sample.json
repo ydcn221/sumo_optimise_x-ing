@@ -114,7 +114,9 @@
       },
       {
         "id": "tee_c70_mainLT_minorR",
-        "cycle_s": 70,
+        "cycle_s": 74,
+        "ped_red_offset_s": 8,
+        "yellow_duration_s": 4,
         "pedestrian_conflicts": {
           "left": false,
           "right": true
@@ -201,7 +203,9 @@
       },
       {
         "id": "cross_splitL",
-        "cycle_s": 100,
+        "cycle_s": 106,
+        "ped_red_offset_s": 7,
+        "yellow_duration_s": 6,
         "pedestrian_conflicts": {
           "left": false,
           "right": true
@@ -247,11 +251,8 @@
     "xwalk_midblock": [
       {
         "id": "xwalk_2phase70",
-        "cycle_s": 70,
-        "pedestrian_conflicts": {
-          "left": false,
-          "right": false
-        },
+        "cycle_s": 76,
+        "yellow_duration_s": 6,
         "phases": [
           {
             "duration_s": 24,
@@ -277,11 +278,8 @@
       },
       {
         "id": "xwalk_veh_only",
-        "cycle_s": 60,
-        "pedestrian_conflicts": {
-          "left": true,
-          "right": true
-        },
+        "cycle_s": 64,
+        "yellow_duration_s": 4,
         "phases": [
           {
             "duration_s": 44,
