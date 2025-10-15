@@ -136,8 +136,12 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 * `defaults`: e.g., minor road length, crossing width, speed_kmh
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "lanes": int }`
 * `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, `split_ped_crossing_on_main`, etc.)
-* `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements). Each phase
-  entry contains just `duration_s` and `allow_movements`.
+* `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements).
+  * `cycle_s` must equal the sum of the listed phase durations.
+  * `yellow_duration_s` is applied as the tail of every green interval: vehicles show yellow for the last `yellow_duration_s`
+    seconds before their signal turns red.
+  * `ped_red_offset_s` (intersections only) shortens the pedestrian clearance: pedestrians turn red `ped_red_offset_s` seconds
+    before the next phase begins.
 * `layout`: ordered events along the main road:
 
   * `tee`: `{ pos_m, branch: "north"|"south", template, signalized, signal?, main_ped_crossing_placement }`

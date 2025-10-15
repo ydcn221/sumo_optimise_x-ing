@@ -70,7 +70,7 @@
     "tee": [
       {
         "id": "tee_c90_mainW_minor",
-        "cycle_s": 95,
+        "cycle_s": 90,
         "ped_red_offset_s": 10,
         "yellow_duration_s": 5,
         "pedestrian_conflicts": {
@@ -114,7 +114,7 @@
       },
       {
         "id": "tee_c70_mainLT_minorR",
-        "cycle_s": 74,
+        "cycle_s": 70,
         "ped_red_offset_s": 8,
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
@@ -157,7 +157,7 @@
     "cross": [
       {
         "id": "cross_basic90",
-        "cycle_s": 94,
+        "cycle_s": 90,
         "ped_red_offset_s": 6,
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
@@ -203,7 +203,7 @@
       },
       {
         "id": "cross_splitL",
-        "cycle_s": 106,
+        "cycle_s": 100,
         "ped_red_offset_s": 7,
         "yellow_duration_s": 6,
         "pedestrian_conflicts": {
@@ -251,7 +251,7 @@
     "xwalk_midblock": [
       {
         "id": "xwalk_2phase70",
-        "cycle_s": 76,
+        "cycle_s": 70,
         "yellow_duration_s": 6,
         "phases": [
           {
@@ -278,7 +278,7 @@
       },
       {
         "id": "xwalk_veh_only",
-        "cycle_s": 64,
+        "cycle_s": 60,
         "yellow_duration_s": 4,
         "phases": [
           {
