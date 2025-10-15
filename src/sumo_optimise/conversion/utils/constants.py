@@ -11,6 +11,7 @@ DATE_DIR_FORMAT = "%m%d"
 NODES_FILE_NAME = "net.nod.xml"
 EDGES_FILE_NAME = "net.edg.xml"
 CONNECTIONS_FILE_NAME = "net.con.xml"
+TLLOGICS_FILE_NAME = "net.tll.xml"
 NETWORK_FILE_NAME = "network.net.xml"
 
 MANIFEST_NAME = "manifest.json"

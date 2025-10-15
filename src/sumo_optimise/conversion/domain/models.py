@@ -170,6 +170,7 @@ class BuildResult:
     nodes_xml: str
     edges_xml: str
     connections_xml: str
+    tllogics_xml: str
     manifest_path: Optional[Path] = None
 
 
@@ -178,4 +179,5 @@ class CorridorArtifacts:
     nodes_path: Path
     edges_path: Path
     connections_path: Path
+    tllogics_path: Path
 

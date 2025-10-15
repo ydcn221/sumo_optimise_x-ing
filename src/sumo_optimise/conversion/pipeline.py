@@ -8,6 +8,7 @@ from .domain.models import BuildOptions, BuildResult
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
 from .emitters.nodes import render_nodes_xml
+from .emitters.tllogics import render_tllogics_xml
 from .parser.spec_loader import (
     build_clusters,
     load_json_file,
@@ -65,8 +66,14 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         main_road,
         lane_overrides,
     )
+    tllogics_xml = render_tllogics_xml(clusters, signal_profiles_by_kind)
 
-    return BuildResult(nodes_xml=nodes_xml, edges_xml=edges_xml, connections_xml=connections_xml)
+    return BuildResult(
+        nodes_xml=nodes_xml,
+        edges_xml=edges_xml,
+        connections_xml=connections_xml,
+        tllogics_xml=tllogics_xml,
+    )
 
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
@@ -80,6 +87,7 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         nodes=result.nodes_xml,
         edges=result.edges_xml,
         connections=result.connections_xml,
+        tllogics=result.tllogics_xml,
     )
 
     manifest = {
