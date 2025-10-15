@@ -178,7 +178,7 @@
       "additionalProperties": false,
       "properties": {
         "id": { "$ref": "#/definitions/idString", "description": "信号プロファイルID" },
-        "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]" },
+        "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]（phases.duration_s の総和と一致）" },
         "ped_red_offset_s": {
           "type": "integer",
           "minimum": 0,
@@ -187,7 +187,7 @@
         "yellow_duration_s": {
           "type": "integer",
           "minimum": 1,
-          "description": "車両の黄信号相の代表時間[秒]"
+          "description": "車両の黄信号相の代表時間[秒]（各フェーズの終了直前に適用）"
         },
         "pedestrian_conflicts": {
           "type": "object",

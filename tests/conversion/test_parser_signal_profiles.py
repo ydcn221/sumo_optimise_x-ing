@@ -26,7 +26,7 @@ def test_parse_signal_profiles_with_conflicts():
     profile = [
         {
             "id": "tee_profile",
-            "cycle_s": 32,
+            "cycle_s": 30,
             "ped_red_offset_s": 7,
             "yellow_duration_s": 2,
             "phases": _phases(10, 20),
@@ -41,11 +41,27 @@ def test_parse_signal_profiles_with_conflicts():
     assert parsed.yellow_duration_s == 2
 
 
+def test_parse_signal_profiles_reject_cycle_mismatch():
+    profile = [
+        {
+            "id": "cycle_mismatch",
+            "cycle_s": 35,
+            "ped_red_offset_s": 2,
+            "yellow_duration_s": 3,
+            "phases": _phases(10, 20),
+            "pedestrian_conflicts": {"left": False, "right": False},
+        }
+    ]
+    spec = _spec_with_profile(EventKind.TEE, profile)
+    with pytest.raises(SemanticValidationError):
+        parse_signal_profiles(spec)
+
+
 def test_parse_signal_profiles_midblock_without_conflicts():
     profile = [
         {
             "id": "xwalk_profile",
-            "cycle_s": 43,
+            "cycle_s": 40,
             "yellow_duration_s": 3,
             "phases": _phases(20, 20),
         }
@@ -108,7 +124,7 @@ def test_parse_signal_profiles_forbid_ped_red_for_midblock():
     profile = [
         {
             "id": "midblock_with_ped_red",
-            "cycle_s": 40,
+            "cycle_s": 35,
             "ped_red_offset_s": 4,
             "yellow_duration_s": 5,
             "phases": _phases(20, 15),

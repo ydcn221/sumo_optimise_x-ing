@@ -273,11 +273,11 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
                 "[VAL] E306 yellow_duration_s must leave room within cycle: "
                 f"profile={pid} kind={kind} cycle_s={cycle} value={yellow_duration}"
             )
-        effective_cycle = sum_dur + yellow_duration
+        effective_cycle = sum_dur
         if effective_cycle != cycle:
             errors.append(
                 "[VAL] E302 cycle mismatch in profile="
-                f"{pid} kind={kind}: sum(phases)={sum_dur} + yellow_duration_s={yellow_duration} != cycle_s={cycle}"
+                f"{pid} kind={kind}: sum(phases)={sum_dur} != cycle_s={cycle}"
             )
         prof = SignalProfileDef(
             id=pid,
