@@ -49,11 +49,11 @@
       {
         "id": "X_90_1",
         "cycle_s": 90,
-        "ped_red_offset_s": "$X_90_1_ped_red_offset(integer)$",
-        "yellow_duration_s": "$X_90_1_yellow_duration(integer)$",
+        "ped_red_offset_s": "4",
+        "yellow_duration_s": "3",
         "pedestrian_conflicts": {
-          "left": "$X_90_1_conflict_left(boolean)$",
-          "right": "$X_90_1_conflict_right(boolean)$"
+          "left": true,
+          "right": false
         },
         "phases": [
           { "duration_s": 32, "allow_movements": ["main_T", "main_L", "pedestrian"] },
@@ -67,11 +67,11 @@
       {
         "id": "X_90_2",
         "cycle_s": 90,
-        "ped_red_offset_s": "$X_90_2_ped_red_offset(integer)$",
-        "yellow_duration_s": "$X_90_2_yellow_duration(integer)$",
+        "ped_red_offset_s": "4",
+        "yellow_duration_s": "3",
         "pedestrian_conflicts": {
-          "left": "$X_90_2_conflict_left(boolean)$",
-          "right": "$X_90_2_conflict_right(boolean)$"
+          "left": true,
+          "right": true
         },
         "phases": [
           { "duration_s": 30, "allow_movements": ["main_T", "pedestrian"] },
@@ -85,7 +85,7 @@
       {
         "id": "mid_90",
         "cycle_s": 90,
-        "yellow_duration_s": "$mid_90_yellow_duration(integer)$",
+        "yellow_duration_s": "3",
         "phases": [
           { "duration_s": 60, "allow_movements": ["main_T"] },
           { "duration_s": 30, "allow_movements": ["pedestrian"] }
