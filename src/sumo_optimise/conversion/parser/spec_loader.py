@@ -18,6 +18,7 @@ from ..domain.models import (
     JunctionTemplate,
     LayoutEvent,
     MainRoadConfig,
+    PedestrianConflictConfig,
     SideMinor,
     SignalPhaseDef,
     SignalProfileDef,
@@ -89,8 +90,8 @@ def validate_json_schema(spec_json: Dict, schema_json: Dict) -> None:
 
 def ensure_supported_version(spec_json: Dict) -> None:
     version = str(spec_json.get("version", ""))
-    if not version.startswith("1.2"):
-        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.2.*)')
+    if not version.startswith("1.3"):
+        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.3.*)')
 
 
 def parse_snap_rule(spec_json: Dict) -> SnapRule:
@@ -169,7 +170,7 @@ def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
 
 
 def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileDef]]:
-    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|minor)_(?:L|T|R))$")
+    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|EB|WB|minor)_(?:L|T|R))$")
 
     profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]] = {
         EventKind.TEE.value: {},
@@ -182,21 +183,111 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
+        ped_red_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
+        ped_red_offset_raw = p.get("ped_red_offset_s")
+        if ped_red_required:
+            if ped_red_offset_raw is None:
+                errors.append(
+                    f"[VAL] E305 ped_red_offset_s is required for intersections: profile={pid} kind={kind}"
+                )
+                ped_red_offset = 0
+            else:
+                ped_red_offset = int(ped_red_offset_raw)
+        else:
+            if ped_red_offset_raw is not None:
+                errors.append(
+                    f"[VAL] E305 ped_red_offset_s is not allowed for midblock crossings: profile={pid} kind={kind}"
+                )
+                ped_red_offset = int(ped_red_offset_raw)
+            else:
+                ped_red_offset = 0
+        yellow_duration_raw = p.get("yellow_duration_s")
+        if yellow_duration_raw is None:
+            errors.append(
+                f"[VAL] E306 yellow_duration_s is required: profile={pid} kind={kind}"
+            )
+            yellow_duration = 0
+        else:
+            yellow_duration = int(yellow_duration_raw)
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
-        for j, ph in enumerate(phases_data):
-            name = str(ph.get("name", f"phase{j}"))
+        conflicts_raw = p.get("pedestrian_conflicts")
+        conflicts = PedestrianConflictConfig(left=False, right=False)
+        conflicts_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
+        if conflicts_required and conflicts_raw is None:
+            errors.append(
+                f"[VAL] E304 pedestrian_conflicts must be provided for intersections: profile={pid} kind={kind}"
+            )
+        if not conflicts_required and conflicts_raw is not None:
+            errors.append(
+                f"[VAL] E304 pedestrian_conflicts is not allowed for midblock crossings: profile={pid} kind={kind}"
+            )
+        if conflicts_raw is not None:
+            if not isinstance(conflicts_raw, dict):
+                errors.append(
+                    f"[VAL] E304 pedestrian_conflicts must be object: profile={pid} kind={kind} value={conflicts_raw!r}"
+                )
+            else:
+                missing = [key for key in ("left", "right") if key not in conflicts_raw]
+                if missing:
+                    errors.append(
+                        f"[VAL] E304 pedestrian_conflicts missing keys={missing}: profile={pid} kind={kind}"
+                    )
+                left_raw = conflicts_raw.get("left")
+                right_raw = conflicts_raw.get("right")
+                type_errors = [
+                    name
+                    for name, val in (("left", left_raw), ("right", right_raw))
+                    if name not in missing and not isinstance(val, bool)
+                ]
+                if type_errors:
+                    errors.append(
+                        f"[VAL] E304 pedestrian_conflicts keys must be boolean: profile={pid} kind={kind} keys={type_errors}"
+                    )
+                conflicts = PedestrianConflictConfig(
+                    left=left_raw if isinstance(left_raw, bool) else False,
+                    right=right_raw if isinstance(right_raw, bool) else False,
+                )
+        for ph in phases_data:
             dur = int(ph["duration_s"])
             amv_list = list(ph.get("allow_movements", []))
             bad = [m for m in amv_list if not MOVEMENT_RE.match(str(m))]
             if bad:
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
-            phases.append(SignalPhaseDef(name=name, duration_s=dur, allow_movements=[str(m) for m in amv_list]))
+            phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
-        if sum_dur != cycle:
-            errors.append(f"[VAL] E302 cycle mismatch in profile={pid} kind={kind}: sum(phases)={sum_dur} != cycle_s={cycle}")
-        prof = SignalProfileDef(id=pid, cycle_s=cycle, phases=phases, kind=EventKind(kind))
+        if ped_red_offset < 0 or ped_red_offset >= cycle:
+            errors.append(
+                "[VAL] E305 ped_red_offset_s must satisfy 0 ≤ value < cycle: "
+                f"profile={pid} kind={kind} cycle_s={cycle} value={ped_red_offset}"
+            )
+        if yellow_duration_raw is not None:
+            if yellow_duration <= 0:
+                errors.append(
+                    "[VAL] E306 yellow_duration_s must be positive when provided: "
+                    f"profile={pid} kind={kind} value={yellow_duration}"
+                )
+        if yellow_duration >= cycle:
+            errors.append(
+                "[VAL] E306 yellow_duration_s must leave room within cycle: "
+                f"profile={pid} kind={kind} cycle_s={cycle} value={yellow_duration}"
+            )
+        effective_cycle = sum_dur + yellow_duration
+        if effective_cycle != cycle:
+            errors.append(
+                "[VAL] E302 cycle mismatch in profile="
+                f"{pid} kind={kind}: sum(phases)={sum_dur} + yellow_duration_s={yellow_duration} != cycle_s={cycle}"
+            )
+        prof = SignalProfileDef(
+            id=pid,
+            cycle_s=cycle,
+            ped_red_offset_s=ped_red_offset,
+            yellow_duration_s=yellow_duration,
+            phases=phases,
+            kind=EventKind(kind),
+            pedestrian_conflicts=conflicts,
+        )
         if pid in profiles_by_kind[kind]:
             errors.append(f"[VAL] E303 duplicate signal_profile id within kind: id={pid} kind={kind}")
         else:

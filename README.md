@@ -1,14 +1,14 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.2)**. The converter validates the JSON, plans lanes and crossings, emits `net.nod.xml` / `net.edg.xml` / `net.con.xml`, and can optionally run `netconvert` to build a runnable `network.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `net.nod.xml` / `net.edg.xml` / `net.con.xml`, and can optionally run `netconvert` to build a runnable `network.net.xml`.
 
-> This repository hosts the modular corridor converter introduced for schema v1.2.
+> This repository hosts the modular corridor converter introduced for schema v1.3.
 
 ---
 
 ## Key capabilities
 
-* **Schema-driven input (v1.2)** with draft-07 JSON Schema.
+* **Schema-driven input (v1.3)** with draft-07 JSON Schema.
 * **Semantic validation** (range checks, duplicate/near-duplicate events, template/profile consistency).
 * **Grid snapping** with configurable step and tie-break.
 * **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
@@ -31,9 +31,9 @@ sumo_optimise/
     sumo_integration/      # netconvert / netedit wrappers
     domain/                # Dataclasses & enums
     utils/                 # Logging, IO, constants, errors
-    data/schema_v1.2.json  # Embedded JSON Schema (v1.2)
+    data/schema.json       # Embedded JSON Schema (v1.3)
     pipeline.py            # Orchestration
-data/reference/             # Sample specifications (e.g., schema_v1.2_sample.json)
+data/reference/             # Sample specifications (e.g., schema_v1.3_sample.json)
 jsonschema/                # (Local namespace; *not* the PyPI package)
 ```
 
@@ -75,7 +75,7 @@ $ python -m pip install -e .
 
 ## Quick start
 
-1. **Prepare input JSON** (v1.2). Use your own file or adapt the provided sample under `data/reference/`.
+1. **Prepare input JSON** (v1.3). Use your own file or adapt the provided sample under `data/reference/`.
 2. **Run the CLI** to build PlainXML (nodes/edges/connections).
 3. **Optionally run `netconvert`** to produce `network.net.xml`.
 
@@ -91,7 +91,7 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 
 **Default behavior**
 
-* The converter validates against **`sumo_optimise/conversion/data/schema_v1.2.json`** (v1.2).
+* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.3).
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
@@ -129,14 +129,15 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
-## Input specification (v1.2 overview)
+## Input specification (v1.3 overview)
 
-* `version`: `"1.2"`
+* `version`: `"1.3"`
 * `snap`: `{ "step_m": int>=1, "tie_break": "toward_west" | "toward_east" }`
 * `defaults`: e.g., minor road length, crossing width, speed_kmh
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "lanes": int }`
 * `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, `split_ped_crossing_on_main`, etc.)
-* `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements)
+* `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements). Each phase
+  entry contains just `duration_s` and `allow_movements`.
 * `layout`: ordered events along the main road:
 
   * `tee`: `{ pos_m, branch: "north"|"south", template, signalized, signal?, main_ped_crossing_placement }`
@@ -164,7 +165,7 @@ $ python -m sumo_optimise.conversion.cli --help
 Typical flags (names may vary by release):
 
 * `--input PATH` — path to spec JSON (required).
-* `--schema PATH` — override schema path (defaults to packaged `data/schema_v1.2.json`).
+* `--schema PATH` — override schema path (defaults to packaged `data/schema.json`).
 * `--out DIR` — output directory root (default `plainXML_out/`).
 * `--keep-output` — keep intermediate files; do not clean on failure.
 * `--skip-netconvert` — generate XML only; do not call `netconvert`.

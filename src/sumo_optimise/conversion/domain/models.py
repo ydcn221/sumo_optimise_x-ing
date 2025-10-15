@@ -86,17 +86,25 @@ class JunctionTemplate:
 
 @dataclass(frozen=True)
 class SignalPhaseDef:
-    name: str
     duration_s: int
     allow_movements: List[str]
+
+
+@dataclass(frozen=True)
+class PedestrianConflictConfig:
+    left: bool
+    right: bool
 
 
 @dataclass(frozen=True)
 class SignalProfileDef:
     id: str
     cycle_s: int
+    ped_red_offset_s: int
+    yellow_duration_s: int
     phases: List[SignalPhaseDef]
     kind: EventKind
+    pedestrian_conflicts: PedestrianConflictConfig
 
 
 @dataclass(frozen=True)

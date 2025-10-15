@@ -1,6 +1,6 @@
 ## 1) Mission & Contract
 
-This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** ("Main") with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.2).
+This repository builds **SUMO PlainXML** (nodes/edges/connections) for a **single straight main road** ("Main") with orthogonal **minor roads** at intersections and **mid-block pedestrian crossings**, from a JSON specification (schema v1.3).
 
 **Agent contract:**
 
@@ -48,10 +48,10 @@ sumo_optimise/
     config/
       __init__.py          # Defaults/paths/version guard (if any)
     data/
-      schema_v1.2.json     # JSON Schema (v1.2)
+      schema.json          # JSON Schema (v1.3)
 data/
   reference/
-    schema_v1.2_sample.json# Sample specification for smoke tests
+    schema_v1.3_sample.json# Sample specification for smoke tests
 jsonschema/
   __init__.py                      # (Namespace stub; do not confuse with PyPI jsonschema)
 sumo_optimise.egg-info/            # Package metadata (editable install)
@@ -63,7 +63,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 
 ## 3) Supported Input & Outputs
 
-* **Input:** JSON spec validated against `sumo_optimise/conversion/data/schema_v1.2.json` (v1.2).
+* **Input:** JSON spec validated against `sumo_optimise/conversion/data/schema.json` (v1.3).
 * **Outputs (PlainXML):**
 
   * `net.nod.xml` — nodes (main EB/WB breakpoints; cluster/join nodes at interior breakpoints; minor road dead-ends).
@@ -98,7 +98,7 @@ python -m pip install jsonschema
 
 ```bash
 python -m sumo_optimise.conversion.cli --input path/to/spec.json
-# Add --schema path/to/schema_v1.2.json to override packaged schema if needed.
+# Add --schema path/to/schema.json to override packaged schema if needed.
 # Run with --help to discover available flags.
 ```
 
@@ -202,7 +202,7 @@ Before editing:
 
 1. Locate the correct layer:
 
-   * Input/schema → `parser/*`, `data/schema_v1.2.json`.
+   * Input/schema → `parser/*`, `data/schema.json`.
    * Validation → `checks/semantics.py`.
    * Snapping/lanes → `planner/*`.
    * Names/format → `builder/ids.py`, `emitters/*`.
@@ -236,7 +236,7 @@ After editing:
 ## 11) Troubleshooting (for Agents)
 
 * **Module import errors:** ensure `pip install -e .` was executed; run from repo root.
-* **Schema missing:** verify `sumo_optimise/conversion/data/schema_v1.2.json` exists or pass `--schema` pointing to a valid path.
+* **Schema missing:** verify `sumo_optimise/conversion/data/schema.json` exists or pass `--schema` pointing to a valid path.
 * **No outputs:** check `build.log` for `[SCH]` or `[VAL]` errors; fix input spec accordingly.
 * **No `network.net.xml`:** `netconvert` likely missing; install SUMO or run the two-step commands manually.
 * **Crossing duplication at junction:** confirm absorption logic in semantics and crossing planner; mid-block at same pos as junction should not double-output.
@@ -263,7 +263,7 @@ python - <<'PY'
 from pathlib import Path
 from sumo_optimise.conversion.cli import main  # or call pipeline directly
 # Run a smoke build on the bundled sample if available:
-# main(["--input", "data/reference/schema_v1.2_sample.json"])
+# main(["--input", "data/reference/schema_v1.3_sample.json"])
 PY
 # Optionally: check that plainXML_out was created and files exist.
 ```
