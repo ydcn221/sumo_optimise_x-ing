@@ -183,17 +183,46 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
+        ped_red_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
         ped_red_offset_raw = p.get("ped_red_offset_s")
-        ped_red_offset = int(ped_red_offset_raw) if ped_red_offset_raw is not None else 0
+        if ped_red_required:
+            if ped_red_offset_raw is None:
+                errors.append(
+                    f"[VAL] E305 ped_red_offset_s is required for intersections: profile={pid} kind={kind}"
+                )
+                ped_red_offset = 0
+            else:
+                ped_red_offset = int(ped_red_offset_raw)
+        else:
+            if ped_red_offset_raw is not None:
+                errors.append(
+                    f"[VAL] E305 ped_red_offset_s is not allowed for midblock crossings: profile={pid} kind={kind}"
+                )
+                ped_red_offset = int(ped_red_offset_raw)
+            else:
+                ped_red_offset = 0
         yellow_duration_raw = p.get("yellow_duration_s")
-        yellow_duration = 0
-        if yellow_duration_raw is not None:
+        if yellow_duration_raw is None:
+            errors.append(
+                f"[VAL] E306 yellow_duration_s is required: profile={pid} kind={kind}"
+            )
+            yellow_duration = 0
+        else:
             yellow_duration = int(yellow_duration_raw)
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
         conflicts_raw = p.get("pedestrian_conflicts")
         conflicts = PedestrianConflictConfig(left=False, right=False)
+        conflicts_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
+        if conflicts_required and conflicts_raw is None:
+            errors.append(
+                f"[VAL] E304 pedestrian_conflicts must be provided for intersections: profile={pid} kind={kind}"
+            )
+        if not conflicts_required and conflicts_raw is not None:
+            errors.append(
+                f"[VAL] E304 pedestrian_conflicts is not allowed for midblock crossings: profile={pid} kind={kind}"
+            )
         if conflicts_raw is not None:
             if not isinstance(conflicts_raw, dict):
                 errors.append(

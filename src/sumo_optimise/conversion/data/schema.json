@@ -85,7 +85,7 @@
         },
         "xwalk_midblock": {
           "type": "array",
-          "items": { "$ref": "#/definitions/signalProfile" },
+          "items": { "$ref": "#/definitions/signalProfileMidblock" },
           "description": "単路部横断用プロファイル"
         }
       },
@@ -173,7 +173,7 @@
       "description": "交差点アプローチ形状・従道路レーン構成の定義。"
     },
 
-    "signalProfile": {
+    "signalProfileBase": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -197,7 +197,7 @@
             "right": { "type": "boolean", "description": "主道路を渡る歩行者が右側(北)の車両と競合するか" }
           },
           "required": ["left", "right"],
-          "description": "歩行者相と左右車両の競合有無。未指定時は両側とも競合なし扱い。"
+          "description": "歩行者相と左右車両の競合有無。midblock 用プロファイルでは設定不可。"
         },
         "phases": {
           "type": "array",
@@ -219,8 +219,24 @@
           "description": "固定時間フェーズ列。黄色相はJSONでは表現しない。"
         }
       },
-      "required": ["id", "cycle_s", "phases"],
+      "required": ["id", "cycle_s", "yellow_duration_s", "phases"],
       "description": "固定時間信号の定義。"
+    },
+
+    "signalProfile": {
+      "allOf": [
+        { "$ref": "#/definitions/signalProfileBase" },
+        { "required": ["ped_red_offset_s", "pedestrian_conflicts"] }
+      ]
+    },
+
+    "signalProfileMidblock": {
+      "allOf": [
+        { "$ref": "#/definitions/signalProfileBase" },
+        { "not": { "required": ["pedestrian_conflicts"] } },
+        { "not": { "required": ["ped_red_offset_s"] } }
+      ],
+      "description": "単路部横断用信号プロファイル。歩行者競合は設定不可。"
     },
 
     "layoutTee": {
