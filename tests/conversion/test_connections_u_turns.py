@@ -55,7 +55,7 @@ def _build_args(median: bool = False):
 
 def test_render_connections_emits_u_turn_links_for_main_approach():
     args = _build_args(median=False)
-    xml = render_connections_xml(*args)
+    xml, _ = render_connections_xml(*args)
 
     eb_in = main_edge_id("EB", 0, 100)
     wb_back = main_edge_id("WB", 0, 100)
@@ -74,7 +74,7 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
 
 def test_render_connections_suppresses_u_turn_when_median_continuous():
     args = _build_args(median=True)
-    xml = render_connections_xml(*args)
+    xml, _ = render_connections_xml(*args)
 
     assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
     assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml

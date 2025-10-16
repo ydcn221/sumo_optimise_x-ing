@@ -57,7 +57,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
 
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
     edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
-    connections_xml = render_connections_xml(
+    connections_xml, link_indexing = render_connections_xml(
         defaults,
         clusters,
         breakpoints,
@@ -66,7 +66,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         main_road,
         lane_overrides,
     )
-    tllogics_xml = render_tllogics_xml(clusters, signal_profiles_by_kind)
+    tllogics_xml = render_tllogics_xml(clusters, signal_profiles_by_kind, link_indexing)
 
     return BuildResult(
         nodes_xml=nodes_xml,
