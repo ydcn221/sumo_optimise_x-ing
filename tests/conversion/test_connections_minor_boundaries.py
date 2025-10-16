@@ -31,7 +31,8 @@ def _build_args(
         main_approach_lanes=0,
         minor_lanes_to_main=1,
         minor_lanes_from_main=1,
-        split_ped_crossing_on_main=False,
+        refuge_island_on_main=False,
+        two_stage_ped_crossing_on_main=False,
         median_continuous=median,
         kind=EventKind.CROSS,
     )

@@ -140,13 +140,25 @@ def parse_junction_templates(spec_json: Dict) -> Dict[str, JunctionTemplate]:
             continue
         for t in arr:
             tpl_id = str(t["id"])
+            refuge = bool(t["refuge_island_on_main"])
+            two_stage = bool(t.get("two_stage_ped_crossing_on_main", False))
+            if two_stage and not refuge:
+                LOG.error(
+                    "[VAL] E307 junction template two_stage requires refuge: id=%s kind=%s",
+                    tpl_id,
+                    kind,
+                )
+                raise SemanticValidationError(
+                    f"junction_template two_stage requires refuge: id={tpl_id} kind={kind}"
+                )
             tpl = JunctionTemplate(
                 id=tpl_id,
                 main_approach_begin_m=int(t["main_approach_begin_m"]),
                 main_approach_lanes=int(t["main_approach_lanes"]),
                 minor_lanes_to_main=int(t["minor_lanes_to_main"]),
                 minor_lanes_from_main=int(t["minor_lanes_from_main"]),
-                split_ped_crossing_on_main=bool(t["split_ped_crossing_on_main"]),
+                refuge_island_on_main=refuge,
+                two_stage_ped_crossing_on_main=two_stage,
                 median_continuous=bool(t["median_continuous"]),
                 kind=EventKind(kind),
             )
@@ -352,6 +364,19 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 branch_lower = branch_raw.lower()
                 if branch_lower in (SideMinor.NORTH.value, SideMinor.SOUTH.value):
                     branch = SideMinor(branch_lower)
+            refuge_override = None
+            if "refuge_island_on_main" in e:
+                refuge_override = bool(e.get("refuge_island_on_main"))
+            two_stage_override = None
+            if "two_stage_ped_crossing_on_main" in e:
+                two_stage_override = bool(e.get("two_stage_ped_crossing_on_main"))
+            if two_stage_override and refuge_override is False:
+                LOG.error(
+                    "[VAL] E308 layout event two_stage requires refuge: type=%s pos=%.3f",
+                    event_type,
+                    pos_raw,
+                )
+                raise SemanticValidationError("layout event two_stage requires refuge")
             layout_event = LayoutEvent(
                 type=EventKind(event_type),
                 pos_m_raw=pos_raw,
@@ -361,15 +386,26 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 signal=parse_signal_ref(e.get("signal")),
                 main_ped_crossing_placement=e.get("main_ped_crossing_placement"),
                 branch=branch,
+                refuge_island_on_main=refuge_override,
+                two_stage_ped_crossing_on_main=two_stage_override,
             )
         else:
+            refuge = bool(e.get("refuge_island_on_main"))
+            two_stage = bool(e.get("two_stage_ped_crossing_on_main", False))
+            if two_stage and not refuge:
+                LOG.error(
+                    "[VAL] E308 midblock two_stage requires refuge: pos=%.3f",
+                    pos_raw,
+                )
+                raise SemanticValidationError("midblock two_stage requires refuge")
             layout_event = LayoutEvent(
                 type=EventKind.XWALK_MIDBLOCK,
                 pos_m_raw=pos_raw,
                 pos_m=pos_snapped,
                 signalized=bool(e.get("signalized")),
                 signal=parse_signal_ref(e.get("signal")),
-                split_ped_crossing_on_main=bool(e.get("split_ped_crossing_on_main")),
+                refuge_island_on_main=refuge,
+                two_stage_ped_crossing_on_main=two_stage,
             )
         events.append(layout_event)
         LOG.info("layout: %s raw=%.3f -> snap=%d", event_type, pos_raw, pos_snapped)

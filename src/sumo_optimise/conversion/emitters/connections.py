@@ -75,6 +75,9 @@ class CrossingPlan:
     edges: Tuple[str, ...]
     width: float
     category: str  # ``minor`` / ``main`` / ``midblock``
+    main_side: Optional[str] = None  # ``west`` / ``east`` for main-road crossings
+    lane_directions: Tuple[str, ...] = ()
+    two_stage: bool = False
 
 
 @dataclass
@@ -173,12 +176,17 @@ def _movement_tokens(approach: ApproachInfo, movement: str) -> Tuple[str, ...]:
     return tuple(sorted(base))
 
 
-def _pedestrian_conflict_tags(category: str) -> Tuple[str, ...]:
-    """Return conflict tags (``left``/``right``) associated with a crossing category."""
+def _pedestrian_conflict_tags(crossing: CrossingPlan) -> Tuple[str, ...]:
+    """Return conflict tags (``left``/``right``) associated with a crossing plan."""
 
-    if category == "midblock":
+    if crossing.category == "midblock":
         return ()
-    return ("left", "right")
+    tags: List[str] = []
+    if "WB" in crossing.lane_directions:
+        tags.append("left")
+    if "EB" in crossing.lane_directions:
+        tags.append("right")
+    return tuple(tags) if tags else ("left", "right")
 
 
 def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
@@ -494,7 +502,7 @@ def _build_cluster_link_indexing(
                 tokens=tokens,
                 movement="P",
                 crossing=crossing,
-                conflicts_with=_pedestrian_conflict_tags(crossing.category),
+                conflicts_with=_pedestrian_conflict_tags(crossing),
             )
             links.append(entry)
             for token in tokens:
@@ -536,13 +544,29 @@ def render_connections_xml(
 
         place_west = False
         place_east = False
-        split_main = False
+        refuge_main_values: List[bool] = []
+        two_stage_main_values: List[bool] = []
         for ev in junction_events:
             if ev.main_ped_crossing_placement:
                 place_west = place_west or bool(ev.main_ped_crossing_placement.get("west", False))
                 place_east = place_east or bool(ev.main_ped_crossing_placement.get("east", False))
             if ev.template_id and ev.template_id in junction_template_by_id:
-                split_main = split_main or bool(junction_template_by_id[ev.template_id].split_ped_crossing_on_main)
+                tpl = junction_template_by_id[ev.template_id]
+                refuge_value = tpl.refuge_island_on_main
+                if ev.refuge_island_on_main is not None:
+                    refuge_value = bool(ev.refuge_island_on_main)
+                two_stage_value = tpl.two_stage_ped_crossing_on_main
+                if ev.two_stage_ped_crossing_on_main is not None:
+                    two_stage_value = bool(ev.two_stage_ped_crossing_on_main)
+                if two_stage_value and not refuge_value:
+                    LOG.error(
+                        "[VAL] E309 junction crossing two_stage requires refuge: node=%s tpl=%s",
+                        node,
+                        tpl.id,
+                    )
+                    raise SemanticValidationError("junction two_stage requires refuge")
+                refuge_main_values.append(refuge_value)
+                two_stage_main_values.append(two_stage_value)
 
         mid_events = [ev for ev in cluster.events if ev.type == EventKind.XWALK_MIDBLOCK]
         if mid_events:
@@ -575,10 +599,18 @@ def render_connections_xml(
                 )
             )
 
+        refuge_main = any(refuge_main_values)
+        if refuge_main_values and len(set(refuge_main_values)) > 1:
+            LOG.warning(
+                "[BUILD] inconsistent refuge settings merged at node=%s (using any=True)",
+                node,
+            )
+        two_stage_main = any(two_stage_main_values) and refuge_main
+
         if place_west:
             eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
             if eb_edge and wb_edge:
-                if split_main:
+                if refuge_main:
                     cid = crossing_id_main_split(pos, "West", "EB")
                     lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
@@ -590,6 +622,9 @@ def render_connections_xml(
                             edges=(eb_edge,),
                             width=width,
                             category="main",
+                            main_side="west",
+                            lane_directions=("EB",),
+                            two_stage=two_stage_main,
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "West", "WB")
@@ -603,6 +638,9 @@ def render_connections_xml(
                             edges=(wb_edge,),
                             width=width,
                             category="main",
+                            main_side="west",
+                            lane_directions=("WB",),
+                            two_stage=two_stage_main,
                         )
                     )
                 else:
@@ -617,13 +655,16 @@ def render_connections_xml(
                             edges=(eb_edge, wb_edge),
                             width=width,
                             category="main",
+                            main_side="west",
+                            lane_directions=("EB", "WB"),
+                            two_stage=False,
                         )
                     )
 
         if place_east:
             eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
             if eb_edge and wb_edge:
-                if split_main:
+                if refuge_main:
                     cid = crossing_id_main_split(pos, "East", "EB")
                     lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
@@ -635,6 +676,9 @@ def render_connections_xml(
                             edges=(eb_edge,),
                             width=width,
                             category="main",
+                            main_side="east",
+                            lane_directions=("EB",),
+                            two_stage=two_stage_main,
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "East", "WB")
@@ -648,6 +692,9 @@ def render_connections_xml(
                             edges=(wb_edge,),
                             width=width,
                             category="main",
+                            main_side="east",
+                            lane_directions=("WB",),
+                            two_stage=two_stage_main,
                         )
                     )
                 else:
@@ -662,6 +709,9 @@ def render_connections_xml(
                             edges=(eb_edge, wb_edge),
                             width=width,
                             category="main",
+                            main_side="east",
+                            lane_directions=("EB", "WB"),
+                            two_stage=False,
                         )
                     )
 
@@ -677,19 +727,27 @@ def render_connections_xml(
 
         if snap_rule.tie_break == "toward_west":
             eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
+            side = "west" if eb_edge and wb_edge else None
             if not (eb_edge and wb_edge):
                 eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
+                side = "east" if eb_edge and wb_edge else side
         else:
             eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
+            side = "east" if eb_edge and wb_edge else None
             if not (eb_edge and wb_edge):
                 eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
+                side = "west" if eb_edge and wb_edge else side
 
         if not (eb_edge and wb_edge):
             LOG.warning("midblock at %s: adjacent main edges not found; crossing omitted", pos)
             continue
 
-        split_midblock = any(bool(ev.split_ped_crossing_on_main) for ev in mid_events)
-        if split_midblock:
+        refuge_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
+        if mid_events and len({bool(ev.refuge_island_on_main) for ev in mid_events}) > 1:
+            LOG.warning("[BUILD] inconsistent midblock refuge flags merged at node=%s", node)
+        two_stage_midblock = any(bool(ev.two_stage_ped_crossing_on_main) for ev in mid_events) and refuge_midblock
+
+        if refuge_midblock:
             cid = crossing_id_midblock_split(pos, "EB")
             lines.append(
                 f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
@@ -701,6 +759,9 @@ def render_connections_xml(
                     edges=(eb_edge,),
                     width=width,
                     category="midblock",
+                    main_side=side,
+                    lane_directions=("EB",),
+                    two_stage=two_stage_midblock,
                 )
             )
             cid2 = crossing_id_midblock_split(pos, "WB")
@@ -714,6 +775,9 @@ def render_connections_xml(
                     edges=(wb_edge,),
                     width=width,
                     category="midblock",
+                    main_side=side,
+                    lane_directions=("WB",),
+                    two_stage=two_stage_midblock,
                 )
             )
         else:
@@ -728,6 +792,9 @@ def render_connections_xml(
                     edges=(eb_edge, wb_edge),
                     width=width,
                     category="midblock",
+                    main_side=side,
+                    lane_directions=("EB", "WB"),
+                    two_stage=False,
                 )
             )
 

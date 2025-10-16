@@ -158,7 +158,11 @@
         "main_approach_lanes": { "type": "integer", "minimum": 0, "description": "アプローチ区間の主道路のレーン数。0=変更なし（元のレーン数を維持）。指示書を受け取った側の処理：複数のアプローチ区間が重なるときは、最も多いレーン数を採用する。" },
         "minor_lanes_to_main": { "type": "integer", "minimum": 1, "description": "従道路→主道路（主道路へ向かう向き）のレーン数" },
         "minor_lanes_from_main": { "type": "integer", "minimum": 1, "description": "主道路→従道路（主道路から離れる向き）のレーン数" },
-        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路を渡る横断歩道の中央に対流空間（refuge island）を作るか" },
+        "refuge_island_on_main": { "type": "boolean", "description": "中央島の有無" },
+        "two_stage_ped_crossing_on_main": {
+          "type": "boolean",
+          "description": "中央島を使った二段階横断にするか"
+        },
         "median_continuous": { "type": "boolean", "description": "中央帯が交差点の中まで連続しているか（主道路で右折できなくなるなど、接続制限を伴う）" }
       },
       "required": [
@@ -167,8 +171,19 @@
         "main_approach_lanes",
         "minor_lanes_to_main",
         "minor_lanes_from_main",
-        "split_ped_crossing_on_main",
+        "refuge_island_on_main",
         "median_continuous"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "two_stage_ped_crossing_on_main": { "const": true } },
+            "required": ["two_stage_ped_crossing_on_main"]
+          },
+          "then": {
+            "properties": { "refuge_island_on_main": { "const": true } }
+          }
+        }
       ],
       "description": "交差点アプローチ形状・従道路レーン構成の定義。"
     },
@@ -268,10 +283,28 @@
         "template": { "$ref": "#/definitions/idString", "description": "適用する cross テンプレートID" },
         "signalized": { "type": "boolean", "description": "信号の有無" },
         "signal": { "$ref": "#/definitions/signalRef" },
-        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
+        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" },
+        "refuge_island_on_main": {
+          "type": "boolean",
+          "description": "中央島の有無（テンプレート既定の上書き）"
+        },
+        "two_stage_ped_crossing_on_main": {
+          "type": "boolean",
+          "description": "中央島がある場合の二段階横断指定（テンプレート既定の上書き）"
+        }
       },
       "required": ["type", "pos_m", "template", "signalized", "main_ped_crossing_placement"],
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "refuge_island_on_main": { "const": false },
+              "two_stage_ped_crossing_on_main": { "const": true }
+            },
+            "required": ["refuge_island_on_main", "two_stage_ped_crossing_on_main"]
+          },
+          "then": false
+        },
         { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
         { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
       ],
@@ -285,11 +318,25 @@
         "type": { "const": "xwalk_midblock", "description": "イベント種別＝単路部歩行者横断" },
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
-        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路横断を二段横断にするか（箇所ごとに設定）" },
+        "refuge_island_on_main": { "type": "boolean", "description": "中央島の有無" },
+        "two_stage_ped_crossing_on_main": {
+          "type": "boolean",
+          "description": "中央島がある場合の二段階横断指定"
+        },
         "signal": { "$ref": "#/definitions/signalRef" }
       },
-      "required": ["type", "pos_m", "signalized", "split_ped_crossing_on_main"],
+      "required": ["type", "pos_m", "signalized", "refuge_island_on_main"],
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "refuge_island_on_main": { "const": false },
+              "two_stage_ped_crossing_on_main": { "const": true }
+            },
+            "required": ["refuge_island_on_main", "two_stage_ped_crossing_on_main"]
+          },
+          "then": false
+        },
         { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
         { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
       ],

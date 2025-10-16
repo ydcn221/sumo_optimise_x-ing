@@ -28,7 +28,8 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 4,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": true,
+        "refuge_island_on_main": true,
+        "two_stage_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
@@ -37,7 +38,8 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 4,
         "minor_lanes_from_main": 3,
-        "split_ped_crossing_on_main": false,
+        "refuge_island_on_main": false,
+        "two_stage_ped_crossing_on_main": false,
         "median_continuous": false
       }
     ]
@@ -115,7 +117,8 @@
       "type": "xwalk_midblock",
       "pos_m": 150,
       "signalized": true,
-      "split_ped_crossing_on_main": true,
+      "refuge_island_on_main": true,
+      "two_stage_ped_crossing_on_main": true,
       "signal": { "profile_id": "mid_90", "offset_s": 75 }
     }
   ]
