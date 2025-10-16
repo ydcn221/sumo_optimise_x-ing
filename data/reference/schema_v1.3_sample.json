@@ -23,7 +23,8 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 1,
-        "split_ped_crossing_on_main": false,
+        "refuge_island_on_main": false,
+        "two_stage_ped_crossing_on_main": false,
         "median_continuous": false
       },
       {
@@ -32,7 +33,8 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 3,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": true,
+        "refuge_island_on_main": true,
+        "two_stage_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
@@ -41,7 +43,8 @@
         "main_approach_lanes": 0,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": false,
+        "refuge_island_on_main": false,
+        "two_stage_ped_crossing_on_main": false,
         "median_continuous": true
       }
     ],
@@ -52,7 +55,8 @@
         "main_approach_lanes": 5,
         "minor_lanes_to_main": 3,
         "minor_lanes_from_main": 3,
-        "split_ped_crossing_on_main": true,
+        "refuge_island_on_main": true,
+        "two_stage_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
@@ -61,7 +65,8 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": false,
+        "refuge_island_on_main": false,
+        "two_stage_ped_crossing_on_main": false,
         "median_continuous": true
       }
     ]
@@ -300,7 +305,8 @@
       "type": "xwalk_midblock",
       "pos_m": 200,
       "signalized": true,
-      "split_ped_crossing_on_main": true,
+      "refuge_island_on_main": true,
+      "two_stage_ped_crossing_on_main": true,
       "signal": {
         "profile_id": "xwalk_2phase70",
         "offset_s": 5
@@ -350,7 +356,7 @@
       "type": "xwalk_midblock",
       "pos_m": 1050,
       "signalized": false,
-      "split_ped_crossing_on_main": false
+      "refuge_island_on_main": false
     },
     {
       "type": "cross",

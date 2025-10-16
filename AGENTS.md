@@ -177,7 +177,7 @@ Agents must preserve or extend these checks in `conversion/checks/semantics.py`:
 
 **Crossings:**
 
-* Intersections: always minor-side crossings; main-side per placement flags; split if `split_ped_crossing_on_main`.
+* Intersections: always minor-side crossings; main-side per placement flags; split if `refuge_island_on_main`.
 * Mid-block: single or split per spec; side selection follows `tie_break`.
 
 ---

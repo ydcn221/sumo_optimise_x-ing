@@ -218,7 +218,7 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit**.
 * `snap`: `{ "step_m": int>=1, "tie_break": "toward_west" | "toward_east" }`
 * `defaults`: typical values include minor road length (m), crossing width (m), default speeds (km/h)
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "carriageways": { "EB": {...}, "WB": {...} } }`
-* `junction_templates`: reusable definitions for `tee`/`cross` (approach length, lane overrides, `median_continuous`, `split_ped_crossing_on_main`)
+* `junction_templates`: reusable definitions for `tee`/`cross` (approach length, lane overrides, `median_continuous`, `refuge_island_on_main`, `two_stage_ped_crossing_on_main`)
 * `signal_profiles`: fixed-time profiles for intersections and mid-block signals (cycle, phases)
 
   * The converter **requires** `sum(phase.durations) == cycle_s`.
@@ -228,7 +228,7 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit**.
 
   * `tee`: `{ pos_m, branch: "north"|"south", template, signalized, signal?, main_ped_crossing_placement }`
   * `cross`: `{ pos_m, template, signalized, signal?, main_ped_crossing_placement }`
-  * `xwalk_midblock`: `{ pos_m, signalized, split_ped_crossing_on_main }`
+  * `xwalk_midblock`: `{ pos_m, signalized, refuge_island_on_main, two_stage_ped_crossing_on_main }`
 
 **Rules (converter enforces):**
 

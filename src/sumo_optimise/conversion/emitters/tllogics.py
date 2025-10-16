@@ -31,14 +31,24 @@ def _phase_state(
     allowed = set(phase.allow_movements)
     active = _active_indices(allowed, indexing.links)
 
-    left_active = any(
-        entry.link_index in active and entry.kind == "vehicle" and entry.movement == "L"
-        for entry in indexing.links
-    )
-    right_active = any(
-        entry.link_index in active and entry.kind == "vehicle" and entry.movement == "R"
-        for entry in indexing.links
-    )
+    turn_left_active = False
+    turn_right_active = False
+    main_left_active = False
+    main_right_active = False
+
+    for entry in indexing.links:
+        if entry.link_index not in active or entry.kind != "vehicle":
+            continue
+        if entry.movement == "L":
+            turn_left_active = True
+        if entry.movement == "R":
+            turn_right_active = True
+        conn = entry.connection
+        if conn and conn.approach.road == "main":
+            if conn.approach.direction == "EB":
+                main_right_active = True
+            elif conn.approach.direction == "WB":
+                main_left_active = True
 
     chars: List[str] = []
     for entry in indexing.links:
@@ -52,9 +62,16 @@ def _phase_state(
             continue
 
         forced_red = False
-        if "left" in entry.conflicts_with and not profile.pedestrian_conflicts.left and left_active:
+        if entry.crossing and entry.crossing.lane_directions:
+            left_conflict_active = main_left_active
+            right_conflict_active = main_right_active
+        else:
+            left_conflict_active = turn_left_active
+            right_conflict_active = turn_right_active
+
+        if "left" in entry.conflicts_with and not profile.pedestrian_conflicts.left and left_conflict_active:
             forced_red = True
-        if "right" in entry.conflicts_with and not profile.pedestrian_conflicts.right and right_active:
+        if "right" in entry.conflicts_with and not profile.pedestrian_conflicts.right and right_conflict_active:
             forced_red = True
         chars.append("r" if forced_red else "g")
     return "".join(chars)
