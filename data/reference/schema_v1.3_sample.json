@@ -119,7 +119,7 @@
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
           "left": false,
-          "right": true
+          "right": false
         },
         "phases": [
           {
@@ -342,7 +342,7 @@
         "offset_s": 12
       },
       "main_ped_crossing_placement": {
-        "west": false,
+        "west": true,
         "east": true
       }
     },
