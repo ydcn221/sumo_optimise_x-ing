@@ -1,6 +1,7 @@
 """PlainXML connection and crossing emission."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
 from ..builder.ids import (
@@ -32,6 +33,78 @@ LOG = get_logger()
 
 
 _ORDER = ("L", "T", "R", "U")
+
+
+@dataclass(frozen=True)
+class ApproachInfo:
+    """Descriptor for a junction approach used when planning connections."""
+
+    road: str  # ``main`` or ``minor``
+    direction: str  # ``EB``/``WB``/``N``/``S``
+
+    @property
+    def key(self) -> str:
+        return f"{self.road}_{self.direction}"
+
+
+@dataclass(frozen=True)
+class VehicleConnectionPlan:
+    """Planned vehicle connection including movement metadata."""
+
+    from_edge: str
+    to_edge: str
+    from_lane: int
+    to_lane: int
+    approach: ApproachInfo
+    movement: str  # ``L``/``T``/``R``/``U``
+
+    @property
+    def normalized_movement(self) -> str:
+        """Normalize movements so that U-turns reuse the right-turn bucket."""
+
+        return "R" if self.movement == "U" else self.movement
+
+
+@dataclass(frozen=True)
+class CrossingPlan:
+    """Planned pedestrian crossing controlled at the cluster."""
+
+    crossing_id: str
+    node: str
+    edges: Tuple[str, ...]
+    width: float
+    category: str  # ``minor`` / ``main`` / ``midblock``
+
+
+@dataclass
+class ClusterLinkPlan:
+    """Aggregated movements associated with a cluster position."""
+
+    crossings: List[CrossingPlan] = field(default_factory=list)
+    vehicle_connections: List[VehicleConnectionPlan] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LinkIndexEntry:
+    """Mapping of a link index to the physical connection/crossing."""
+
+    link_index: int
+    kind: str  # ``vehicle`` or ``pedestrian``
+    tokens: Tuple[str, ...]
+    movement: str  # ``L``/``T``/``R``/``P``
+    connection: Optional[VehicleConnectionPlan] = None
+    crossing: Optional[CrossingPlan] = None
+    conflicts_with: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ClusterLinkIndexing:
+    """Per-cluster lookup for signalised movements."""
+
+    tl_id: str
+    links: Tuple[LinkIndexEntry, ...]
+    token_to_indices: Dict[str, Tuple[int, ...]]
+
 
 
 def _canon(label: str) -> str:
@@ -87,6 +160,24 @@ def _count_effective(lanes: List[str], sym: str) -> int:
     """Count lanes that effectively behave as ``sym`` while ignoring shared ``U``."""
 
     return sum(1 for lane in lanes if lane.replace("U", "") == sym)
+
+
+def _movement_tokens(approach: ApproachInfo, movement: str) -> Tuple[str, ...]:
+    """Return movement tokens controlling ``movement`` for the given approach."""
+
+    normalized = "R" if movement == "U" else movement
+    base: Set[str] = {f"{approach.road}_{normalized}"}
+    if approach.road == "main":
+        base.add(f"{approach.direction}_{normalized}")
+    return tuple(sorted(base))
+
+
+def _pedestrian_conflict_tags(category: str) -> Tuple[str, ...]:
+    """Return conflict tags (``left``/``right``) associated with a crossing category."""
+
+    if category == "midblock":
+        return ()
+    return ("left", "right")
 
 
 def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
@@ -218,8 +309,7 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
     raise ValueError("Configuration not supported by current specification.")
 
 
-def _emit_vehicle_connections_for_approach(
-    lines: List[str],
+def _plan_vehicle_connections_for_approach(
     pos: int,
     in_edge_id: str,
     s_count: int,
@@ -227,7 +317,10 @@ def _emit_vehicle_connections_for_approach(
     T_target: Optional[Tuple[str, int]],
     R_target: Optional[Tuple[str, int]],
     U_target: Optional[Tuple[str, int]],
-) -> int:
+    approach: ApproachInfo,
+) -> List[VehicleConnectionPlan]:
+    """Derive the set of vehicle connections for a single approach."""
+
     l_target = L_target[1] if L_target else 0
     t_target = T_target[1] if T_target else 0
     r_target = R_target[1] if R_target else 0
@@ -272,18 +365,21 @@ def _emit_vehicle_connections_for_approach(
     idx_r = [i for i, label in enumerate(lane_labels, start=1) if "R" in label]
     idx_u = [i for i, label in enumerate(lane_labels, start=1) if "U" in label]
 
-    emitted = 0
+    plans: List[VehicleConnectionPlan] = []
 
-    def append_connection(from_lane: int, to_lane: int, edge_id: str) -> None:
-        nonlocal emitted
-        lines.append(
-            f'  <connection from="{in_edge_id}" to="{edge_id}" '
-            f'fromLane="{from_lane}" toLane="{to_lane}"/>'
+    def append_plan(from_lane: int, to_lane: int, edge_id: str, movement: str) -> None:
+        plans.append(
+            VehicleConnectionPlan(
+                from_edge=in_edge_id,
+                to_edge=edge_id,
+                from_lane=from_lane,
+                to_lane=to_lane,
+                approach=approach,
+                movement=movement,
+            )
         )
-        emitted += 1
 
     def emit_left(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
-        """Map left turns from the inside out, sharing the last target lane if needed."""
         if not idx or not target:
             return
         edge_id, lane_count = target
@@ -291,10 +387,9 @@ def _emit_vehicle_connections_for_approach(
             return
         for offset, from_lane in enumerate(idx):
             to_lane = min(offset + 1, lane_count)
-            append_connection(from_lane, to_lane, edge_id)
+            append_plan(from_lane, to_lane, edge_id, "L")
 
     def emit_straight(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
-        """Assign straight lanes left-to-left, fanning the rightmost lane when required."""
         if not idx or not target:
             return
         edge_id, lane_count = target
@@ -303,17 +398,16 @@ def _emit_vehicle_connections_for_approach(
         count = len(idx)
         matched = min(count, lane_count)
         for offset in range(matched):
-            append_connection(idx[offset], offset + 1, edge_id)
+            append_plan(idx[offset], offset + 1, edge_id, "T")
         if count > lane_count:
             for from_lane in idx[lane_count:]:
-                append_connection(from_lane, lane_count, edge_id)
+                append_plan(from_lane, lane_count, edge_id, "T")
         elif lane_count > count:
             edge_from = idx[-1]
             for to_lane in range(count + 1, lane_count + 1):
-                append_connection(edge_from, to_lane, edge_id)
+                append_plan(edge_from, to_lane, edge_id, "T")
 
-    def emit_right(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
-        """Attach right (and U) turns from the outside in, sharing the edge lane as needed."""
+    def emit_right(idx: List[int], target: Optional[Tuple[str, int]], movement: str) -> None:
         if not idx or not target:
             return
         edge_id, lane_count = target
@@ -324,18 +418,18 @@ def _emit_vehicle_connections_for_approach(
                 to_lane = lane_count - offset
             else:
                 to_lane = lane_count
-            append_connection(from_lane, to_lane, edge_id)
+            append_plan(from_lane, to_lane, edge_id, movement)
 
     if l > 0:
         emit_left(idx_l, L_target)
     if t > 0:
         emit_straight(idx_t, T_target)
     if r > 0:
-        emit_right(idx_r, R_target)
+        emit_right(idx_r, R_target, "R")
     if u > 0:
-        emit_right(idx_u, U_target)
+        emit_right(idx_u, U_target or R_target, "U")
 
-    if (l + t + r + u) > 0 and emitted == 0 and s_count > 0:
+    if (l + t + r + u) > 0 and not plans and s_count > 0:
         LOG.error(
             "[VAL] E402 zero vehicle connections emitted: pos=%s in_edge=%s s=%d l=%d t=%d r=%d u=%d",
             pos,
@@ -347,7 +441,7 @@ def _emit_vehicle_connections_for_approach(
             u,
         )
         raise SemanticValidationError("no vehicle connections emitted")
-    return emitted
+    return plans
 
 
 def get_main_edges_west_side(breakpoints: List[int], pos: int) -> Tuple[Optional[str], Optional[str]]:
@@ -364,6 +458,55 @@ def get_main_edges_east_side(breakpoints: List[int], pos: int) -> Tuple[Optional
     return (main_edge_id("EB", pos, east), main_edge_id("WB", pos, east))
 
 
+def _build_cluster_link_indexing(
+    plans: Dict[int, ClusterLinkPlan],
+    signalized_positions: Set[int],
+) -> Dict[int, ClusterLinkIndexing]:
+    """Create link index mapping for signalised clusters."""
+
+    mapping: Dict[int, ClusterLinkIndexing] = {}
+    for pos in sorted(signalized_positions):
+        plan = plans.get(pos)
+        if not plan:
+            continue
+        links: List[LinkIndexEntry] = []
+        token_to_indices: Dict[str, List[int]] = {}
+        index = 0
+        for conn in plan.vehicle_connections:
+            tokens = _movement_tokens(conn.approach, conn.movement)
+            entry = LinkIndexEntry(
+                link_index=index,
+                kind="vehicle",
+                tokens=tokens,
+                movement=conn.normalized_movement,
+                connection=conn,
+            )
+            links.append(entry)
+            for token in tokens:
+                token_to_indices.setdefault(token, []).append(index)
+            index += 1
+        for crossing in plan.crossings:
+            tokens = ("pedestrian",)
+            entry = LinkIndexEntry(
+                link_index=index,
+                kind="pedestrian",
+                tokens=tokens,
+                movement="P",
+                crossing=crossing,
+                conflicts_with=_pedestrian_conflict_tags(crossing.category),
+            )
+            links.append(entry)
+            for token in tokens:
+                token_to_indices.setdefault(token, []).append(index)
+            index += 1
+        mapping[pos] = ClusterLinkIndexing(
+            tl_id=cluster_id(pos),
+            links=tuple(links),
+            token_to_indices={key: tuple(sorted(values)) for key, values in token_to_indices.items()},
+        )
+    return mapping
+
+
 def render_connections_xml(
     defaults: Defaults,
     clusters: List[Cluster],
@@ -372,10 +515,13 @@ def render_connections_xml(
     snap_rule: SnapRule,
     main_road: MainRoadConfig,
     lane_overrides: Dict[str, List[LaneOverride]],
-) -> str:
+) -> Tuple[str, Dict[int, ClusterLinkIndexing]]:
     width = defaults.ped_crossing_width_m
-    lines: List[str] = []
-    lines.append("<connections>")
+    lines: List[str] = ["<connections>"]
+    plans: Dict[int, ClusterLinkPlan] = {}
+
+    def get_plan(pos: int) -> ClusterLinkPlan:
+        return plans.setdefault(pos, ClusterLinkPlan())
 
     absorbed_pos: Set[int] = set()
 
@@ -384,6 +530,7 @@ def render_connections_xml(
         junction_events = [ev for ev in cluster.events if ev.type in (EventKind.TEE, EventKind.CROSS)]
         if not junction_events:
             continue
+        plan = get_plan(pos)
         node = cluster_id(pos)
 
         place_west = False
@@ -417,41 +564,104 @@ def render_connections_xml(
             e_from = f"Edge.Minor.{pos}.from.{ns}"
             cid = crossing_id_minor(pos, ns)
             lines.append(f'  <crossing id="{cid}" node="{node}" edges="{e_to} {e_from}" width="{width:.3f}"/>')
+            plan.crossings.append(
+                CrossingPlan(
+                    crossing_id=cid,
+                    node=node,
+                    edges=(e_to, e_from),
+                    width=width,
+                    category="minor",
+                )
+            )
 
         if place_west:
             eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
             if eb_edge and wb_edge:
                 if split_main:
+                    cid = crossing_id_main_split(pos, "West", "EB")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main_split(pos, "West", "EB")}" '
-                        f'node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
                     )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid,
+                            node=node,
+                            edges=(eb_edge,),
+                            width=width,
+                            category="main",
+                        )
+                    )
+                    cid2 = crossing_id_main_split(pos, "West", "WB")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main_split(pos, "West", "WB")}" '
-                        f'node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+                    )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid2,
+                            node=node,
+                            edges=(wb_edge,),
+                            width=width,
+                            category="main",
+                        )
                     )
                 else:
+                    cid = crossing_id_main(pos, "West")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main(pos, "West")}" '
-                        f'node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+                    )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid,
+                            node=node,
+                            edges=(eb_edge, wb_edge),
+                            width=width,
+                            category="main",
+                        )
                     )
 
         if place_east:
             eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
             if eb_edge and wb_edge:
                 if split_main:
+                    cid = crossing_id_main_split(pos, "East", "EB")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main_split(pos, "East", "EB")}" '
-                        f'node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
                     )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid,
+                            node=node,
+                            edges=(eb_edge,),
+                            width=width,
+                            category="main",
+                        )
+                    )
+                    cid2 = crossing_id_main_split(pos, "East", "WB")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main_split(pos, "East", "WB")}" '
-                        f'node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+                    )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid2,
+                            node=node,
+                            edges=(wb_edge,),
+                            width=width,
+                            category="main",
+                        )
                     )
                 else:
+                    cid = crossing_id_main(pos, "East")
                     lines.append(
-                        f'  <crossing id="{crossing_id_main(pos, "East")}" '
-                        f'node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+                    )
+                    plan.crossings.append(
+                        CrossingPlan(
+                            crossing_id=cid,
+                            node=node,
+                            edges=(eb_edge, wb_edge),
+                            width=width,
+                            category="main",
+                        )
                     )
 
     for cluster in clusters:
@@ -461,6 +671,7 @@ def render_connections_xml(
         mid_events = [ev for ev in cluster.events if ev.type == EventKind.XWALK_MIDBLOCK]
         if not mid_events:
             continue
+        plan = get_plan(pos)
         node = cluster_id(pos)
 
         if snap_rule.tie_break == "toward_west":
@@ -478,18 +689,45 @@ def render_connections_xml(
 
         split_midblock = any(bool(ev.split_ped_crossing_on_main) for ev in mid_events)
         if split_midblock:
+            cid = crossing_id_midblock_split(pos, "EB")
             lines.append(
-                f'  <crossing id="{crossing_id_midblock_split(pos, "EB")}" '
-                f'node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
+                f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
             )
+            plan.crossings.append(
+                CrossingPlan(
+                    crossing_id=cid,
+                    node=node,
+                    edges=(eb_edge,),
+                    width=width,
+                    category="midblock",
+                )
+            )
+            cid2 = crossing_id_midblock_split(pos, "WB")
             lines.append(
-                f'  <crossing id="{crossing_id_midblock_split(pos, "WB")}" '
-                f'node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+                f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
+            )
+            plan.crossings.append(
+                CrossingPlan(
+                    crossing_id=cid2,
+                    node=node,
+                    edges=(wb_edge,),
+                    width=width,
+                    category="midblock",
+                )
             )
         else:
+            cid = crossing_id_midblock(pos)
             lines.append(
-                f'  <crossing id="{crossing_id_midblock(pos)}" '
-                f'node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+                f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
+            )
+            plan.crossings.append(
+                CrossingPlan(
+                    crossing_id=cid,
+                    node=node,
+                    edges=(eb_edge, wb_edge),
+                    width=width,
+                    category="midblock",
+                )
             )
 
     for cluster in clusters:
@@ -497,6 +735,7 @@ def render_connections_xml(
         junction_events = [ev for ev in cluster.events if ev.type in (EventKind.TEE, EventKind.CROSS)]
         if not junction_events:
             continue
+        plan = get_plan(pos)
         ev = junction_events[0]
         tpl = junction_template_by_id.get(ev.template_id) if ev.template_id else None
         if not tpl:
@@ -536,9 +775,22 @@ def render_connections_xml(
             if tpl.median_continuous:
                 R_target = None
                 U_target = None
-            _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
+            plans_west = _plan_vehicle_connections_for_approach(
+                pos,
+                in_edge,
+                s_count,
+                L_target,
+                T_target,
+                R_target,
+                U_target,
+                ApproachInfo(road="main", direction="EB"),
             )
+            plan.vehicle_connections.extend(plans_west)
+            for conn in plans_west:
+                lines.append(
+                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
+                )
 
         if east is not None:
             in_edge = main_edge_id("WB", pos, east)
@@ -559,9 +811,22 @@ def render_connections_xml(
             if tpl.median_continuous:
                 R_target = None
                 U_target = None
-            _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
+            plans_east = _plan_vehicle_connections_for_approach(
+                pos,
+                in_edge,
+                s_count,
+                L_target,
+                T_target,
+                R_target,
+                U_target,
+                ApproachInfo(road="main", direction="WB"),
             )
+            plan.vehicle_connections.extend(plans_east)
+            for conn in plans_east:
+                lines.append(
+                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
+                )
 
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
@@ -592,9 +857,22 @@ def render_connections_xml(
                     east_lanes,
                 )
                 raise SemanticValidationError("no available movements for approach")
-            _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
+            plans_north = _plan_vehicle_connections_for_approach(
+                pos,
+                in_edge,
+                s_count,
+                L_target,
+                T_target,
+                R_target,
+                U_target,
+                ApproachInfo(road="minor", direction="N"),
             )
+            plan.vehicle_connections.extend(plans_north)
+            for conn in plans_north:
+                lines.append(
+                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
+                )
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
@@ -625,9 +903,22 @@ def render_connections_xml(
                     east_lanes,
                 )
                 raise SemanticValidationError("no available movements for approach")
-            _emit_vehicle_connections_for_approach(
-                lines, pos, in_edge, s_count, L_target, T_target, R_target, U_target
+            plans_south = _plan_vehicle_connections_for_approach(
+                pos,
+                in_edge,
+                s_count,
+                L_target,
+                T_target,
+                R_target,
+                U_target,
+                ApproachInfo(road="minor", direction="S"),
             )
+            plan.vehicle_connections.extend(plans_south)
+            for conn in plans_south:
+                lines.append(
+                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
+                )
 
     unique_lines: List[str] = []
     seen: Set[str] = set()
@@ -643,4 +934,11 @@ def render_connections_xml(
     unique_lines.append("</connections>")
     xml = "\n".join(unique_lines) + "\n"
     LOG.info("rendered connections (%d lines)", len(unique_lines))
-    return xml
+
+    signalized_positions: Set[int] = {
+        cluster.pos_m
+        for cluster in clusters
+        if any(bool(ev.signalized) and ev.signal is not None for ev in cluster.events)
+    }
+    indexing = _build_cluster_link_indexing(plans, signalized_positions)
+    return xml, indexing
