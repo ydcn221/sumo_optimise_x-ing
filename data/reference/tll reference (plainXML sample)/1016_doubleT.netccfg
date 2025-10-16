@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-10-16 15:20:59 by Eclipse SUMO netedit Version 1.24.0
+-->
+
+<neteditConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/neteditConfiguration.xsd">
+
+    <input>
+        <node-files value="C:\Users\user_name\Documents\Codes\Python\sumo_optimise_x-ing\plainXML_out\1016_007 tll plX\1_fin.nod.xml"/>
+        <edge-files value="C:\Users\user_name\Documents\Codes\Python\sumo_optimise_x-ing\plainXML_out\1016_007 tll plX\1_fin.edg.xml"/>
+        <connection-files value="C:\Users\user_name\Documents\Codes\Python\sumo_optimise_x-ing\plainXML_out\1016_007 tll plX\1_fin.con.xml"/>
+        <tllogic-files value="C:\Users\user_name\Documents\Codes\Python\sumo_optimise_x-ing\plainXML_out\1016_007 tll plX\1_fin.tll.xml"/>
+    </input>
+
+    <processing>
+        <geometry.min-radius.fix.railways value="false"/>
+        <geometry.avoid-overlap value="false"/>
+        <geometry.max-grade.fix value="false"/>
+        <offset.disable-normalization value="true"/>
+        <lefthand value="1"/>
+    </processing>
+
+    <junctions>
+        <no-internal-links value="false"/>
+        <no-turnarounds value="true"/>
+        <junctions.corner-detail value="5"/>
+        <junctions.limit-turn-speed value="5.50"/>
+        <rectangular-lane-cut value="0"/>
+    </junctions>
+
+    <pedestrian>
+        <walkingareas value="0"/>
+    </pedestrian>
+
+</neteditConfiguration>

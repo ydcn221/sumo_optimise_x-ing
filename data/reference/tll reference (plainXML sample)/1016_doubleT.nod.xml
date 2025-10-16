@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-10-16 15:20:59 by Eclipse SUMO netedit Version 1.24.0
+<neteditConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/neteditConfiguration.xsd">
+
+    <input>
+        <sumo-net-file value="C:\Users\user_name\Documents\Codes\Python\sumo_optimise_x-ing\plainXML_out\1016_007\network.net.xml"/>
+    </input>
+
+    <processing>
+        <geometry.min-radius.fix.railways value="false"/>
+        <geometry.avoid-overlap value="false"/>
+        <geometry.max-grade.fix value="false"/>
+        <offset.disable-normalization value="true"/>
+        <lefthand value="1"/>
+    </processing>
+
+    <junctions>
+        <no-internal-links value="false"/>
+        <no-turnarounds value="true"/>
+        <junctions.corner-detail value="5"/>
+        <junctions.limit-turn-speed value="5.50"/>
+        <rectangular-lane-cut value="0"/>
+    </junctions>
+
+    <pedestrian>
+        <walkingareas value="0"/>
+    </pedestrian>
+
+</neteditConfiguration>
+-->
+
+<nodes version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <location netOffset="0.00,70.00" convBoundary="0.00,0.00,300.00,140.00" origBoundary="0.00,-70.00,300.00,70.00" projParameter="!"/>
+
+    <node id="Cluster.Main.100" x="100.00" y="70.00" type="traffic_light" tl="Cluster.Main.100"/>
+    <node id="Cluster.Main.150" x="150.00" y="70.00" type="priority"/>
+    <node id="Cluster.Main.200" x="200.00" y="70.00" type="traffic_light" tl="Cluster.Main.200"/>
+    <node id="Cluster.Main.250" x="250.00" y="70.00" type="priority"/>
+    <node id="Cluster.Main.50" x="50.00" y="70.00" type="priority"/>
+    <node id="Node.Main.EB.0" x="0.00" y="73.00" type="dead_end"/>
+    <node id="Node.Main.EB.300" x="300.00" y="73.00" type="dead_end"/>
+    <node id="Node.Main.WB.0" x="0.00" y="67.00" type="dead_end"/>
+    <node id="Node.Main.WB.300" x="300.00" y="67.00" type="dead_end"/>
+    <node id="Node.Minor.100.N-End" x="100.00" y="140.00" type="priority"/>
+    <node id="Node.Minor.200.S-End" x="200.00" y="0.00" type="priority"/>
+</nodes>
