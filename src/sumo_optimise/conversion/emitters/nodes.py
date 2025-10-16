@@ -7,6 +7,7 @@ from ..builder.ids import cluster_id, main_node_id, minor_end_node_id
 from ..domain.models import BreakpointInfo, Cluster, Defaults, EventKind, MainRoadConfig, SideMinor
 from ..planner.geometry import build_main_carriageway_y
 from ..utils.logging import get_logger
+from ..utils.signals import cluster_has_signal_reference
 
 LOG = get_logger()
 
@@ -28,16 +29,33 @@ def render_nodes_xml(
         lines.append(f'  <node id="{main_node_id("EB", x)}" x="{x}" y="{y_eb}"/>')
         lines.append(f'  <node id="{main_node_id("WB", x)}" x="{x}" y="{y_wb}"/>')
 
+    cluster_by_pos = {cluster.pos_m: cluster for cluster in clusters}
+
     for pos in breakpoints:
         if pos in (0, grid_max):
             continue
         eb = main_node_id("EB", pos)
         wb = main_node_id("WB", pos)
         reasons_text = ",".join(sorted(reason_by_pos[pos].reasons))
-        lines.append(
-            f'  <join id="{cluster_id(pos)}" x="{pos}" y="0" nodes="{eb} {wb}"/>'
-            f'  <!-- reasons: {reasons_text} -->'
-        )
+        cluster = cluster_by_pos.get(pos)
+        is_signalized = cluster_has_signal_reference(cluster)
+        join_attrs = [
+            f'id="{cluster_id(pos)}"',
+            f'x="{pos}"',
+            'y="0"',
+            f'nodes="{eb} {wb}"',
+        ]
+        if is_signalized:
+            join_attrs.extend(
+                [
+                    'type="traffic_light"',
+                    f'tl="{cluster_id(pos)}"',
+                    'tlType="static"',
+                ]
+            )
+        join_text = " ".join(join_attrs)
+        lines.append(f"  <join {join_text}/>")
+        lines[-1] += f"  <!-- reasons: {reasons_text} -->"
 
     for cluster in clusters:
         pos = cluster.pos_m

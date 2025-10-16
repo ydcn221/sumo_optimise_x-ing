@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List, Set
 
 from ..domain.models import Cluster, SignalPhaseDef, SignalProfileDef
 from ..utils.logging import get_logger
+from ..utils.signals import cluster_has_signal_reference
 from .connections import ClusterLinkIndexing, LinkIndexEntry
 
 LOG = get_logger()
@@ -72,10 +73,12 @@ def render_tllogics_xml(
     rendered = 0
 
     for cluster in clusters:
+        if not cluster_has_signal_reference(cluster):
+            continue
         tl_events = [
             ev
             for ev in cluster.events
-            if bool(ev.signalized) and ev.signal is not None and ev.type.value in signal_profiles_by_kind
+            if ev.signalized is True and ev.signal is not None and ev.type.value in signal_profiles_by_kind
         ]
         if not tl_events:
             continue

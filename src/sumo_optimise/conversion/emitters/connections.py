@@ -28,6 +28,7 @@ from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.lanes import find_neighbor_segments, pick_lanes_for_segment
 from ..utils.errors import SemanticValidationError
 from ..utils.logging import get_logger
+from ..utils.signals import cluster_has_signal_reference
 
 LOG = get_logger()
 
@@ -938,7 +939,7 @@ def render_connections_xml(
     signalized_positions: Set[int] = {
         cluster.pos_m
         for cluster in clusters
-        if any(bool(ev.signalized) and ev.signal is not None for ev in cluster.events)
+        if cluster_has_signal_reference(cluster)
     }
     indexing = _build_cluster_link_indexing(plans, signalized_positions)
     return xml, indexing
