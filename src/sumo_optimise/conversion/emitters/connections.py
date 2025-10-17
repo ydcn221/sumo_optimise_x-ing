@@ -534,8 +534,19 @@ def _build_cluster_link_indexing(
                 )
             )
             index += 1
+        tl_name = cluster_id(pos)
+        vehicle_count = sum(1 for link in links if link.kind == "vehicle")
+        pedestrian_count = sum(1 for link in links if link.kind == "pedestrian")
+        highest_index = links[-1].link_index if links else None
+        LOG.info(
+            "[BUILD] cluster link index summary: tl=%s vehicle_links=%d pedestrian_links=%d max_link_index=%s",
+            tl_name,
+            vehicle_count,
+            pedestrian_count,
+            highest_index,
+        )
         mapping[pos] = ClusterLinkIndexing(
-            tl_id=cluster_id(pos),
+            tl_id=tl_name,
             links=tuple(links),
             token_to_indices={key: tuple(sorted(values)) for key, values in token_to_indices.items()},
             pedestrian_links=tuple(pedestrian_links),

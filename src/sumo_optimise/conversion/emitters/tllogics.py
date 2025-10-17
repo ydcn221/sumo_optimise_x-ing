@@ -349,6 +349,17 @@ def render_tllogics_xml(
         for entry in idx.links:
             if entry.kind == "vehicle" and entry.connection is not None:
                 conn = entry.connection
+                LOG.info(
+                    "[BUILD] tl connection mapping: tl=%s tokens=%s movement=%s linkIndex=%d from=%s lane=%d to=%s lane=%d",
+                    idx.tl_id,
+                    ",".join(entry.tokens),
+                    entry.movement,
+                    entry.link_index,
+                    conn.from_edge,
+                    conn.from_lane,
+                    conn.to_edge,
+                    conn.to_lane,
+                )
                 connection_lines.append(
                     f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
                     f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}" '
