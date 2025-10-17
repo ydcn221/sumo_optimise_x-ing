@@ -77,42 +77,47 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
 
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
-    result = build_corridor_artifacts(spec_path, options)
     artifacts = ensure_output_directory(options.output_template)
     configure_logger(artifacts.log_path, console=options.console_log)
     LOG.info("outdir: %s", artifacts.outdir.resolve())
 
-    persist_xml(
-        artifacts,
-        nodes=result.nodes_xml,
-        edges=result.edges_xml,
-        connections=result.connections_xml,
-        tllogics=result.tllogics_xml,
-    )
+    try:
+        result = build_corridor_artifacts(spec_path, options)
 
-    manifest = {
-        "source": str(spec_path.resolve()),
-        "schema": str(options.schema_path.resolve()),
-    }
-    manifest_path = write_manifest(artifacts, manifest)
-    result.manifest_path = manifest_path
-
-    if options.run_netconvert:
-        run_two_step_netconvert(
-            artifacts.outdir,
-            artifacts.nodes_path,
-            artifacts.edges_path,
-            artifacts.connections_path,
-            artifacts.tllogics_path,
+        persist_xml(
+            artifacts,
+            nodes=result.nodes_xml,
+            edges=result.edges_xml,
+            connections=result.connections_xml,
+            tllogics=result.tllogics_xml,
         )
 
-    if options.run_netedit:
-        network_path = artifacts.outdir / NETWORK_FILE_NAME
-        LOG.info("netedit requested. Looking for network file at %s", network_path.resolve())
-        if network_path.exists():
-            LOG.info("network file found. Launching netedit.")
-            launch_netedit(network_path)
-        else:
-            LOG.warning("network file %s not found. Skip launching netedit.", network_path)
+        manifest = {
+            "source": str(spec_path.resolve()),
+            "schema": str(options.schema_path.resolve()),
+        }
+        manifest_path = write_manifest(artifacts, manifest)
+        result.manifest_path = manifest_path
 
-    return result
+        if options.run_netconvert:
+            run_two_step_netconvert(
+                artifacts.outdir,
+                artifacts.nodes_path,
+                artifacts.edges_path,
+                artifacts.connections_path,
+                artifacts.tllogics_path,
+            )
+
+        if options.run_netedit:
+            network_path = artifacts.outdir / NETWORK_FILE_NAME
+            LOG.info("netedit requested. Looking for network file at %s", network_path.resolve())
+            if network_path.exists():
+                LOG.info("network file found. Launching netedit.")
+                launch_netedit(network_path)
+            else:
+                LOG.warning("network file %s not found. Skip launching netedit.", network_path)
+
+        return result
+    except Exception:  # pragma: no cover - defensive logging
+        LOG.exception("build_and_persist failed")
+        raise
