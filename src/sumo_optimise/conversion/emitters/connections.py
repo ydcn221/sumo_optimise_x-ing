@@ -102,12 +102,30 @@ class LinkIndexEntry:
 
 
 @dataclass(frozen=True)
+class PedestrianSignalLink:
+    """Lookup entry linking a pedestrian crossing to its signal metadata."""
+
+    crossing_id: str
+    tl_id: str
+    link_index: int
+
+
+@dataclass(frozen=True)
 class ClusterLinkIndexing:
     """Per-cluster lookup for signalised movements."""
 
     tl_id: str
     links: Tuple[LinkIndexEntry, ...]
     token_to_indices: Dict[str, Tuple[int, ...]]
+    pedestrian_links: Tuple[PedestrianSignalLink, ...] = ()
+
+    def get_pedestrian_link(self, crossing_id: str) -> Optional[PedestrianSignalLink]:
+        """Return the pedestrian link metadata for ``crossing_id`` if present."""
+
+        for link in self.pedestrian_links:
+            if link.crossing_id == crossing_id:
+                return link
+        return None
 
 
 
@@ -480,6 +498,7 @@ def _build_cluster_link_indexing(
             continue
         links: List[LinkIndexEntry] = []
         token_to_indices: Dict[str, List[int]] = {}
+        pedestrian_links: List[PedestrianSignalLink] = []
         index = 0
         for conn in plan.vehicle_connections:
             tokens = _movement_tokens(conn.approach, conn.movement)
@@ -507,11 +526,19 @@ def _build_cluster_link_indexing(
             links.append(entry)
             for token in tokens:
                 token_to_indices.setdefault(token, []).append(index)
+            pedestrian_links.append(
+                PedestrianSignalLink(
+                    crossing_id=crossing.crossing_id,
+                    tl_id=cluster_id(pos),
+                    link_index=index,
+                )
+            )
             index += 1
         mapping[pos] = ClusterLinkIndexing(
             tl_id=cluster_id(pos),
             links=tuple(links),
             token_to_indices={key: tuple(sorted(values)) for key, values in token_to_indices.items()},
+            pedestrian_links=tuple(pedestrian_links),
         )
     return mapping
 

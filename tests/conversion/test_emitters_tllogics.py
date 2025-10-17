@@ -189,6 +189,16 @@ def test_render_tllogics_emits_state_strings_and_link_indices(monkeypatch) -> No
     index_info = link_indexing[60]
     ped_indices = [entry.link_index for entry in index_info.links if entry.kind == "pedestrian"]
     assert ped_indices, "expected at least one pedestrian link"
+    ped_signal_links = index_info.pedestrian_links
+    assert ped_signal_links, "expected stored pedestrian signal references"
+    assert all(link.tl_id == index_info.tl_id for link in ped_signal_links)
+    ped_crossing_ids = {link.crossing_id for link in ped_signal_links}
+    planned_crossing_ids = {
+        entry.crossing.crossing_id
+        for entry in index_info.links
+        if entry.kind == "pedestrian" and entry.crossing is not None
+    }
+    assert ped_crossing_ids == planned_crossing_ids
 
     profile = SignalProfileDef(
         id="cross_profile",
@@ -211,6 +221,7 @@ def test_render_tllogics_emits_state_strings_and_link_indices(monkeypatch) -> No
         link_indexing,
     )
 
+    assert "<crossing" not in xml
     phases = _extract_phases(xml)
     assert phases, "expected phases to be emitted"
     state_length = len(phases[0][1])
