@@ -29,6 +29,15 @@ def run_two_step_netconvert(
     base_network = "base_raw.net.xml"
     plain_prefix = "base_plain"
 
+    LOG.info(
+        "netconvert inputs: outdir=%s nodes=%s edges=%s connections=%s tllogics=%s",
+        outdir,
+        nodes_file,
+        edges_file,
+        connections_file,
+        tllogics_file,
+    )
+
     step1 = [
         exe,
         "--node-files",
@@ -76,4 +85,15 @@ def run_two_step_netconvert(
                 LOG.error("[netconvert %d STDOUT]\n%s", idx, exc.stdout)
             if exc.stderr:
                 LOG.error("[netconvert %d STDERR]\n%s", idx, exc.stderr)
+            LOG.error(
+                "netconvert failure context: cwd=%s command=%s",
+                outdir,
+                " ".join(cmd),
+            )
+            LOG.error(
+                "Investigate generated files (e.g., %s, %s, %s) for inconsistencies.",
+                nodes_file,
+                edges_file,
+                connections_file,
+            )
             raise NetconvertExecutionError(f"netconvert step {idx} failed with rc={exc.returncode}")
