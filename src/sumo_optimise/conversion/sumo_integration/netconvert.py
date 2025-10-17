@@ -12,8 +12,14 @@ from ..utils.logging import get_logger
 LOG = get_logger()
 
 
-def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, connections_file: Path) -> None:
-    """Execute the three-stage netconvert workflow required by SUMO."""
+def run_two_step_netconvert(
+    outdir: Path,
+    nodes_file: Path,
+    edges_file: Path,
+    connections_file: Path,
+    tllogics_file: Path,
+) -> None:
+    """Execute the multi-stage netconvert workflow required by SUMO."""
 
     exe = shutil.which("netconvert")
     if exe is None:
@@ -38,23 +44,18 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         exe,
         "--sumo-net-file",
         base_network,
-        "--plain-output-prefix",
-        plain_prefix,
-    ]
-    step3 = [
-        exe,
-        "--node-files",
-        f"{plain_prefix}.nod.xml",
-        "--edge-files",
-        f"{plain_prefix}.edg.xml",
         "--connection-files",
         connections_file.name,
+        "--tllogic-files",
+        tllogics_file.name,
         "--lefthand",
+        "--plain-output-prefix",
+        plain_prefix,
         "--output-file",
         NETWORK_FILE_NAME,
     ]
 
-    for idx, cmd in enumerate((step1, step2, step3), start=1):
+    for idx, cmd in enumerate((step1, step2), start=1):
         LOG.info("netconvert step %d: %s", idx, " ".join(cmd))
         try:
             proc = subprocess.run(

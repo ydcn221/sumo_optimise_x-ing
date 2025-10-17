@@ -103,6 +103,7 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
             artifacts.nodes_path,
             artifacts.edges_path,
             artifacts.connections_path,
+            artifacts.tllogics_path,
         )
 
     if options.run_netedit:
