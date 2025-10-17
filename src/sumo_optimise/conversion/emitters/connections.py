@@ -86,6 +86,25 @@ class ClusterLinkPlan:
 
     crossings: List[CrossingPlan] = field(default_factory=list)
     vehicle_connections: List[VehicleConnectionPlan] = field(default_factory=list)
+    _vehicle_keys: Set[Tuple[str, str, int, int, str]] = field(
+        default_factory=set, init=False, repr=False
+    )
+
+    def add_vehicle_connection(self, connection: VehicleConnectionPlan) -> bool:
+        """Register ``connection`` if it has not been seen for the cluster."""
+
+        key = (
+            connection.from_edge,
+            connection.to_edge,
+            connection.from_lane,
+            connection.to_lane,
+            connection.movement,
+        )
+        if key in self._vehicle_keys:
+            return False
+        self._vehicle_keys.add(key)
+        self.vehicle_connections.append(connection)
+        return True
 
 
 @dataclass(frozen=True)
@@ -126,6 +145,45 @@ class ClusterLinkIndexing:
             if link.crossing_id == crossing_id:
                 return link
         return None
+
+
+def _format_vehicle_debug(conn: VehicleConnectionPlan) -> str:
+    """Return a concise descriptor for a vehicle connection."""
+
+    return (
+        f"{conn.approach.key}:{conn.movement} "
+        f"{conn.from_edge}[{conn.from_lane}]->{conn.to_edge}[{conn.to_lane}]"
+    )
+
+
+def _format_crossing_debug(crossing: CrossingPlan) -> str:
+    """Return a concise descriptor for a pedestrian crossing."""
+
+    details = [crossing.category]
+    if crossing.main_side:
+        details.append(f"side={crossing.main_side}")
+    if crossing.two_stage:
+        details.append("two-stage")
+    detail_str = ",".join(details)
+    return f"{crossing.crossing_id} ({detail_str}) width={crossing.width}"
+
+
+def _log_cluster_plan_debug(pos: int, plan: ClusterLinkPlan) -> None:
+    """Emit detailed plan information for debugging builds."""
+
+    if not plan.vehicle_connections and not plan.crossings:
+        return
+
+    LOG.info(
+        "[BUILD] cluster plan summary: node=%s vehicle=%d pedestrian=%d",
+        cluster_id(pos),
+        len(plan.vehicle_connections),
+        len(plan.crossings),
+    )
+    for idx, conn in enumerate(plan.vehicle_connections):
+        LOG.info("[BUILD]   vehicle[%02d] %s", idx, _format_vehicle_debug(conn))
+    for idx, crossing in enumerate(plan.crossings):
+        LOG.info("[BUILD]   crossing[%02d] %s", idx, _format_crossing_debug(crossing))
 
 
 
@@ -534,12 +592,38 @@ def _build_cluster_link_indexing(
                 )
             )
             index += 1
+        vehicle_count = sum(1 for entry in links if entry.kind == "vehicle")
+        pedestrian_count = sum(1 for entry in links if entry.kind == "pedestrian")
         mapping[pos] = ClusterLinkIndexing(
             tl_id=cluster_id(pos),
             links=tuple(links),
             token_to_indices={key: tuple(sorted(values)) for key, values in token_to_indices.items()},
             pedestrian_links=tuple(pedestrian_links),
         )
+        LOG.info(
+            "[BUILD] link indices for %s: total=%d vehicle=%d pedestrian=%d",
+            cluster_id(pos),
+            len(links),
+            vehicle_count,
+            pedestrian_count,
+        )
+        for entry in links:
+            if entry.kind == "vehicle" and entry.connection is not None:
+                LOG.info(
+                    "[BUILD]   link[%02d] tokens=%s movement=%s %s",
+                    entry.link_index,
+                    ",".join(entry.tokens),
+                    entry.movement,
+                    _format_vehicle_debug(entry.connection),
+                )
+            elif entry.kind == "pedestrian" and entry.crossing is not None:
+                LOG.info(
+                    "[BUILD]   link[%02d] tokens=%s movement=%s %s",
+                    entry.link_index,
+                    ",".join(entry.tokens),
+                    entry.movement,
+                    _format_crossing_debug(entry.crossing),
+                )
     return mapping
 
 
@@ -558,6 +642,16 @@ def render_connections_xml(
 
     def get_plan(pos: int) -> ClusterLinkPlan:
         return plans.setdefault(pos, ClusterLinkPlan())
+
+    def append_connection(plan: ClusterLinkPlan, connection: VehicleConnectionPlan) -> None:
+        line = (
+            f'  <connection from="{connection.from_edge}" to="{connection.to_edge}" '
+            f'fromLane="{connection.from_lane}" toLane="{connection.to_lane}"/>'
+        )
+        if plan.add_vehicle_connection(connection):
+            lines.append(line)
+        else:
+            LOG.warning("[VAL] E405 duplicated <connection> suppressed: %s", line.strip())
 
     absorbed_pos: Set[int] = set()
 
@@ -880,12 +974,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="main", direction="EB"),
             )
-            plan.vehicle_connections.extend(plans_west)
             for conn in plans_west:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if east is not None:
             in_edge = main_edge_id("WB", pos, east)
@@ -916,12 +1006,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="main", direction="WB"),
             )
-            plan.vehicle_connections.extend(plans_east)
             for conn in plans_east:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
@@ -962,12 +1048,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="minor", direction="N"),
             )
-            plan.vehicle_connections.extend(plans_north)
             for conn in plans_north:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
@@ -1008,12 +1090,10 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="minor", direction="S"),
             )
-            plan.vehicle_connections.extend(plans_south)
             for conn in plans_south:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
+
+        _log_cluster_plan_debug(pos, plan)
 
     unique_lines: List[str] = []
     seen: Set[str] = set()
