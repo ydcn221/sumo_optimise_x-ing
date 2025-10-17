@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
 from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
     EventKind,
+    BuildOptions,
     JunctionTemplate,
     LaneOverride,
     LayoutEvent,
@@ -16,6 +20,100 @@ from sumo_optimise.conversion.domain.models import (
 )
 from sumo_optimise.conversion.emitters.connections import render_connections_xml
 from sumo_optimise.conversion.emitters.tllogics import render_tllogics_xml
+from sumo_optimise.conversion.pipeline import build_corridor_artifacts
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = REPO_ROOT / "src/sumo_optimise/conversion/data/schema.json"
+REFERENCE_DIR = REPO_ROOT / "data/reference/tll reference (plainXML sample)"
+
+
+def _extract_phases(xml: str) -> list[tuple[int, str]]:
+    phases: list[tuple[int, str]] = []
+    for line in xml.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("<phase "):
+            continue
+        duration_part = stripped.split('duration="', 1)[1]
+        duration = int(duration_part.split('"', 1)[0])
+        state_part = stripped.split('state="', 1)[1]
+        state = state_part.split('"', 1)[0]
+        phases.append((duration, state))
+    return phases
+
+
+def _states_by_tl(root: ET.Element) -> dict[str, list[tuple[int, str]]]:
+    mapping: dict[str, list[tuple[int, str]]] = {}
+    for logic in root.findall("tlLogic"):
+        mapping[logic.attrib["id"]] = [
+            (int(phase.attrib["duration"]), phase.attrib["state"]) for phase in logic.findall("phase")
+        ]
+    return mapping
+
+
+def _states_by_tl_from_string(xml: str) -> dict[str, list[tuple[int, str]]]:
+    root = ET.fromstring(xml)
+    return _states_by_tl(root)
+
+
+EXPECTED_STATES_1015: dict[str, list[tuple[int, str]]] = {
+    "Cluster.Main.100": [
+        (25, "gGGGrrgGGGrrrrrrrrrrGGrr"),
+        (4, "gGGGrrgGGGrrrrrrrrrrrrrr"),
+        (3, "yyyyrryyyyrrrrrrrrrrrrrr"),
+        (12, "rrrrggrrrrggrrrrrrrrrrrr"),
+        (3, "rrrryyrrrryyrrrrrrrrrrrr"),
+        (3, "rrrrrrrrrrrrrrrrrrrrrrrr"),
+        (20, "rrrrrrrrrrrrgGGrgGGrGGGG"),
+        (4, "rrrrrrrrrrrrgGGrgGGrrrGG"),
+        (3, "rrrrrrrrrrrryyyryyyrrrGG"),
+        (3, "rrrrrrrrrrrrrrrgrrrgrrGG"),
+        (4, "rrrrrrrrrrrrrrrgrrrgrrrr"),
+        (3, "rrrrrrrrrrrrrrryrrryrrrr"),
+        (3, "rrrrrrrrrrrrrrrrrrrrrrrr"),
+    ],
+    "Cluster.Main.150": [(60, "rr"), (30, "GG")],
+    "Cluster.Main.200": [
+        (21, "rGGGrrrGGGrrrrrrrrrrrrGGr"),
+        (5, "rGGGrrrGGGrrrrrrrrrrrrrrr"),
+        (4, "ryyyrrryyyrrrrrrrrrrrrrrr"),
+        (11, "rrrrggrrrrgggrrrrgrrrrrrr"),
+        (4, "rrrryyrrrryyyrrrryrrrrrrr"),
+        (21, "rrrrrrrrrrrrrGGGrrGGGrGGG"),
+        (5, "rrrrrrrrrrrrrGGGrrGGGrrrr"),
+        (4, "rrrrrrrrrrrrryyyrryyyrrrr"),
+        (11, "grrrrrgrrrrrrrrrgrrrrgrrr"),
+        (4, "yrrrrryrrrrrrrrryrrrryrrr"),
+    ],
+}
+
+
+EXPECTED_STATES_1016: dict[str, list[tuple[int, str]]] = {
+    "Cluster.Main.100": [
+        (29, "gGGGrGGGrrrrrrrrrrr"),
+        (3, "yyyyryyyrrrrrrrrrrr"),
+        (12, "rrrrgrrrggrrrrrrrrr"),
+        (3, "rrrryrrryyrrrrrrrrr"),
+        (3, "rrrrrrrrrrrrrrrrrrr"),
+        (24, "rrrrrrrrrrggrrrGGGG"),
+        (3, "rrrrrrrrrryyrrrGGGG"),
+        (3, "rrrrrrrrrrrrggrGGGG"),
+        (4, "rrrrrrrrrrrrggrrrrr"),
+        (3, "rrrrrrrrrrrryyrrrrr"),
+        (3, "rrrrrrrrrrrrrrrrrrr"),
+    ],
+    "Cluster.Main.200": [
+        (21, "GGGrrrGGGrrrrrGrrrr"),
+        (5, "GGGrrrGGGrrrrrrrrrr"),
+        (4, "yyyrrryyyrrrrrrrrrr"),
+        (11, "rrrggrrrrgggrrrrrrr"),
+        (4, "rrryyrrrryyyrrrrrrr"),
+        (21, "rrrrrrrrrrrrrrGGGGG"),
+        (9, "rrrrrrrrrrrrrrrrrrr"),
+        (11, "rrrrrgrrrrrrggrrrrr"),
+        (4, "rrrrryrrrrrryyrrrrr"),
+    ],
+}
 
 
 def _build_signal_cluster(pos: int, profile_id: str, offset: int) -> Cluster:
@@ -113,20 +211,35 @@ def test_render_tllogics_emits_state_strings_and_link_indices(monkeypatch) -> No
         link_indexing,
     )
 
-    states = [
-        line.split('state="')[1].split('"')[0]
-        for line in xml.splitlines()
-        if line.strip().startswith("<phase ")
-    ]
-    assert states, "expected phases to be emitted"
-    state_length = len(states[0])
+    phases = _extract_phases(xml)
+    assert phases, "expected phases to be emitted"
+    state_length = len(phases[0][1])
     assert state_length == len(index_info.links)
 
     ped_index = ped_indices[0]
-    # Pedestrian only phase should be green at the pedestrian index.
-    assert states[0][ped_index] == "g"
-    # Phase with main right turn should force pedestrian red due to conflict setting.
-    assert states[2][ped_index] == "r"
+    first_phase_duration = profile.phases[0].duration_s
+    consumed = 0
+    first_phase_segments: list[tuple[int, str]] = []
+    for duration, state in phases:
+        if consumed >= first_phase_duration:
+            break
+        remaining = first_phase_duration - consumed
+        take = min(duration, remaining)
+        first_phase_segments.append((take, state))
+        consumed += duration
+    assert sum(duration for duration, _ in first_phase_segments) == first_phase_duration
+    assert first_phase_segments[0][1][ped_index] == "G"
+    assert first_phase_segments[-1][1][ped_index] == "r"
+
+    yellow_segments = [(duration, state) for duration, state in phases if "y" in state]
+    assert yellow_segments, "expected yellow segments"
+    assert all(duration == profile.yellow_duration_s for duration, _ in yellow_segments)
+
+    assert any(state[ped_index] == "G" for _, state in phases)
+    assert any(
+        state[ped_index] == "r" and any(ch in {"g", "G"} for ch in state[:ped_index])
+        for _, state in phases
+    )
 
     connection_lines = [line for line in xml.splitlines() if line.strip().startswith("<connection ")]
     assert connection_lines, "expected connection entries in net.tll.xml"
@@ -231,17 +344,20 @@ def test_two_stage_crossing_allows_opposite_half_green(monkeypatch) -> None:
         link_indexing,
     )
 
-    states = [
-        line.split('state="')[1].split('"')[0]
-        for line in xml.splitlines()
-        if line.strip().startswith("<phase ")
-    ]
-    assert len(states) == 3
+    phases = _extract_phases(xml)
+    assert phases
+    assert [duration for duration, _ in phases] == [10, 7, 3, 7, 3]
 
-    assert states[1][wb_index] == "r"
-    assert states[1][eb_index] == "g"
-    assert states[2][eb_index] == "r"
-    assert states[2][wb_index] == "g"
+    wb_states = [state[wb_index] for _, state in phases]
+    eb_states = [state[eb_index] for _, state in phases]
+
+    assert wb_states == ["G", "r", "r", "G", "G"]
+    assert eb_states == ["G", "G", "G", "r", "r"]
+
+    yellow_segments = [(duration, state) for duration, state in phases if "y" in state]
+    assert yellow_segments and all(duration == profile.yellow_duration_s for duration, _ in yellow_segments)
+
+
 def test_render_tllogics_without_signals_returns_empty() -> None:
     cluster = Cluster(
         pos_m=50,
@@ -259,3 +375,21 @@ def test_render_tllogics_without_signals_returns_empty() -> None:
     xml = render_tllogics_xml([cluster], {EventKind.CROSS.value: {}}, {})
 
     assert xml == "<tlLogics>\n</tlLogics>\n"
+
+
+def test_reference_profile_1015_matches_expected_states() -> None:
+    spec_path = REFERENCE_DIR / "1015.2.json"
+    options = BuildOptions(schema_path=SCHEMA_PATH)
+    result = build_corridor_artifacts(spec_path, options)
+
+    generated = _states_by_tl_from_string(result.tllogics_xml)
+    assert generated == EXPECTED_STATES_1015
+
+
+def test_reference_profile_1016_matches_expected_states() -> None:
+    spec_path = REFERENCE_DIR / "1016_doubleT.json"
+    options = BuildOptions(schema_path=SCHEMA_PATH)
+    result = build_corridor_artifacts(spec_path, options)
+
+    generated = _states_by_tl_from_string(result.tllogics_xml)
+    assert generated == EXPECTED_STATES_1016
