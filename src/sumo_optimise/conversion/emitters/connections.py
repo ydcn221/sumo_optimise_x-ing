@@ -86,6 +86,25 @@ class ClusterLinkPlan:
 
     crossings: List[CrossingPlan] = field(default_factory=list)
     vehicle_connections: List[VehicleConnectionPlan] = field(default_factory=list)
+    _vehicle_keys: Set[Tuple[str, str, int, int, str]] = field(
+        default_factory=set, init=False, repr=False
+    )
+
+    def add_vehicle_connection(self, connection: VehicleConnectionPlan) -> bool:
+        """Register ``connection`` if it has not been seen for the cluster."""
+
+        key = (
+            connection.from_edge,
+            connection.to_edge,
+            connection.from_lane,
+            connection.to_lane,
+            connection.movement,
+        )
+        if key in self._vehicle_keys:
+            return False
+        self._vehicle_keys.add(key)
+        self.vehicle_connections.append(connection)
+        return True
 
 
 @dataclass(frozen=True)
@@ -559,6 +578,16 @@ def render_connections_xml(
     def get_plan(pos: int) -> ClusterLinkPlan:
         return plans.setdefault(pos, ClusterLinkPlan())
 
+    def append_connection(plan: ClusterLinkPlan, connection: VehicleConnectionPlan) -> None:
+        line = (
+            f'  <connection from="{connection.from_edge}" to="{connection.to_edge}" '
+            f'fromLane="{connection.from_lane}" toLane="{connection.to_lane}"/>'
+        )
+        if plan.add_vehicle_connection(connection):
+            lines.append(line)
+        else:
+            LOG.warning("[VAL] E405 duplicated <connection> suppressed: %s", line.strip())
+
     absorbed_pos: Set[int] = set()
 
     for cluster in clusters:
@@ -880,12 +909,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="main", direction="EB"),
             )
-            plan.vehicle_connections.extend(plans_west)
             for conn in plans_west:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if east is not None:
             in_edge = main_edge_id("WB", pos, east)
@@ -916,12 +941,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="main", direction="WB"),
             )
-            plan.vehicle_connections.extend(plans_east)
             for conn in plans_east:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
@@ -962,12 +983,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="minor", direction="N"),
             )
-            plan.vehicle_connections.extend(plans_north)
             for conn in plans_north:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
@@ -1008,12 +1025,8 @@ def render_connections_xml(
                 U_target,
                 ApproachInfo(road="minor", direction="S"),
             )
-            plan.vehicle_connections.extend(plans_south)
             for conn in plans_south:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                append_connection(plan, conn)
 
     unique_lines: List[str] = []
     seen: Set[str] = set()
