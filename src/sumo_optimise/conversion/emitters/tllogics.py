@@ -354,13 +354,6 @@ def render_tllogics_xml(
                     f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}" '
                     f'tl="{idx.tl_id}" linkIndex="{entry.link_index}"/>'
                 )
-            elif entry.kind == "pedestrian" and entry.crossing is not None:
-                crossing = entry.crossing
-                edges = " ".join(crossing.edges)
-                connection_lines.append(
-                    f'  <crossing id="{crossing.crossing_id}" node="{crossing.node}" edges="{edges}" '
-                    f'width="{crossing.width:.3f}" tl="{idx.tl_id}" linkIndex="{entry.link_index}"/>'
-                )
 
     lines.extend(connection_lines)
     lines.append("</tlLogics>")

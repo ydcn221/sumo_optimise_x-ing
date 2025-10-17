@@ -102,12 +102,40 @@ class LinkIndexEntry:
 
 
 @dataclass(frozen=True)
+class PedestrianSignalLink:
+    """Lookup entry linking a pedestrian crossing to its signal metadata."""
+
+    crossing_id: str
+    tl_id: str
+    link_index: int
+
+
+@dataclass(frozen=True)
 class ClusterLinkIndexing:
     """Per-cluster lookup for signalised movements."""
 
     tl_id: str
     links: Tuple[LinkIndexEntry, ...]
     token_to_indices: Dict[str, Tuple[int, ...]]
+    pedestrian_links: Tuple[PedestrianSignalLink, ...] = ()
+    connection_lookup: Dict[VehicleConnectionPlan, LinkIndexEntry] = field(
+        default_factory=dict
+    )
+
+    def get_pedestrian_link(self, crossing_id: str) -> Optional[PedestrianSignalLink]:
+        """Return the pedestrian link metadata for ``crossing_id`` if present."""
+
+        for link in self.pedestrian_links:
+            if link.crossing_id == crossing_id:
+                return link
+        return None
+
+    def get_connection_entry(
+        self, connection: VehicleConnectionPlan
+    ) -> Optional[LinkIndexEntry]:
+        """Return the ``LinkIndexEntry`` backing ``connection`` if available."""
+
+        return self.connection_lookup.get(connection)
 
 
 
@@ -480,6 +508,8 @@ def _build_cluster_link_indexing(
             continue
         links: List[LinkIndexEntry] = []
         token_to_indices: Dict[str, List[int]] = {}
+        pedestrian_links: List[PedestrianSignalLink] = []
+        connection_lookup: Dict[VehicleConnectionPlan, LinkIndexEntry] = {}
         index = 0
         for conn in plan.vehicle_connections:
             tokens = _movement_tokens(conn.approach, conn.movement)
@@ -491,6 +521,7 @@ def _build_cluster_link_indexing(
                 connection=conn,
             )
             links.append(entry)
+            connection_lookup[conn] = entry
             for token in tokens:
                 token_to_indices.setdefault(token, []).append(index)
             index += 1
@@ -507,11 +538,20 @@ def _build_cluster_link_indexing(
             links.append(entry)
             for token in tokens:
                 token_to_indices.setdefault(token, []).append(index)
+            pedestrian_links.append(
+                PedestrianSignalLink(
+                    crossing_id=crossing.crossing_id,
+                    tl_id=cluster_id(pos),
+                    link_index=index,
+                )
+            )
             index += 1
         mapping[pos] = ClusterLinkIndexing(
             tl_id=cluster_id(pos),
             links=tuple(links),
             token_to_indices={key: tuple(sorted(values)) for key, values in token_to_indices.items()},
+            pedestrian_links=tuple(pedestrian_links),
+            connection_lookup=dict(connection_lookup),
         )
     return mapping
 
@@ -526,7 +566,8 @@ def render_connections_xml(
     lane_overrides: Dict[str, List[LaneOverride]],
 ) -> Tuple[str, Dict[int, ClusterLinkIndexing]]:
     width = defaults.ped_crossing_width_m
-    lines: List[str] = ["<connections>"]
+    crossing_lines: List[str] = []
+    vehicle_records: List[Tuple[int, VehicleConnectionPlan]] = []
     plans: Dict[int, ClusterLinkPlan] = {}
 
     def get_plan(pos: int) -> ClusterLinkPlan:
@@ -588,7 +629,9 @@ def render_connections_xml(
             e_to = f"Edge.Minor.{pos}.to.{ns}"
             e_from = f"Edge.Minor.{pos}.from.{ns}"
             cid = crossing_id_minor(pos, ns)
-            lines.append(f'  <crossing id="{cid}" node="{node}" edges="{e_to} {e_from}" width="{width:.3f}"/>')
+            crossing_lines.append(
+                f'  <crossing id="{cid}" node="{node}" edges="{e_to} {e_from}" width="{width:.3f}"/>'
+            )
             plan.crossings.append(
                 CrossingPlan(
                     crossing_id=cid,
@@ -612,7 +655,7 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if refuge_main:
                     cid = crossing_id_main_split(pos, "West", "EB")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -628,7 +671,7 @@ def render_connections_xml(
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "West", "WB")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -645,7 +688,7 @@ def render_connections_xml(
                     )
                 else:
                     cid = crossing_id_main(pos, "West")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -666,7 +709,7 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if refuge_main:
                     cid = crossing_id_main_split(pos, "East", "EB")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -682,7 +725,7 @@ def render_connections_xml(
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "East", "WB")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -699,7 +742,7 @@ def render_connections_xml(
                     )
                 else:
                     cid = crossing_id_main(pos, "East")
-                    lines.append(
+                    crossing_lines.append(
                         f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
                     )
                     plan.crossings.append(
@@ -749,7 +792,7 @@ def render_connections_xml(
 
         if refuge_midblock:
             cid = crossing_id_midblock_split(pos, "EB")
-            lines.append(
+            crossing_lines.append(
                 f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
             )
             plan.crossings.append(
@@ -765,7 +808,7 @@ def render_connections_xml(
                 )
             )
             cid2 = crossing_id_midblock_split(pos, "WB")
-            lines.append(
+            crossing_lines.append(
                 f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
             )
             plan.crossings.append(
@@ -782,7 +825,7 @@ def render_connections_xml(
             )
         else:
             cid = crossing_id_midblock(pos)
-            lines.append(
+            crossing_lines.append(
                 f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
             )
             plan.crossings.append(
@@ -855,10 +898,7 @@ def render_connections_xml(
             )
             plan.vehicle_connections.extend(plans_west)
             for conn in plans_west:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                vehicle_records.append((pos, conn))
 
         if east is not None:
             in_edge = main_edge_id("WB", pos, east)
@@ -891,10 +931,7 @@ def render_connections_xml(
             )
             plan.vehicle_connections.extend(plans_east)
             for conn in plans_east:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                vehicle_records.append((pos, conn))
 
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
@@ -937,10 +974,7 @@ def render_connections_xml(
             )
             plan.vehicle_connections.extend(plans_north)
             for conn in plans_north:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
+                vehicle_records.append((pos, conn))
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
@@ -983,25 +1017,7 @@ def render_connections_xml(
             )
             plan.vehicle_connections.extend(plans_south)
             for conn in plans_south:
-                lines.append(
-                    f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
-                    f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
-                )
-
-    unique_lines: List[str] = []
-    seen: Set[str] = set()
-    for ln in lines:
-        if ln.startswith("  <connection "):
-            key = ln.strip()
-            if key in seen:
-                LOG.warning("[VAL] E405 duplicated <connection> suppressed: %s", key)
-                continue
-            seen.add(key)
-        unique_lines.append(ln)
-
-    unique_lines.append("</connections>")
-    xml = "\n".join(unique_lines) + "\n"
-    LOG.info("rendered connections (%d lines)", len(unique_lines))
+                vehicle_records.append((pos, conn))
 
     signalized_positions: Set[int] = {
         cluster.pos_m
@@ -1009,4 +1025,36 @@ def render_connections_xml(
         if cluster_has_signal_reference(cluster)
     }
     indexing = _build_cluster_link_indexing(plans, signalized_positions)
+    lines: List[str] = ["<connections>"]
+    lines.extend(crossing_lines)
+
+    seen: Set[str] = set()
+    for pos, conn in vehicle_records:
+        base = (
+            f'  <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+            f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"'
+        )
+        idx = indexing.get(pos)
+        if idx is not None:
+            entry = idx.get_connection_entry(conn)
+            if entry is None:
+                LOG.error(
+                    "[BUILD] missing linkIndex for connection: pos=%s from=%s to=%s", pos, conn.from_edge, conn.to_edge
+                )
+                raise RuntimeError("missing link index for signalised connection")
+            base = (
+                f"{base} tl=\"{idx.tl_id}\" linkIndex=\"{entry.link_index}\""
+            )
+        line = f"{base}/>"
+        key = line.strip()
+        if key in seen:
+            LOG.warning("[VAL] E405 duplicated <connection> suppressed: %s", key)
+            continue
+        seen.add(key)
+        lines.append(line)
+
+    lines.append("</connections>")
+    xml = "\n".join(lines) + "\n"
+    LOG.info("rendered connections (%d lines)", len(lines))
+
     return xml, indexing
