@@ -555,9 +555,18 @@ def render_connections_xml(
     width = defaults.ped_crossing_width_m
     lines: List[str] = ["<connections>"]
     plans: Dict[int, ClusterLinkPlan] = {}
+    crossing_line_refs: List[Tuple[int, str, int]] = []
 
     def get_plan(pos: int) -> ClusterLinkPlan:
         return plans.setdefault(pos, ClusterLinkPlan())
+
+    def append_crossing_line(crossing_id: str, node: str, edges: Tuple[str, ...], pos: int) -> None:
+        edges_attr = " ".join(edges)
+        line_index = len(lines)
+        lines.append(
+            f'  <crossing id="{crossing_id}" node="{node}" edges="{edges_attr}" width="{width:.3f}"/>'
+        )
+        crossing_line_refs.append((line_index, crossing_id, pos))
 
     absorbed_pos: Set[int] = set()
 
@@ -615,7 +624,7 @@ def render_connections_xml(
             e_to = f"Edge.Minor.{pos}.to.{ns}"
             e_from = f"Edge.Minor.{pos}.from.{ns}"
             cid = crossing_id_minor(pos, ns)
-            lines.append(f'  <crossing id="{cid}" node="{node}" edges="{e_to} {e_from}" width="{width:.3f}"/>')
+            append_crossing_line(cid, node, (e_to, e_from), pos)
             plan.crossings.append(
                 CrossingPlan(
                     crossing_id=cid,
@@ -639,9 +648,7 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if refuge_main:
                     cid = crossing_id_main_split(pos, "West", "EB")
-                    lines.append(
-                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid, node, (eb_edge,), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid,
@@ -655,9 +662,7 @@ def render_connections_xml(
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "West", "WB")
-                    lines.append(
-                        f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid2, node, (wb_edge,), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid2,
@@ -672,9 +677,7 @@ def render_connections_xml(
                     )
                 else:
                     cid = crossing_id_main(pos, "West")
-                    lines.append(
-                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid, node, (eb_edge, wb_edge), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid,
@@ -693,9 +696,7 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if refuge_main:
                     cid = crossing_id_main_split(pos, "East", "EB")
-                    lines.append(
-                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid, node, (eb_edge,), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid,
@@ -709,9 +710,7 @@ def render_connections_xml(
                         )
                     )
                     cid2 = crossing_id_main_split(pos, "East", "WB")
-                    lines.append(
-                        f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid2, node, (wb_edge,), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid2,
@@ -726,9 +725,7 @@ def render_connections_xml(
                     )
                 else:
                     cid = crossing_id_main(pos, "East")
-                    lines.append(
-                        f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
-                    )
+                    append_crossing_line(cid, node, (eb_edge, wb_edge), pos)
                     plan.crossings.append(
                         CrossingPlan(
                             crossing_id=cid,
@@ -776,9 +773,7 @@ def render_connections_xml(
 
         if refuge_midblock:
             cid = crossing_id_midblock_split(pos, "EB")
-            lines.append(
-                f'  <crossing id="{cid}" node="{node}" edges="{eb_edge}" width="{width:.3f}"/>'
-            )
+            append_crossing_line(cid, node, (eb_edge,), pos)
             plan.crossings.append(
                 CrossingPlan(
                     crossing_id=cid,
@@ -792,9 +787,7 @@ def render_connections_xml(
                 )
             )
             cid2 = crossing_id_midblock_split(pos, "WB")
-            lines.append(
-                f'  <crossing id="{cid2}" node="{node}" edges="{wb_edge}" width="{width:.3f}"/>'
-            )
+            append_crossing_line(cid2, node, (wb_edge,), pos)
             plan.crossings.append(
                 CrossingPlan(
                     crossing_id=cid2,
@@ -809,9 +802,7 @@ def render_connections_xml(
             )
         else:
             cid = crossing_id_midblock(pos)
-            lines.append(
-                f'  <crossing id="{cid}" node="{node}" edges="{eb_edge} {wb_edge}" width="{width:.3f}"/>'
-            )
+            append_crossing_line(cid, node, (eb_edge, wb_edge), pos)
             plan.crossings.append(
                 CrossingPlan(
                     crossing_id=cid,
@@ -1015,6 +1006,28 @@ def render_connections_xml(
                     f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}"/>'
                 )
 
+    signalized_positions: Set[int] = {
+        cluster.pos_m
+        for cluster in clusters
+        if cluster_has_signal_reference(cluster)
+    }
+    indexing = _build_cluster_link_indexing(plans, signalized_positions)
+
+    for line_index, cid, pos in crossing_line_refs:
+        idx = indexing.get(pos)
+        if idx is None:
+            continue
+        link = idx.get_pedestrian_link(cid)
+        if link is None:
+            continue
+        original = lines[line_index]
+        if not original.endswith("/>"):
+            continue
+        lines[line_index] = (
+            original[:-2]
+            + f' tl="{link.tl_id}" linkIndex="{link.link_index}"/>'
+        )
+
     unique_lines: List[str] = []
     seen: Set[str] = set()
     for ln in lines:
@@ -1030,10 +1043,4 @@ def render_connections_xml(
     xml = "\n".join(unique_lines) + "\n"
     LOG.info("rendered connections (%d lines)", len(unique_lines))
 
-    signalized_positions: Set[int] = {
-        cluster.pos_m
-        for cluster in clusters
-        if cluster_has_signal_reference(cluster)
-    }
-    indexing = _build_cluster_link_indexing(plans, signalized_positions)
     return xml, indexing
