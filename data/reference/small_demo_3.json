@@ -58,42 +58,42 @@
           {
             "duration_s": 10,
             "allow_movements": [
-              "Main_T",
+              "main_T",
               "pedestrian"
             ]
           },
           {
             "duration_s": 10,
             "allow_movements": [
-              "Main_L",
+              "main_L",
               "pedestrian"
             ]
           },
           {
             "duration_s": 10,
             "allow_movements": [
-              "Main_R",
+              "main_R",
               "pedestrian"
             ]
           },
           {
             "duration_s": 10,
             "allow_movements": [
-              "Minor_T",
+              "minor_T",
               "pedestrian"
             ]
           },
           {
             "duration_s": 10,
             "allow_movements": [
-              "Minor_L",
+              "minor_L",
               "pedestrian"
             ]
           },
           {
             "duration_s": 10,
             "allow_movements": [
-              "Minor_R",
+              "minor_R",
               "pedestrian"
             ]
           },
