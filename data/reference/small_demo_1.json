@@ -33,7 +33,7 @@
     "cross": [
       {
         "id": "placeholder_cross_profile",
-        "cycle_s": 60,
+        "cycle_s": 90,
         "ped_early_cutoff_s": 10,
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
@@ -42,11 +42,63 @@
         },
         "phases": [
           {
-            "duration_s": 30,
-            "allow_movements": []
+            "duration_s": 10,
+            "allow_movements": [
+              "EB_T",
+              "pedestrian"
+            ]
           },
           {
-            "duration_s": 30,
+            "duration_s": 10,
+            "allow_movements": [
+              "WB_T",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Main_T",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Main_L",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Main_R",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Minor_T",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Minor_L",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
+            "allow_movements": [
+              "Minor_R",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 10,
             "allow_movements": [
               "pedestrian"
             ]
