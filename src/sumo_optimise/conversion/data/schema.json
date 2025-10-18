@@ -246,8 +246,6 @@
         "branch": { "type": "string", "enum": ["north", "south"], "description": "従道路の方向" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する tee テンプレートID" },
         "signalized": { "type": "boolean", "description": "信号の有無" },
-        "signal": { "$ref": "#/definitions/signalRef" },
-        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" },
         "refuge_island_on_main": {
           "type": "boolean",
           "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
@@ -256,7 +254,9 @@
           "type": "boolean",
           "const": true,
           "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
-        }
+        },
+        "signal": { "$ref": "#/definitions/signalRef" },
+        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
       },
       "required": [
         "type",
@@ -293,8 +293,6 @@
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する cross テンプレートID" },
         "signalized": { "type": "boolean", "description": "信号の有無" },
-        "signal": { "$ref": "#/definitions/signalRef" },
-        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" },
         "refuge_island_on_main": {
           "type": "boolean",
           "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
@@ -303,7 +301,9 @@
           "type": "boolean",
           "const": true,
           "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
-        }
+        },
+        "signal": { "$ref": "#/definitions/signalRef" },
+        "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
       },
       "required": [
         "type",
