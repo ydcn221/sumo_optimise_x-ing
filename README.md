@@ -146,9 +146,9 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
     before the next phase begins.
 * `layout`: ordered events along the main road:
 
-  * `tee`: `{ pos_m, branch: "north"|"south", template, signalized, signal?, main_ped_crossing_placement, refuge_island_on_main, two_stage_tll_control? }`
-  * `cross`: `{ pos_m, template, signalized, signal?, main_ped_crossing_placement, refuge_island_on_main, two_stage_tll_control? }`
-  * `xwalk_midblock`: `{ pos_m, signalized, refuge_island_on_main, two_stage_tll_control?, signal? }`
+  * `tee`: `{ pos_m, branch: "north"|"south", template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `cross`: `{ pos_m, template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
 
 **Rules (selected):**
 

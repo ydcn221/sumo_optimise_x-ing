@@ -245,11 +245,11 @@
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "branch": { "type": "string", "enum": ["north", "south"], "description": "従道路の方向" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する tee テンプレートID" },
-        "signalized": { "type": "boolean", "description": "信号の有無" },
         "refuge_island_on_main": {
           "type": "boolean",
           "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
         },
+        "signalized": { "type": "boolean", "description": "信号の有無" },
         "two_stage_tll_control": {
           "type": "boolean",
           "const": true,
@@ -292,11 +292,11 @@
         "type": { "const": "cross", "description": "イベント種別＝十字路" },
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する cross テンプレートID" },
-        "signalized": { "type": "boolean", "description": "信号の有無" },
         "refuge_island_on_main": {
           "type": "boolean",
           "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
         },
+        "signalized": { "type": "boolean", "description": "信号の有無" },
         "two_stage_tll_control": {
           "type": "boolean",
           "const": true,
@@ -337,11 +337,11 @@
       "properties": {
         "type": { "const": "xwalk_midblock", "description": "イベント種別＝単路部歩行者横断" },
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
-        "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
         "refuge_island_on_main": {
           "type": "boolean",
           "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
         },
+        "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
         "two_stage_tll_control": {
           "type": "boolean",
           "const": true,
