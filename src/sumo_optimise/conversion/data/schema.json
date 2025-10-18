@@ -158,7 +158,6 @@
         "main_approach_lanes": { "type": "integer", "minimum": 0, "description": "アプローチ区間の主道路のレーン数。0=変更なし（元のレーン数を維持）。指示書を受け取った側の処理：複数のアプローチ区間が重なるときは、最も多いレーン数を採用する。" },
         "minor_lanes_to_main": { "type": "integer", "minimum": 1, "description": "従道路→主道路（主道路へ向かう向き）のレーン数" },
         "minor_lanes_from_main": { "type": "integer", "minimum": 1, "description": "主道路→従道路（主道路から離れる向き）のレーン数" },
-        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路を渡る横断歩道の中央に対流空間（refuge island）を作るか" },
         "median_continuous": { "type": "boolean", "description": "中央帯が交差点の中まで連続しているか（主道路で右折できなくなるなど、接続制限を伴う）" }
       },
       "required": [
@@ -167,7 +166,6 @@
         "main_approach_lanes",
         "minor_lanes_to_main",
         "minor_lanes_from_main",
-        "split_ped_crossing_on_main",
         "median_continuous"
       ],
       "description": "交差点アプローチ形状・従道路レーン構成の定義。"
@@ -179,15 +177,15 @@
       "properties": {
         "id": { "$ref": "#/definitions/idString", "description": "信号プロファイルID" },
         "cycle_s": { "type": "integer", "minimum": 1, "description": "サイクル長[秒]（phases.duration_s の総和と一致）" },
-        "ped_red_offset_s": {
+        "ped_early_cutoff_s": {
           "type": "integer",
           "minimum": 0,
-          "description": "歩行者全赤に入るまでのサイクル先行時間[秒]"
+          "description": "歩行者横断信号を車両より先行して赤に切り替える時間[秒]"
         },
         "yellow_duration_s": {
           "type": "integer",
           "minimum": 1,
-          "description": "車両の黄信号相の代表時間[秒]（各フェーズの終了直前に適用）"
+          "description": "車両現示が赤に変わる直前、連続した青現示の末尾と入れ替える黄現示時間[秒]。複数フェーズにまたがって青が継続する場合は赤に切り替わるまでの青時間を合算し、その末尾 yellow_duration_s 秒を黄色にする。"
         },
         "pedestrian_conflicts": {
           "type": "object",
@@ -226,7 +224,7 @@
     "signalProfile": {
       "allOf": [
         { "$ref": "#/definitions/signalProfileBase" },
-        { "required": ["ped_red_offset_s", "pedestrian_conflicts"] }
+        { "required": ["ped_early_cutoff_s", "pedestrian_conflicts"] }
       ]
     },
 
@@ -234,7 +232,7 @@
       "allOf": [
         { "$ref": "#/definitions/signalProfileBase" },
         { "not": { "required": ["pedestrian_conflicts"] } },
-        { "not": { "required": ["ped_red_offset_s"] } }
+        { "not": { "required": ["ped_early_cutoff_s"] } }
       ],
       "description": "単路部横断用信号プロファイル。歩行者競合は設定不可。"
     },
@@ -247,16 +245,44 @@
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "branch": { "type": "string", "enum": ["north", "south"], "description": "従道路の方向" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する tee テンプレートID" },
+        "refuge_island_on_main": {
+          "type": "boolean",
+          "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
+        },
         "signalized": { "type": "boolean", "description": "信号の有無" },
+        "two_stage_tll_control": {
+          "type": "boolean",
+          "const": true,
+          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+        },
         "signal": { "$ref": "#/definitions/signalRef" },
         "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
       },
-      "required": ["type", "pos_m", "branch", "template", "signalized", "main_ped_crossing_placement"],
+      "required": [
+        "type",
+        "pos_m",
+        "branch",
+        "template",
+        "signalized",
+        "main_ped_crossing_placement",
+        "refuge_island_on_main"
+      ],
       "allOf": [
         { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
-        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } },
+        {
+          "if": {
+            "properties": {
+              "signalized": { "const": true },
+              "refuge_island_on_main": { "const": true }
+            },
+            "required": ["signalized", "refuge_island_on_main"]
+          },
+          "then": { "required": ["two_stage_tll_control"] },
+          "else": { "not": { "required": ["two_stage_tll_control"] } }
+        }
       ],
-      "description": "T字路イベント。ここでは split/median を指定しない（テンプレート側で管理）。"
+      "description": "T字路イベント。幾何形状はテンプレートで、主道路横断のrefuge islandや制御はイベントごとに指定する。"
     },
 
     "layoutCross": {
@@ -266,16 +292,43 @@
         "type": { "const": "cross", "description": "イベント種別＝十字路" },
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
         "template": { "$ref": "#/definitions/idString", "description": "適用する cross テンプレートID" },
+        "refuge_island_on_main": {
+          "type": "boolean",
+          "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
+        },
         "signalized": { "type": "boolean", "description": "信号の有無" },
+        "two_stage_tll_control": {
+          "type": "boolean",
+          "const": true,
+          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+        },
         "signal": { "$ref": "#/definitions/signalRef" },
         "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
       },
-      "required": ["type", "pos_m", "template", "signalized", "main_ped_crossing_placement"],
+      "required": [
+        "type",
+        "pos_m",
+        "template",
+        "signalized",
+        "main_ped_crossing_placement",
+        "refuge_island_on_main"
+      ],
       "allOf": [
         { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
-        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } },
+        {
+          "if": {
+            "properties": {
+              "signalized": { "const": true },
+              "refuge_island_on_main": { "const": true }
+            },
+            "required": ["signalized", "refuge_island_on_main"]
+          },
+          "then": { "required": ["two_stage_tll_control"] },
+          "else": { "not": { "required": ["two_stage_tll_control"] } }
+        }
       ],
-      "description": "十字路イベント。※ここでは split/median を指定しない（テンプレート側で管理）。"
+      "description": "十字路イベント。幾何形状はテンプレートで、主道路横断のrefuge islandや制御はイベントごとに指定する。"
     },
 
     "layoutXwalkMidblock": {
@@ -284,16 +337,35 @@
       "properties": {
         "type": { "const": "xwalk_midblock", "description": "イベント種別＝単路部歩行者横断" },
         "pos_m": { "type": "number", "minimum": 0, "description": "主道路起点からの位置[m]" },
+        "refuge_island_on_main": {
+          "type": "boolean",
+          "description": "主道路横断に歩行者退避スペース（refuge island）を設けるか"
+        },
         "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
-        "split_ped_crossing_on_main": { "type": "boolean", "description": "主道路横断を二段横断にするか（箇所ごとに設定）" },
+        "two_stage_tll_control": {
+          "type": "boolean",
+          "const": true,
+          "description": "refuge island を設けた信号横断で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+        },
         "signal": { "$ref": "#/definitions/signalRef" }
       },
-      "required": ["type", "pos_m", "signalized", "split_ped_crossing_on_main"],
+      "required": ["type", "pos_m", "signalized", "refuge_island_on_main"],
       "allOf": [
         { "if": { "properties": { "signalized": { "const": true } }, "required": ["signalized"] }, "then": { "required": ["signal"] } },
-        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } }
+        { "if": { "properties": { "signalized": { "const": false } }, "required": ["signalized"] }, "then": { "not": { "required": ["signal"] } } },
+        {
+          "if": {
+            "properties": {
+              "signalized": { "const": true },
+              "refuge_island_on_main": { "const": true }
+            },
+            "required": ["signalized", "refuge_island_on_main"]
+          },
+          "then": { "required": ["two_stage_tll_control"] },
+          "else": { "not": { "required": ["two_stage_tll_control"] } }
+        }
       ],
-      "description": "単路部横断イベント。東西どちらのエッジを横断するかは snap.tie_break に従う。テンプレートはない。"
+      "description": "単路部横断イベント。東西どちらのエッジを横断するかは snap.tie_break に従う。refuge island や制御はイベントごとに指定する。"
     }
   }
 }

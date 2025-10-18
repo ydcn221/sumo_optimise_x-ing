@@ -393,8 +393,7 @@ def render_connections_xml(
             if ev.main_ped_crossing_placement:
                 place_west = place_west or bool(ev.main_ped_crossing_placement.get("west", False))
                 place_east = place_east or bool(ev.main_ped_crossing_placement.get("east", False))
-            if ev.template_id and ev.template_id in junction_template_by_id:
-                split_main = split_main or bool(junction_template_by_id[ev.template_id].split_ped_crossing_on_main)
+            split_main = split_main or bool(ev.refuge_island_on_main)
 
         mid_events = [ev for ev in cluster.events if ev.type == EventKind.XWALK_MIDBLOCK]
         if mid_events:
@@ -476,7 +475,7 @@ def render_connections_xml(
             LOG.warning("midblock at %s: adjacent main edges not found; crossing omitted", pos)
             continue
 
-        split_midblock = any(bool(ev.split_ped_crossing_on_main) for ev in mid_events)
+        split_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
         if split_midblock:
             lines.append(
                 f'  <crossing id="{crossing_id_midblock_split(pos, "EB")}" '
