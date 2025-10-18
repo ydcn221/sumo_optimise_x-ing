@@ -252,8 +252,7 @@
         "signalized": { "type": "boolean", "description": "信号の有無" },
         "two_stage_tll_control": {
           "type": "boolean",
-          "const": true,
-          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)の有無を指定（signalized=true かつ refuge_island_on_main=true の場合のみ必須）"
         },
         "signal": { "$ref": "#/definitions/signalRef" },
         "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
@@ -299,8 +298,7 @@
         "signalized": { "type": "boolean", "description": "信号の有無" },
         "two_stage_tll_control": {
           "type": "boolean",
-          "const": true,
-          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+          "description": "refuge island を設けた信号交差点で二段階横断信号制御(two-stage TLL)の有無を指定（signalized=true かつ refuge_island_on_main=true の場合のみ必須）"
         },
         "signal": { "$ref": "#/definitions/signalRef" },
         "main_ped_crossing_placement": { "$ref": "#/definitions/mainPedCrossingPlacement" }
@@ -344,8 +342,7 @@
         "signalized": { "type": "boolean", "description": "信号の有無（箇所ごとに設定）" },
         "two_stage_tll_control": {
           "type": "boolean",
-          "const": true,
-          "description": "refuge island を設けた信号横断で二段階横断信号制御(two-stage TLL)を行う場合に指定"
+          "description": "refuge island を設けた信号横断で二段階横断信号制御(two-stage TLL)の有無を指定（signalized=true かつ refuge_island_on_main=true の場合のみ必須）"
         },
         "signal": { "$ref": "#/definitions/signalRef" }
       },
