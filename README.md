@@ -150,6 +150,8 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
   * `cross`: `{ pos_m, template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
 
+    * `two_stage_tll_control` — required boolean field that is present only when `signalized=true` and `refuge_island_on_main=true`.
+
 **Rules (selected):**
 
 * All positions round to the grid (`step_m`). Midpoints use `tie_break`.

@@ -74,9 +74,9 @@ def validate_semantics(
             refuge = bool(e.get("refuge_island_on_main"))
             two_stage_present = "two_stage_tll_control" in e
             if signalized is True and refuge:
-                if not two_stage_present or not bool(e.get("two_stage_tll_control")):
+                if not two_stage_present:
                     errors.append(
-                        "[VAL] E305 two_stage_tll_control must be true when signalized and refuge island are enabled: "
+                        "[VAL] E305 two_stage_tll_control must be provided when signalized=true and refuge_island_on_main=true: "
                         f"index={idx} type={etype}"
                     )
             else:
@@ -113,9 +113,9 @@ def validate_semantics(
             refuge = bool(e.get("refuge_island_on_main"))
             two_stage_present = "two_stage_tll_control" in e
             if signalized is True and refuge:
-                if not two_stage_present or not bool(e.get("two_stage_tll_control")):
+                if not two_stage_present:
                     errors.append(
-                        "[VAL] E305 two_stage_tll_control must be true when signalized and refuge island are enabled: "
+                        "[VAL] E305 two_stage_tll_control must be provided when signalized=true and refuge_island_on_main=true: "
                         f"index={idx} type={etype}"
                     )
             else:
