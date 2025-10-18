@@ -79,7 +79,6 @@ class JunctionTemplate:
     main_approach_lanes: int
     minor_lanes_to_main: int
     minor_lanes_from_main: int
-    split_ped_crossing_on_main: bool
     median_continuous: bool
     kind: EventKind
 
@@ -100,7 +99,7 @@ class PedestrianConflictConfig:
 class SignalProfileDef:
     id: str
     cycle_s: int
-    ped_red_offset_s: int
+    ped_early_cutoff_s: int
     yellow_duration_s: int
     phases: List[SignalPhaseDef]
     kind: EventKind
@@ -123,7 +122,8 @@ class LayoutEvent:
     signal: Optional[SignalRef] = None
     main_ped_crossing_placement: Optional[Dict[str, bool]] = None
     branch: Optional[SideMinor] = None
-    split_ped_crossing_on_main: Optional[bool] = None
+    refuge_island_on_main: Optional[bool] = None
+    two_stage_tll_control: Optional[bool] = None
 
 
 @dataclass

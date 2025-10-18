@@ -27,7 +27,7 @@ def test_parse_signal_profiles_with_conflicts():
         {
             "id": "tee_profile",
             "cycle_s": 30,
-            "ped_red_offset_s": 7,
+            "ped_early_cutoff_s": 7,
             "yellow_duration_s": 2,
             "phases": _phases(10, 20),
             "pedestrian_conflicts": {"left": True, "right": False},
@@ -37,7 +37,7 @@ def test_parse_signal_profiles_with_conflicts():
     result = parse_signal_profiles(spec)
     parsed = result[EventKind.TEE.value]["tee_profile"]
     assert parsed.pedestrian_conflicts == PedestrianConflictConfig(left=True, right=False)
-    assert parsed.ped_red_offset_s == 7
+    assert parsed.ped_early_cutoff_s == 7
     assert parsed.yellow_duration_s == 2
 
 
@@ -46,7 +46,7 @@ def test_parse_signal_profiles_reject_cycle_mismatch():
         {
             "id": "cycle_mismatch",
             "cycle_s": 35,
-            "ped_red_offset_s": 2,
+            "ped_early_cutoff_s": 2,
             "yellow_duration_s": 3,
             "phases": _phases(10, 20),
             "pedestrian_conflicts": {"left": False, "right": False},
@@ -70,7 +70,7 @@ def test_parse_signal_profiles_midblock_without_conflicts():
     result = parse_signal_profiles(spec)
     parsed = result[EventKind.XWALK_MIDBLOCK.value]["xwalk_profile"]
     assert parsed.pedestrian_conflicts == PedestrianConflictConfig(left=False, right=False)
-    assert parsed.ped_red_offset_s == 0
+    assert parsed.ped_early_cutoff_s == 0
     assert parsed.yellow_duration_s == 3
 
 
@@ -79,7 +79,7 @@ def test_parse_signal_profiles_rejects_invalid_timings():
         {
             "id": "bad_profile",
             "cycle_s": 30,
-            "ped_red_offset_s": -1,
+            "ped_early_cutoff_s": -1,
             "yellow_duration_s": 5,
             "pedestrian_conflicts": {"left": False, "right": False},
             "phases": _phases(10, 20),
@@ -95,7 +95,7 @@ def test_parse_signal_profiles_require_conflicts_for_intersections():
         {
             "id": "bad_profile",
             "cycle_s": 40,
-            "ped_red_offset_s": 2,
+            "ped_early_cutoff_s": 2,
             "yellow_duration_s": 3,
             "phases": _phases(20, 20),
         }
@@ -120,12 +120,12 @@ def test_parse_signal_profiles_forbid_conflicts_for_midblock():
         parse_signal_profiles(spec)
 
 
-def test_parse_signal_profiles_forbid_ped_red_for_midblock():
+def test_parse_signal_profiles_forbid_ped_cutoff_for_midblock():
     profile = [
         {
-            "id": "midblock_with_ped_red",
+            "id": "midblock_with_ped_cutoff",
             "cycle_s": 35,
-            "ped_red_offset_s": 4,
+            "ped_early_cutoff_s": 4,
             "yellow_duration_s": 5,
             "phases": _phases(20, 15),
         }

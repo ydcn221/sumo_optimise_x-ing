@@ -71,6 +71,21 @@ def validate_semantics(
             if signalized is False and has_signal:
                 errors.append(f"[VAL] E105 signal must be absent when signalized=false: index={idx} type={etype}")
 
+            refuge = bool(e.get("refuge_island_on_main"))
+            two_stage_present = "two_stage_tll_control" in e
+            if signalized is True and refuge:
+                if not two_stage_present:
+                    errors.append(
+                        "[VAL] E305 two_stage_tll_control must be provided when signalized=true and refuge_island_on_main=true: "
+                        f"index={idx} type={etype}"
+                    )
+            else:
+                if two_stage_present:
+                    errors.append(
+                        "[VAL] E305 two_stage_tll_control is only allowed when signalized=true and refuge_island_on_main=true: "
+                        f"index={idx} type={etype}"
+                    )
+
             if signalized is True:
                 sig = e.get("signal") or {}
                 pid = sig.get("profile_id")
@@ -94,6 +109,21 @@ def validate_semantics(
                 errors.append(f"[VAL] E105 signal required but missing: index={idx} type={etype}")
             if signalized is False and has_signal:
                 errors.append(f"[VAL] E105 signal must be absent when signalized=false: index={idx} type={etype}")
+
+            refuge = bool(e.get("refuge_island_on_main"))
+            two_stage_present = "two_stage_tll_control" in e
+            if signalized is True and refuge:
+                if not two_stage_present:
+                    errors.append(
+                        "[VAL] E305 two_stage_tll_control must be provided when signalized=true and refuge_island_on_main=true: "
+                        f"index={idx} type={etype}"
+                    )
+            else:
+                if two_stage_present:
+                    errors.append(
+                        "[VAL] E305 two_stage_tll_control is only allowed when signalized=true and refuge_island_on_main=true: "
+                        f"index={idx} type={etype}"
+                    )
 
             if signalized is True:
                 sig = e.get("signal") or {}

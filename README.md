@@ -135,18 +135,23 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 * `snap`: `{ "step_m": int>=1, "tie_break": "toward_west" | "toward_east" }`
 * `defaults`: e.g., minor road length, crossing width, speed_kmh
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "lanes": int }`
-* `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, `split_ped_crossing_on_main`, etc.)
+* `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, etc.)
 * `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements).
   * `cycle_s` must equal the sum of the listed phase durations.
-  * `yellow_duration_s` is applied as the tail of every green interval: vehicles show yellow for the last `yellow_duration_s`
-    seconds before their signal turns red.
-  * `ped_red_offset_s` (intersections only) shortens the pedestrian clearance: pedestrians turn red `ped_red_offset_s` seconds
+  * `yellow_duration_s` defines the yellow interval that **replaces** the tail of the last continuous green stretch for a vehicle
+    movement before it turns red. If the movement remains green across multiple successive phases, total their durations until
+    the phase that first turns the movement red, then treat the final `yellow_duration_s` seconds of that combined green time as
+    yellow before entering the red phase.
+  * `ped_early_cutoff_s` (intersections only) shortens the pedestrian clearance: pedestrians turn red `ped_early_cutoff_s` seconds
     before the next phase begins.
 * `layout`: ordered events along the main road:
 
-  * `tee`: `{ pos_m, branch: "north"|"south", template, signalized, signal?, main_ped_crossing_placement }`
-  * `cross`: `{ pos_m, template, signalized, signal?, main_ped_crossing_placement }`
-  * `xwalk_midblock`: `{ pos_m, signalized, split_ped_crossing_on_main }`
+  * `tee`: `{ pos_m, branch: "north"|"south", template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `cross`: `{ pos_m, template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
+
+  `two_stage_tll_control` appears only when both `refuge_island_on_main` and `signalized` are `true`, and it is a boolean that makes
+  the two-stage control choice explicit (`true` or `false`). Leave the property out for any other combination of flags.
 
 **Rules (selected):**
 
@@ -154,7 +159,8 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 * Events must lie within `[0, length]`; snapped positions within `[0, grid_max]`.
 * A junction and a mid-block crossing at the **same** position will be **absorbed** into the junction’s crossing flags.
 * `median_continuous=true` restricts certain turns (e.g., main-road right turn).
-* If `signalized=true`, a valid profile reference is required.
+* If `signalized=true`, a valid profile reference is required. When both `signalized` and `refuge_island_on_main` are `true`, set
+  `two_stage_tll_control` to either `true` or `false`; omit the property for all other cases.
 
 ---
 

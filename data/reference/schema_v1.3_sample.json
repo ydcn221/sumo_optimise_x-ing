@@ -23,7 +23,6 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 1,
-        "split_ped_crossing_on_main": false,
         "median_continuous": false
       },
       {
@@ -32,7 +31,6 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 3,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
@@ -41,7 +39,6 @@
         "main_approach_lanes": 0,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": false,
         "median_continuous": true
       }
     ],
@@ -52,7 +49,6 @@
         "main_approach_lanes": 5,
         "minor_lanes_to_main": 3,
         "minor_lanes_from_main": 3,
-        "split_ped_crossing_on_main": true,
         "median_continuous": false
       },
       {
@@ -61,7 +57,6 @@
         "main_approach_lanes": 4,
         "minor_lanes_to_main": 2,
         "minor_lanes_from_main": 2,
-        "split_ped_crossing_on_main": false,
         "median_continuous": true
       }
     ]
@@ -71,7 +66,7 @@
       {
         "id": "tee_c90_mainW_minor",
         "cycle_s": 90,
-        "ped_red_offset_s": 10,
+        "ped_early_cutoff_s": 10,
         "yellow_duration_s": 5,
         "pedestrian_conflicts": {
           "left": true,
@@ -115,7 +110,7 @@
       {
         "id": "tee_c70_mainLT_minorR",
         "cycle_s": 70,
-        "ped_red_offset_s": 8,
+        "ped_early_cutoff_s": 8,
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
           "left": false,
@@ -158,7 +153,7 @@
       {
         "id": "cross_basic90",
         "cycle_s": 90,
-        "ped_red_offset_s": 6,
+        "ped_early_cutoff_s": 6,
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {
           "left": true,
@@ -204,7 +199,7 @@
       {
         "id": "cross_splitL",
         "cycle_s": 100,
-        "ped_red_offset_s": 7,
+        "ped_early_cutoff_s": 7,
         "yellow_duration_s": 6,
         "pedestrian_conflicts": {
           "left": false,
@@ -299,8 +294,9 @@
     {
       "type": "xwalk_midblock",
       "pos_m": 200,
+      "refuge_island_on_main": true,
       "signalized": true,
-      "split_ped_crossing_on_main": true,
+      "two_stage_tll_control": true,
       "signal": {
         "profile_id": "xwalk_2phase70",
         "offset_s": 5
@@ -311,6 +307,7 @@
       "pos_m": 350,
       "branch": "north",
       "template": "T1_compact_minor_bias",
+      "refuge_island_on_main": false,
       "signalized": false,
       "main_ped_crossing_placement": {
         "west": true,
@@ -321,7 +318,9 @@
       "type": "cross",
       "pos_m": 650,
       "template": "X1_4x4_split_peds",
+      "refuge_island_on_main": true,
       "signalized": true,
+      "two_stage_tll_control": true,
       "signal": {
         "profile_id": "cross_basic90",
         "offset_s": 20
@@ -336,7 +335,9 @@
       "pos_m": 900,
       "branch": "south",
       "template": "T2_split_peds_major",
+      "refuge_island_on_main": true,
       "signalized": true,
+      "two_stage_tll_control": true,
       "signal": {
         "profile_id": "tee_c70_mainLT_minorR",
         "offset_s": 12
@@ -349,13 +350,14 @@
     {
       "type": "xwalk_midblock",
       "pos_m": 1050,
-      "signalized": false,
-      "split_ped_crossing_on_main": false
+      "refuge_island_on_main": false,
+      "signalized": false
     },
     {
       "type": "cross",
       "pos_m": 1000,
       "template": "X2_4x4_median_cont",
+      "refuge_island_on_main": false,
       "signalized": true,
       "signal": {
         "profile_id": "cross_splitL",
