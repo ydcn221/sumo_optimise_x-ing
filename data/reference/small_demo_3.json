@@ -34,8 +34,8 @@
       {
         "id": "placeholder_cross_profile_3",
         "cycle_s": 90,
-        "ped_early_cutoff_s": 10,
-        "yellow_duration_s": 4,
+        "ped_early_cutoff_s": 3,
+        "yellow_duration_s": 3,
         "pedestrian_conflicts": {
           "left": false,
           "right": false

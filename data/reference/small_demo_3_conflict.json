@@ -19,7 +19,7 @@
     "tee": [],
     "cross": [
       {
-        "id": "cross_small_demo_1",
+        "id": "cross_small_demo_3",
         "main_approach_begin_m": 50,
         "main_approach_lanes": 3,
         "minor_lanes_to_main": 3,
@@ -32,13 +32,13 @@
     "tee": [],
     "cross": [
       {
-        "id": "placeholder_cross_profile",
+        "id": "placeholder_cross_profile_3",
         "cycle_s": 90,
         "ped_early_cutoff_s": 3,
         "yellow_duration_s": 3,
         "pedestrian_conflicts": {
-          "left": false,
-          "right": false
+          "left": true,
+          "right": true
         },
         "phases": [
           {
@@ -112,12 +112,11 @@
     {
       "type": "cross",
       "pos_m": 150,
-      "template": "cross_small_demo_1",
-      "refuge_island_on_main": true,
+      "template": "cross_small_demo_3",
+      "refuge_island_on_main": false,
       "signalized": true,
-      "two_stage_tll_control": true,
       "signal": {
-        "profile_id": "placeholder_cross_profile",
+        "profile_id": "placeholder_cross_profile_3",
         "offset_s": 0
       },
       "main_ped_crossing_placement": {
