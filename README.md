@@ -146,11 +146,12 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
     before the next phase begins.
 * `layout`: ordered events along the main road:
 
-  * `tee`: `{ pos_m, branch: "north"|"south", template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
-  * `cross`: `{ pos_m, template, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `tee`: `{ pos_m, branch: "north"|"south", template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `cross`: `{ pos_m, template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
 
     * `two_stage_tll_control` — required boolean field that is present only when `signalized=true` and `refuge_island_on_main=true`.
+    * `main_u_turn_allowed` — required boolean for intersections. `false` prohibits main-road U-turns in both directions; `true` keeps them.
 
 **Rules (selected):**
 
@@ -158,6 +159,7 @@ Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 * Events must lie within `[0, length]`; snapped positions within `[0, grid_max]`.
 * A junction and a mid-block crossing at the **same** position will be **absorbed** into the junction’s crossing flags.
 * `median_continuous=true` restricts certain turns (e.g., main-road right turn).
+* `main_u_turn_allowed=false` removes U-turn connections on the main road (both EB and WB) at that junction.
 * If `signalized=true`, a valid profile reference is required.
 
 ---

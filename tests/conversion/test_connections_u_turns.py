@@ -12,7 +12,7 @@ from sumo_optimise.conversion.domain.models import (
 from sumo_optimise.conversion.emitters.connections import render_connections_xml
 
 
-def _build_args(median: bool = False):
+def _build_args(median: bool = False, allow_uturn: bool = True):
     template_id = "X_UTurn_Median" if median else "X_UTurn_Base"
     defaults = Defaults(minor_road_length_m=80, ped_crossing_width_m=3.0, speed_kmh=40)
     snap_rule = SnapRule(step_m=10, tie_break="toward_west")
@@ -38,6 +38,7 @@ def _build_args(median: bool = False):
                 pos_m_raw=100.0,
                 pos_m=100,
                 template_id=template_id,
+                main_u_turn_allowed=allow_uturn,
             )
         ],
     )
@@ -69,6 +70,14 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
         f'  <connection from="{wb_in}" to="{eb_back}" fromLane="4" toLane="2"/>'
         in xml
     )
+
+
+def test_render_connections_suppresses_u_turn_when_disallowed():
+    args = _build_args(median=False, allow_uturn=False)
+    xml = render_connections_xml(*args)
+
+    assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
+    assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml
 
 
 def test_render_connections_suppresses_u_turn_when_median_continuous():

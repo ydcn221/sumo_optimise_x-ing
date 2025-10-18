@@ -122,6 +122,7 @@ class LayoutEvent:
     signal: Optional[SignalRef] = None
     main_ped_crossing_placement: Optional[Dict[str, bool]] = None
     branch: Optional[SideMinor] = None
+    main_u_turn_allowed: Optional[bool] = None
     refuge_island_on_main: Optional[bool] = None
     two_stage_tll_control: Optional[bool] = None
 

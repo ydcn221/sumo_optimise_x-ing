@@ -351,6 +351,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 branch_lower = branch_raw.lower()
                 if branch_lower in (SideMinor.NORTH.value, SideMinor.SOUTH.value):
                     branch = SideMinor(branch_lower)
+            main_u_turn_allowed = bool(e["main_u_turn_allowed"])
             layout_event = LayoutEvent(
                 type=EventKind(event_type),
                 pos_m_raw=pos_raw,
@@ -360,6 +361,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 signal=parse_signal_ref(e.get("signal")),
                 main_ped_crossing_placement=e.get("main_ped_crossing_placement"),
                 branch=branch,
+                main_u_turn_allowed=main_u_turn_allowed,
                 refuge_island_on_main=bool(e.get("refuge_island_on_main")),
                 two_stage_tll_control=bool(e.get("two_stage_tll_control")),
             )
