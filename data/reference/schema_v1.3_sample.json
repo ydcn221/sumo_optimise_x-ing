@@ -307,6 +307,7 @@
       "pos_m": 350,
       "branch": "north",
       "template": "T1_compact_minor_bias",
+      "main_u_turn_allowed": true,
       "refuge_island_on_main": false,
       "signalized": false,
       "main_ped_crossing_placement": {
@@ -318,6 +319,7 @@
       "type": "cross",
       "pos_m": 650,
       "template": "X1_4x4_split_peds",
+      "main_u_turn_allowed": false,
       "refuge_island_on_main": true,
       "signalized": true,
       "two_stage_tll_control": true,
@@ -335,6 +337,7 @@
       "pos_m": 900,
       "branch": "south",
       "template": "T2_split_peds_major",
+      "main_u_turn_allowed": true,
       "refuge_island_on_main": true,
       "signalized": true,
       "two_stage_tll_control": true,
@@ -357,6 +360,7 @@
       "type": "cross",
       "pos_m": 1000,
       "template": "X2_4x4_median_cont",
+      "main_u_turn_allowed": true,
       "refuge_island_on_main": false,
       "signalized": true,
       "signal": {

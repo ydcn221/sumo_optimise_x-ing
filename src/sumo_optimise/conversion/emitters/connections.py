@@ -502,6 +502,12 @@ def render_connections_xml(
             LOG.warning("junction template not found: id=%s (pos=%s)", getattr(ev, "template_id", None), pos)
             continue
 
+        allow_main_uturn = True
+        for j_ev in junction_events:
+            if j_ev.main_u_turn_allowed is False:
+                allow_main_uturn = False
+                break
+
         if ev.type == EventKind.CROSS:
             exist_north = True
             exist_south = True
@@ -529,6 +535,8 @@ def render_connections_xml(
                 minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
             ) if exist_south else None
             u_lanes = pick_main("WB", west, pos)
+            if not allow_main_uturn:
+                u_lanes = 0
             U_target = (
                 main_edge_id("WB", west, pos), u_lanes
             ) if u_lanes > 0 else None
@@ -552,6 +560,8 @@ def render_connections_xml(
                 minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
             ) if exist_north else None
             u_lanes = pick_main("EB", pos, east)
+            if not allow_main_uturn:
+                u_lanes = 0
             U_target = (
                 main_edge_id("EB", pos, east), u_lanes
             ) if u_lanes > 0 else None
