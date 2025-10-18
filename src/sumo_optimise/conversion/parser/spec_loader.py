@@ -146,7 +146,6 @@ def parse_junction_templates(spec_json: Dict) -> Dict[str, JunctionTemplate]:
                 main_approach_lanes=int(t["main_approach_lanes"]),
                 minor_lanes_to_main=int(t["minor_lanes_to_main"]),
                 minor_lanes_from_main=int(t["minor_lanes_from_main"]),
-                split_ped_crossing_on_main=bool(t["split_ped_crossing_on_main"]),
                 median_continuous=bool(t["median_continuous"]),
                 kind=EventKind(kind),
             )
@@ -183,24 +182,24 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
-        ped_red_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
-        ped_red_offset_raw = p.get("ped_red_offset_s")
-        if ped_red_required:
-            if ped_red_offset_raw is None:
+        ped_cutoff_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
+        ped_early_cutoff_raw = p.get("ped_early_cutoff_s")
+        if ped_cutoff_required:
+            if ped_early_cutoff_raw is None:
                 errors.append(
-                    f"[VAL] E305 ped_red_offset_s is required for intersections: profile={pid} kind={kind}"
+                    f"[VAL] E305 ped_early_cutoff_s is required for intersections: profile={pid} kind={kind}"
                 )
-                ped_red_offset = 0
+                ped_early_cutoff = 0
             else:
-                ped_red_offset = int(ped_red_offset_raw)
+                ped_early_cutoff = int(ped_early_cutoff_raw)
         else:
-            if ped_red_offset_raw is not None:
+            if ped_early_cutoff_raw is not None:
                 errors.append(
-                    f"[VAL] E305 ped_red_offset_s is not allowed for midblock crossings: profile={pid} kind={kind}"
+                    f"[VAL] E305 ped_early_cutoff_s is not allowed for midblock crossings: profile={pid} kind={kind}"
                 )
-                ped_red_offset = int(ped_red_offset_raw)
+                ped_early_cutoff = int(ped_early_cutoff_raw)
             else:
-                ped_red_offset = 0
+                ped_early_cutoff = 0
         yellow_duration_raw = p.get("yellow_duration_s")
         if yellow_duration_raw is None:
             errors.append(
@@ -257,10 +256,10 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
             phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
-        if ped_red_offset < 0 or ped_red_offset >= cycle:
+        if ped_early_cutoff < 0 or ped_early_cutoff >= cycle:
             errors.append(
-                "[VAL] E305 ped_red_offset_s must satisfy 0 ≤ value < cycle: "
-                f"profile={pid} kind={kind} cycle_s={cycle} value={ped_red_offset}"
+                "[VAL] E305 ped_early_cutoff_s must satisfy 0 ≤ value < cycle: "
+                f"profile={pid} kind={kind} cycle_s={cycle} value={ped_early_cutoff}"
             )
         if yellow_duration_raw is not None:
             if yellow_duration <= 0:
@@ -282,7 +281,7 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
         prof = SignalProfileDef(
             id=pid,
             cycle_s=cycle,
-            ped_red_offset_s=ped_red_offset,
+            ped_early_cutoff_s=ped_early_cutoff,
             yellow_duration_s=yellow_duration,
             phases=phases,
             kind=EventKind(kind),
@@ -361,6 +360,8 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 signal=parse_signal_ref(e.get("signal")),
                 main_ped_crossing_placement=e.get("main_ped_crossing_placement"),
                 branch=branch,
+                refuge_island_on_main=bool(e.get("refuge_island_on_main")),
+                two_stage_tll_control=bool(e.get("two_stage_tll_control")),
             )
         else:
             layout_event = LayoutEvent(
@@ -369,7 +370,8 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 pos_m=pos_snapped,
                 signalized=bool(e.get("signalized")),
                 signal=parse_signal_ref(e.get("signal")),
-                split_ped_crossing_on_main=bool(e.get("split_ped_crossing_on_main")),
+                refuge_island_on_main=bool(e.get("refuge_island_on_main")),
+                two_stage_tll_control=bool(e.get("two_stage_tll_control")),
             )
         events.append(layout_event)
         LOG.info("layout: %s raw=%.3f -> snap=%d", event_type, pos_raw, pos_snapped)
