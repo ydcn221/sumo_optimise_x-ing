@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-10-19 00:40:33 by Eclipse SUMO netedit Version 1.24.0
+<!-- generated on 2025-10-19 12:53:14 by Eclipse SUMO netedit Version 1.24.0
 <neteditConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/neteditConfiguration.xsd">
 
     <input>
-        <node-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_noconflict_ideal.nod.xml"/>
-        <edge-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_noconflict_ideal.edg.xml"/>
-        <connection-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_noconflict_ideal.con.xml"/>
-        <tllogic-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_noconflict_ideal.tll.xml"/>
+        <node-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_allowconflict_ideal.nod.xml"/>
+        <edge-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_allowconflict_ideal.edg.xml"/>
+        <connection-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_allowconflict_ideal.con.xml"/>
+        <tllogic-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_2\demo_2_allowconflict_ideal.tll.xml"/>
     </input>
 
     <processing>
@@ -44,7 +44,7 @@
         <phase duration="3"  state="rrrrrrrrrrryrrGrrGrr"/>
         <phase duration="10" state="rrrrGrrrrrrrrrGrrGrr"/>
         <phase duration="7"  state="rrrrGrrrrrrGrrGrrGrr"/>
-        <phase duration="3"  state="rrrryrrrrrryrrrrrrrr"/>
+        <phase duration="3"  state="rrrryrrrrrryrrGrrGrr"/>
         <phase duration="7"  state="rrrgrrrrrrgrrrGrrGrr"/>
         <phase duration="3"  state="rrryrrrrrryrrrGrrGrr"/>
         <phase duration="7"  state="rrrrrggrrrrrggGrrGrr"/>
