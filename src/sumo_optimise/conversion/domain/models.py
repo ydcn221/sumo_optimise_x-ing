@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from ..utils.constants import OUTPUT_DIR_PREFIX
 
@@ -33,6 +33,12 @@ class Movement(str, Enum):
     THROUGH = "T"
     RIGHT = "R"
     PEDESTRIAN = "PED"
+
+
+class SignalMovementFamily(str, Enum):
+    MAIN = "main"
+    MINOR = "minor"
+    UTURN = "uturn"
 
 
 class EventKind(str, Enum):
@@ -171,6 +177,8 @@ class BuildResult:
     nodes_xml: str
     edges_xml: str
     connections_xml: str
+    vehicle_connections: List["VehicleConnectionSpec"] = field(default_factory=list)
+    pedestrian_crossings: List["PedestrianCrossingSpec"] = field(default_factory=list)
     manifest_path: Optional[Path] = None
 
 
@@ -179,4 +187,33 @@ class CorridorArtifacts:
     nodes_path: Path
     edges_path: Path
     connections_path: Path
+
+
+@dataclass(frozen=True)
+class VehicleConnectionSpec:
+    index: int
+    from_edge: str
+    to_edge: str
+    from_lane: int
+    to_lane: int
+    movement: str
+    movement_family: SignalMovementFamily
+    node_id: str
+    tl_id: str
+
+
+@dataclass(frozen=True)
+class PedestrianCrossingSpec:
+    order: int
+    crossing_id: str
+    node_id: str
+    edges: Tuple[str, ...]
+    tl_id: str
+
+
+@dataclass(frozen=True)
+class RenderedConnections:
+    xml: str
+    vehicle_connections: List[VehicleConnectionSpec]
+    pedestrian_crossings: List[PedestrianCrossingSpec]
 

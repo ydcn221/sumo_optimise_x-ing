@@ -8,6 +8,7 @@ from sumo_optimise.conversion.domain.models import (
     LayoutEvent,
     MainRoadConfig,
     SnapRule,
+    SignalMovementFamily,
 )
 from sumo_optimise.conversion.emitters.connections import render_connections_xml
 
@@ -55,7 +56,8 @@ def _build_args(median: bool = False, allow_uturn: bool = True):
 
 def test_render_connections_emits_u_turn_links_for_main_approach():
     args = _build_args(median=False)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     eb_in = main_edge_id("EB", 0, 100)
     wb_back = main_edge_id("WB", 0, 100)
@@ -71,18 +73,27 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
         in xml
     )
 
+    uturn_specs = [spec for spec in result.vehicle_connections if spec.movement == "U"]
+    assert {spec.to_edge for spec in uturn_specs} == {wb_back, eb_back}
+    assert all(spec.movement_family == SignalMovementFamily.UTURN for spec in uturn_specs)
+    assert all(spec.tl_id == "Cluster.Main.100" for spec in uturn_specs)
+
 
 def test_render_connections_suppresses_u_turn_when_disallowed():
     args = _build_args(median=False, allow_uturn=False)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
     assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml
+    assert all(spec.movement != "U" for spec in result.vehicle_connections)
 
 
 def test_render_connections_suppresses_u_turn_when_median_continuous():
     args = _build_args(median=True)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
     assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml
+    assert all(spec.movement != "U" for spec in result.vehicle_connections)

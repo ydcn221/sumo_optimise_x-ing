@@ -65,7 +65,8 @@ def _build_args(
 
 def test_minor_south_branch_uses_available_east_segment_at_zero():
     args = _build_args(pos=0, length=60)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(0, "to", "S")
     east_edge = main_edge_id("EB", 0, 60)
@@ -76,7 +77,7 @@ def test_minor_south_branch_uses_available_east_segment_at_zero():
 def test_minor_north_branch_uses_available_west_segment_at_grid_max():
     length = 80
     args = _build_args(pos=length, length=length)
-    xml = render_connections_xml(*args)
+    xml = render_connections_xml(*args).xml
 
     in_edge = minor_edge_id(length, "to", "N")
     west_edge = main_edge_id("WB", 0, length)
@@ -86,7 +87,7 @@ def test_minor_north_branch_uses_available_west_segment_at_grid_max():
 
 def test_minor_straight_between_branches_is_emitted():
     args = _build_args(pos=30, length=60)
-    xml = render_connections_xml(*args)
+    xml = render_connections_xml(*args).xml
 
     in_edge = minor_edge_id(30, "to", "N")
     straight_edge = minor_edge_id(30, "from", "S")
@@ -96,7 +97,8 @@ def test_minor_straight_between_branches_is_emitted():
 
 def test_minor_straight_removed_when_median_continuous():
     args = _build_args(pos=30, length=60, median=True)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(30, "to", "N")
     straight_edge = minor_edge_id(30, "from", "S")
@@ -104,3 +106,7 @@ def test_minor_straight_removed_when_median_continuous():
 
     assert f'from="{in_edge}" to="{straight_edge}"' not in xml
     assert f'from="{in_edge}" to="{left_edge}"' in xml
+
+    assert [spec.order for spec in result.pedestrian_crossings] == list(
+        range(len(result.pedestrian_crossings))
+    )
