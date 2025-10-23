@@ -66,9 +66,6 @@ class ConnectionRecord:
             f'fromLane="{self.from_lane}"',
             f'toLane="{self.to_lane}"',
         ]
-        if self.tl_id and self.link_index is not None:
-            attrs.append(f'tl="{self.tl_id}"')
-            attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <connection {" ".join(attrs)}/>'
 
 
