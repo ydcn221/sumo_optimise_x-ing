@@ -3,7 +3,15 @@ from __future__ import annotations
 
 from typing import Dict, Sequence
 
-from ..domain.models import Cluster, Defaults, JunctionTemplate, LaneOverride, MainRoadConfig, SnapRule
+from ..domain.models import (
+    Cluster,
+    Defaults,
+    JunctionTemplate,
+    LaneOverride,
+    MainRoadConfig,
+    SignalLink,
+    SnapRule,
+)
 
 
 def render_tll_xml(
@@ -16,6 +24,7 @@ def render_tll_xml(
     main_road: MainRoadConfig,
     lane_overrides: Sequence[LaneOverride],
     signal_profiles_by_kind: Dict[str, Dict[str, object]],
+    connection_links: Sequence[SignalLink],
 ) -> str:
     """Return an empty tlLogic document.
 
@@ -32,5 +41,6 @@ def render_tll_xml(
         main_road,
         lane_overrides,
         signal_profiles_by_kind,
+        connection_links,
     )
     return ""
