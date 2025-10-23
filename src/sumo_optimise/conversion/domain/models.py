@@ -32,6 +32,7 @@ class Movement(str, Enum):
     LEFT = "L"
     THROUGH = "T"
     RIGHT = "R"
+    UTURN = "U"
     PEDESTRIAN = "PED"
 
 
@@ -171,6 +172,7 @@ class BuildResult:
     nodes_xml: str
     edges_xml: str
     connections_xml: str
+    connections_metadata: Optional["ConnectionsEmission"] = None
     manifest_path: Optional[Path] = None
 
 
@@ -179,4 +181,51 @@ class CorridorArtifacts:
     nodes_path: Path
     edges_path: Path
     connections_path: Path
+
+
+@dataclass(frozen=True)
+class VehicleConnectionSpec:
+    """Metadata describing a vehicle `<connection>` element."""
+
+    index: int
+    controller_id: str
+    pos_m: int
+    approach: str
+    approach_side: Optional[str]
+    from_edge: str
+    from_lane: int
+    to_edge: str
+    to_lane: int
+    movement: Movement
+    is_uturn: bool
+
+
+@dataclass(frozen=True)
+class CrossingSpec:
+    """Metadata describing a pedestrian `<crossing>` element."""
+
+    index: int
+    controller_id: str
+    pos_m: int
+    crossing_id: str
+    node_id: str
+    edges: List[str]
+    placement: str
+
+
+@dataclass(frozen=True)
+class ConnectionsEmission:
+    """Structured result for connection emission including metadata."""
+
+    xml: str
+    vehicle_connections: List[VehicleConnectionSpec]
+    crossings: List[CrossingSpec]
+
+    def __str__(self) -> str:  # pragma: no cover - convenience for legacy callers
+        return self.xml
+
+    def __contains__(self, item: object) -> bool:
+        if not isinstance(item, str):
+            return False
+        return item in self.xml
 

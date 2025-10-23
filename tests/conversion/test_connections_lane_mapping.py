@@ -1,19 +1,24 @@
 from sumo_optimise.conversion.emitters import connections as mod
 
 
-def extract_connections(lines: list[str], to_edge: str) -> set[str]:
+def extract_connections(
+    entries: list[tuple[str, dict[str, object]]], to_edge: str
+) -> set[str]:
     return {
         line.strip()
-        for line in lines
+        for line, _ in entries
         if f'to="{to_edge}"' in line
     }
 
 
 def test_straight_fans_out_to_rightmost_targets():
-    lines: list[str] = []
+    entries: list[tuple[str, dict[str, object]]] = []
     emitted = mod._emit_vehicle_connections_for_approach(
-        lines,
+        entries,
         pos=0,
+        controller_id="Cluster.Main.0",
+        approach="main",
+        approach_side="EB",
         in_edge_id="Edge.In",
         s_count=2,
         L_target=None,
@@ -23,7 +28,7 @@ def test_straight_fans_out_to_rightmost_targets():
     )
 
     assert emitted == 4
-    assert extract_connections(lines, "Edge.Straight") == {
+    assert extract_connections(entries, "Edge.Straight") == {
         '<connection from="Edge.In" to="Edge.Straight" fromLane="1" toLane="1"/>',
         '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="2"/>',
         '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="3"/>',
@@ -37,10 +42,13 @@ def test_left_turns_share_last_target_lane(monkeypatch):
 
     monkeypatch.setattr(mod, "allocate_lanes", fake_allocate)
 
-    lines: list[str] = []
+    entries: list[tuple[str, dict[str, object]]] = []
     emitted = mod._emit_vehicle_connections_for_approach(
-        lines,
+        entries,
         pos=0,
+        controller_id="Cluster.Main.0",
+        approach="main",
+        approach_side="EB",
         in_edge_id="Edge.In",
         s_count=4,
         L_target=("Edge.Left", 2),
@@ -50,7 +58,7 @@ def test_left_turns_share_last_target_lane(monkeypatch):
     )
 
     assert emitted == 4
-    assert extract_connections(lines, "Edge.Left") == {
+    assert extract_connections(entries, "Edge.Left") == {
         '<connection from="Edge.In" to="Edge.Left" fromLane="1" toLane="1"/>',
         '<connection from="Edge.In" to="Edge.Left" fromLane="2" toLane="2"/>',
         '<connection from="Edge.In" to="Edge.Left" fromLane="3" toLane="2"/>',
@@ -64,10 +72,13 @@ def test_right_turns_share_outer_lane(monkeypatch):
 
     monkeypatch.setattr(mod, "allocate_lanes", fake_allocate)
 
-    lines: list[str] = []
+    entries: list[tuple[str, dict[str, object]]] = []
     emitted = mod._emit_vehicle_connections_for_approach(
-        lines,
+        entries,
         pos=0,
+        controller_id="Cluster.Main.0",
+        approach="main",
+        approach_side="EB",
         in_edge_id="Edge.In",
         s_count=4,
         L_target=None,
@@ -77,7 +88,7 @@ def test_right_turns_share_outer_lane(monkeypatch):
     )
 
     assert emitted == 4
-    assert extract_connections(lines, "Edge.Right") == {
+    assert extract_connections(entries, "Edge.Right") == {
         '<connection from="Edge.In" to="Edge.Right" fromLane="4" toLane="2"/>',
         '<connection from="Edge.In" to="Edge.Right" fromLane="3" toLane="1"/>',
         '<connection from="Edge.In" to="Edge.Right" fromLane="2" toLane="2"/>',
