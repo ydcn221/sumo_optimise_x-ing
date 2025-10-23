@@ -16,6 +16,7 @@ from .constants import (
     EDGES_FILE_NAME,
     MANIFEST_NAME,
     NODES_FILE_NAME,
+    TLL_FILE_NAME,
 )
 
 
@@ -98,6 +99,7 @@ class BuildArtifacts:
         self.nodes_path = outdir / NODES_FILE_NAME
         self.edges_path = outdir / EDGES_FILE_NAME
         self.connections_path = outdir / CONNECTIONS_FILE_NAME
+        self.tll_path = outdir / TLL_FILE_NAME
 
 
 def ensure_output_directory(
@@ -143,10 +145,18 @@ def write_manifest(artifacts: BuildArtifacts, payload: dict) -> Path:
     return path
 
 
-def persist_xml(artifacts: BuildArtifacts, *, nodes: str, edges: str, connections: str) -> None:
+def persist_xml(
+    artifacts: BuildArtifacts,
+    *,
+    nodes: str,
+    edges: str,
+    connections: str,
+    tll: str,
+) -> None:
     artifacts.nodes_path.write_text(nodes, encoding="utf-8")
     artifacts.edges_path.write_text(edges, encoding="utf-8")
     artifacts.connections_path.write_text(connections, encoding="utf-8")
+    artifacts.tll_path.write_text(tll, encoding="utf-8")
 
 
 __all__ = [

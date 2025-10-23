@@ -7,6 +7,7 @@ from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
+from .emitters.tll import render_tll_xml
 from .emitters.nodes import render_nodes_xml
 from .parser.spec_loader import (
     build_clusters,
@@ -65,8 +66,23 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         main_road,
         lane_overrides,
     )
+    tll_xml = render_tll_xml(
+        defaults=defaults,
+        clusters=clusters,
+        breakpoints=breakpoints,
+        junction_template_by_id=junction_template_by_id,
+        snap_rule=snap_rule,
+        main_road=main_road,
+        lane_overrides=lane_overrides,
+        signal_profiles_by_kind=signal_profiles_by_kind,
+    )
 
-    return BuildResult(nodes_xml=nodes_xml, edges_xml=edges_xml, connections_xml=connections_xml)
+    return BuildResult(
+        nodes_xml=nodes_xml,
+        edges_xml=edges_xml,
+        connections_xml=connections_xml,
+        tll_xml=tll_xml,
+    )
 
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
@@ -80,6 +96,7 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         nodes=result.nodes_xml,
         edges=result.edges_xml,
         connections=result.connections_xml,
+        tll=result.tll_xml,
     )
 
     manifest = {
