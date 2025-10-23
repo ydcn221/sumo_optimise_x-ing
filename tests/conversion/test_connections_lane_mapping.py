@@ -1,4 +1,15 @@
+from xml.etree import ElementTree as ET
+
 import sumo_optimise.conversion.emitters.connections as mod
+from sumo_optimise.conversion.domain.models import (
+    Cluster,
+    Defaults,
+    EventKind,
+    LayoutEvent,
+    MainRoadConfig,
+    SignalRef,
+    SnapRule,
+)
 
 
 def extract_connections(lines: list[str], to_edge: str) -> set[str]:
@@ -136,4 +147,50 @@ def test_crossing_link_index_offsets_after_vehicle_links():
     assert [link.kind for link in tl_links] == ["connection", "connection", "crossing"]
     assert [link.link_index for link in tl_links] == [0, 1, 2]
     assert [link.slot_index for link in tl_links] == [0, 1, 2]
+
+
+def test_midblock_crossings_align_after_mainline_connections():
+    defaults = Defaults(minor_road_length_m=25, ped_crossing_width_m=3.5, speed_kmh=40)
+    main_road = MainRoadConfig(length_m=400.0, center_gap_m=0.0, lanes=3)
+    snap_rule = SnapRule(step_m=10, tie_break="toward_west")
+    cluster = Cluster(
+        pos_m=200,
+        events=[
+            LayoutEvent(
+                type=EventKind.XWALK_MIDBLOCK,
+                pos_m_raw=200.0,
+                pos_m=200,
+                signalized=True,
+                signal=SignalRef(profile_id="mid", offset_s=0),
+                refuge_island_on_main=True,
+            )
+        ],
+    )
+
+    result = mod.render_connections_xml(
+        defaults=defaults,
+        clusters=[cluster],
+        breakpoints=[0, 200, 400],
+        junction_template_by_id={},
+        snap_rule=snap_rule,
+        main_road=main_road,
+        lane_overrides={"EB": [], "WB": []},
+    )
+
+    root = ET.fromstring(result.xml)
+    tl_id = "Cluster.Main.200"
+
+    crossing_indexes = sorted(
+        int(elem.get("linkIndex"))
+        for elem in root.findall("crossing")
+        if elem.get("tl") == tl_id
+    )
+    assert crossing_indexes == [6, 7]
+
+    connections = [elem for elem in root.findall("connection")]
+    assert len(connections) == 6
+
+    tl_links = [link for link in result.links if link.tl_id == tl_id]
+    assert [link.kind for link in tl_links] == ["connection"] * 6 + ["crossing"] * 2
+    assert [link.link_index for link in tl_links] == list(range(8))
 

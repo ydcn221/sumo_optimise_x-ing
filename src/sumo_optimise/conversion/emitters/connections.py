@@ -707,18 +707,56 @@ def render_connections_xml(
         node = cluster_id(pos)
         tl_id = cluster_tl_id(cluster)
 
-        if snap_rule.tie_break == "toward_west":
-            eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
-            if not (eb_edge and wb_edge):
-                eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
-        else:
-            eb_edge, wb_edge = get_main_edges_east_side(breakpoints, pos)
-            if not (eb_edge and wb_edge):
-                eb_edge, wb_edge = get_main_edges_west_side(breakpoints, pos)
-
-        if not (eb_edge and wb_edge):
+        west, east = find_neighbor_segments(breakpoints, pos)
+        if west is None or east is None:
             LOG.warning("midblock at %s: adjacent main edges not found; crossing omitted", pos)
             continue
+
+        eb_in_edge = main_edge_id("EB", west, pos)
+        eb_out_edge = main_edge_id("EB", pos, east)
+        wb_in_edge = main_edge_id("WB", pos, east)
+        wb_out_edge = main_edge_id("WB", west, pos)
+
+        eb_in_lanes = pick_lanes_for_segment("EB", west, pos, main_road.lanes, lane_overrides)
+        eb_out_lanes = pick_lanes_for_segment("EB", pos, east, main_road.lanes, lane_overrides)
+        if eb_in_lanes > 0 and eb_out_lanes > 0:
+            _emit_vehicle_connections_for_approach(
+                collector,
+                pos,
+                eb_in_edge,
+                eb_in_lanes,
+                None,
+                (eb_out_edge, eb_out_lanes),
+                None,
+                None,
+                tl_id=tl_id,
+                movement_prefix="main_EB",
+            )
+
+        wb_in_lanes = pick_lanes_for_segment("WB", pos, east, main_road.lanes, lane_overrides)
+        wb_out_lanes = pick_lanes_for_segment("WB", west, pos, main_road.lanes, lane_overrides)
+        if wb_in_lanes > 0 and wb_out_lanes > 0:
+            _emit_vehicle_connections_for_approach(
+                collector,
+                pos,
+                wb_in_edge,
+                wb_in_lanes,
+                None,
+                (wb_out_edge, wb_out_lanes),
+                None,
+                None,
+                tl_id=tl_id,
+                movement_prefix="main_WB",
+            )
+
+        if snap_rule.tie_break == "toward_west":
+            eb_edge, wb_edge = (eb_in_edge, wb_out_edge)
+            if not (eb_edge and wb_edge):
+                eb_edge, wb_edge = (eb_out_edge, wb_in_edge)
+        else:
+            eb_edge, wb_edge = (eb_out_edge, wb_in_edge)
+            if not (eb_edge and wb_edge):
+                eb_edge, wb_edge = (eb_in_edge, wb_out_edge)
 
         split_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
         if split_midblock:
