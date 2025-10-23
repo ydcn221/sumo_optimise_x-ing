@@ -24,6 +24,12 @@ def render_nodes_xml(
     lines: List[str] = []
     lines.append("<nodes>")
 
+    signalised_positions = {
+        cluster.pos_m
+        for cluster in clusters
+        if any(bool(event.signalized) for event in cluster.events)
+    }
+
     for x in breakpoints:
         lines.append(f'  <node id="{main_node_id("EB", x)}" x="{x}" y="{y_eb}"/>')
         lines.append(f'  <node id="{main_node_id("WB", x)}" x="{x}" y="{y_wb}"/>')
@@ -34,10 +40,17 @@ def render_nodes_xml(
         eb = main_node_id("EB", pos)
         wb = main_node_id("WB", pos)
         reasons_text = ",".join(sorted(reason_by_pos[pos].reasons))
-        lines.append(
-            f'  <join id="{cluster_id(pos)}" x="{pos}" y="0" nodes="{eb} {wb}"/>'
-            f'  <!-- reasons: {reasons_text} -->'
-        )
+        attrs = [
+            ("id", cluster_id(pos)),
+            ("x", pos),
+            ("y", 0),
+            ("nodes", f"{eb} {wb}"),
+        ]
+        if pos in signalised_positions:
+            attrs.append(("type", "traffic_light"))
+            attrs.append(("tl", cluster_id(pos)))
+        attr_text = " ".join(f'{name}="{value}"' for name, value in attrs)
+        lines.append(f"  <join {attr_text}/>  <!-- reasons: {reasons_text} -->")
 
     for cluster in clusters:
         pos = cluster.pos_m
