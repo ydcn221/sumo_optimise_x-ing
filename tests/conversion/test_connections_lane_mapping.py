@@ -99,3 +99,41 @@ def test_right_turns_share_outer_lane(monkeypatch):
     assert [link.link_index for link in metadata] == [0, 1, 2, 3]
     assert {link.tl_id for link in metadata} == {"TestTL"}
 
+
+def test_crossing_link_index_offsets_after_vehicle_links():
+    collector = mod.LinkEmissionCollector()
+    collector.add_connection(
+        from_edge="Edge.In",
+        to_edge="Edge.Out",
+        from_lane=1,
+        to_lane=1,
+        movement="veh_0",
+        tl_id="TestTL",
+    )
+    collector.add_connection(
+        from_edge="Edge.In",
+        to_edge="Edge.Diverge",
+        from_lane=2,
+        to_lane=1,
+        movement="veh_1",
+        tl_id="TestTL",
+    )
+    collector.add_crossing(
+        crossing_id="Cross.0",
+        node_id="Cluster.Main.0",
+        edges="Edge.A Edge.B",
+        width=4.0,
+        movement="ped_minor",
+        tl_id="TestTL",
+    )
+
+    lines, metadata = collector.finalize()
+
+    ped_line = next(line for line in lines if line.strip().startswith("<crossing"))
+    assert 'linkIndex="2"' in ped_line
+
+    tl_links = [link for link in metadata if link.tl_id == "TestTL"]
+    assert [link.kind for link in tl_links] == ["connection", "connection", "crossing"]
+    assert [link.link_index for link in tl_links] == [0, 1, 2]
+    assert [link.slot_index for link in tl_links] == [0, 1, 2]
+

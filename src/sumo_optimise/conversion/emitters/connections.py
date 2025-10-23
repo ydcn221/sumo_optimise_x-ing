@@ -196,14 +196,14 @@ class LinkEmissionCollector:
         for tl_id, records in crossings_by_tl.items():
             base = len(connections_by_tl.get(tl_id, []))
             for idx, record in enumerate(records):
-                record.link_index = idx
+                record.link_index = base + idx
                 record.slot_index = base + idx
                 metadata.append(
                     SignalLink(
                         tl_id=tl_id,
                         movement=record.movement,
                         slot_index=record.slot_index,
-                        link_index=idx,
+                        link_index=record.link_index,
                         kind="crossing",
                         element_id=record.crossing_id,
                     )
