@@ -1,6 +1,6 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `net.nod.xml` / `net.edg.xml` / `net.con.xml`, and can optionally run `netconvert` to build a runnable `network.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `4-n+e+c+t.net.xml`.
 
 > This repository hosts the modular corridor converter introduced for schema v1.3.
 
@@ -77,7 +77,7 @@ $ python -m pip install -e .
 
 1. **Prepare input JSON** (v1.3). Use your own file or adapt the provided sample under `data/reference/`.
 2. **Run the CLI** to build PlainXML (nodes/edges/connections).
-3. **Optionally run `netconvert`** to produce `network.net.xml`.
+3. **Optionally run `netconvert`** to produce `4-n+e+c+t.net.xml`.
 
 ### Minimal build
 
@@ -95,9 +95,10 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
-  * `net.nod.xml` — nodes
-  * `net.edg.xml` — edges
-  * `net.con.xml` — vehicle connections and pedestrian crossings
+  * `1-generated.nod.xml` — nodes
+  * `1-generated.edg.xml` — edges
+  * `1-generated.con.xml` — vehicle connections and pedestrian crossings
+  * `1-generated.tll.xml` — traffic-light logic programmes
   * `build.log` — structured log
 
 ### Build + netconvert (if `netconvert` is on PATH)
@@ -107,25 +108,26 @@ Some setups run it automatically. If not, you can run manually:
 ```bash
 # Step 1: build an initial SUMO network
 $ netconvert --lefthand \
-  --node-files net.nod.xml \
-  --edge-files net.edg.xml \
+  --node-files 1-generated.nod.xml \
+  --edge-files 1-generated.edg.xml \
   --sidewalks.guess \
-  --output base_raw.net.xml
+  --output 2-n+e.net.xml
 
 # Step 2: round-trip to PlainXML
 $ netconvert \
-  --sumo-net-file base_raw.net.xml \
-  --plain-output-prefix base_plain
+  --sumo-net-file 2-n+e.net.xml \
+  --plain-output-prefix 3-cooked
 
-# Step 3: merge crossings/connections
+# Step 3: merge crossings/connections/signals
 $ netconvert --lefthand \
-  --node-files base_plain.nod.xml \
-  --edge-files base_plain.edg.xml \
-  --connection-files net.con.xml \
-  --output network.net.xml
+  --node-files 3-cooked.nod.xml \
+  --edge-files 3-cooked.edg.xml \
+  --connection-files 1-generated.con.xml \
+  --tllogic-files 1-generated.tll.xml \
+  --output 4-n+e+c+t.net.xml
 ```
 
-Open `network.net.xml` in **SUMO-GUI** or **netedit** to inspect.
+Open `4-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
@@ -186,13 +188,14 @@ Typical flags (names may vary by release):
 
 * **PlainXML**
 
-  * `net.nod.xml` — main road endpoints and breakpoints; cluster `<join>` nodes at interior junctions; minor dead-ends.
-  * `net.edg.xml` — EB/WB segments per breakpoint; minor “to/from” one-way edges; lane counts with overrides; speeds in m/s.
-  * `net.con.xml` — `<connection>` for vehicle L/T/R movements with left turns mapped from the inside out, straight lanes paired left-to-left (fanning the rightmost lane when targets exceed sources), and right/U turns sharing the outermost lane when needed; `<crossing>` for pedestrians (junction/min-block; single/split).
+  * `1-generated.nod.xml` — main road endpoints and breakpoints; cluster `<join>` nodes at interior junctions; minor dead-ends.
+  * `1-generated.edg.xml` — EB/WB segments per breakpoint; minor “to/from” one-way edges; lane counts with overrides; speeds in m/s.
+  * `1-generated.con.xml` — `<connection>` for vehicle L/T/R movements with left turns mapped from the inside out, straight lanes paired left-to-left (fanning the rightmost lane when targets exceed sources), and right/U turns sharing the outermost lane when needed; `<crossing>` for pedestrians (junction/min-block; single/split).
+  * `1-generated.tll.xml` — `<tlLogic>` definitions assembled from the signal profiles referenced by each cluster.
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
-  * `base_raw.net.xml`, `base_plain.*`, and `network.net.xml` — if `netconvert` runs.
+  * `2-n+e.net.xml`, `3-cooked.*`, and `4-n+e+c+t.net.xml` — if `netconvert` runs.
 
 ---
 

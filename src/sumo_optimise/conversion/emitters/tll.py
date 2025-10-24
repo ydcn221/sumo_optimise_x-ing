@@ -1,4 +1,4 @@
-"""Emission of ``net.tll.xml`` traffic light programmes."""
+"""Emission of ``1-generated.tll.xml`` traffic light programmes."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -413,7 +413,7 @@ def render_tll_xml(
     connection_links: Sequence[SignalLink],
     controlled_connections: Sequence[ControlledConnection],
 ) -> str:
-    """Render a ``net.tll.xml`` document with deterministic ordering."""
+    """Render a ``1-generated.tll.xml`` document with deterministic ordering."""
 
     _ = (defaults, breakpoints, junction_template_by_id, snap_rule, main_road, lane_overrides)
 

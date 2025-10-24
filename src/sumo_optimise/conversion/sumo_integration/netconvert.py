@@ -4,6 +4,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from ..utils.constants import NETWORK_FILE_NAME
 from ..utils.errors import NetconvertExecutionError
@@ -12,7 +13,13 @@ from ..utils.logging import get_logger
 LOG = get_logger()
 
 
-def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, connections_file: Path) -> None:
+def run_two_step_netconvert(
+    outdir: Path,
+    nodes_file: Path,
+    edges_file: Path,
+    connections_file: Path,
+    tll_file: Optional[Path],
+) -> None:
     """Execute the three-stage netconvert workflow required by SUMO."""
 
     exe = shutil.which("netconvert")
@@ -20,8 +27,8 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         LOG.warning("netconvert not found in PATH. Skip multi-step conversion.")
         return
 
-    base_network = "base_raw.net.xml"
-    plain_prefix = "base_plain"
+    base_network = "2-n+e.net.xml"
+    plain_prefix = "3-cooked"
 
     step1 = [
         exe,
@@ -50,6 +57,13 @@ def run_two_step_netconvert(outdir: Path, nodes_file: Path, edges_file: Path, co
         "--connection-files",
         connections_file.name,
         "--lefthand",
+    ]
+    if tll_file is not None:
+        step3 += [
+            "--tllogic-files",
+            tll_file.name,
+        ]
+    step3 += [
         "--output-file",
         NETWORK_FILE_NAME,
     ]
