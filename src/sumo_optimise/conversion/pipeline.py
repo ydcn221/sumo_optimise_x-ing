@@ -1,8 +1,6 @@
 """High-level orchestration for building PlainXML artefacts."""
 from __future__ import annotations
 
-import re
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .checks.semantics import validate_semantics
@@ -31,51 +29,6 @@ from .utils.io import ensure_output_directory, persist_xml, write_manifest
 from .utils.logging import configure_logger, get_logger
 
 LOG = get_logger()
-
-
-def _strip_crossing_tl(xml_text: str) -> str:
-    """Remove the ``tl`` attribute from crossing elements while preserving layout."""
-
-    lines = []
-    for line in xml_text.splitlines():
-        if line.lstrip().startswith("<crossing"):
-            line = re.sub(r"\s+tl=\"[^\"]+\"", "", line)
-        lines.append(line)
-    result = "\n".join(lines)
-    if xml_text.endswith("\n") and not result.endswith("\n"):
-        result += "\n"
-    return result
-
-
-def _apply_connection_tl(xml_text: str, links) -> str:
-    """Attach ``tl``/``linkIndex`` to connection elements using the signal metadata."""
-
-    mapping = {
-        link.element_id: (link.tl_id, link.link_index)
-        for link in links
-        if link.kind == "connection"
-    }
-    lines = []
-    for line in xml_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("<connection "):
-            indent = line[: len(line) - len(stripped)]
-            elem = ET.fromstring(stripped)
-            key = (
-                f"{elem.attrib['from']}:{elem.attrib.get('fromLane', '0')}->"
-                f"{elem.attrib['to']}:{elem.attrib.get('toLane', '0')}"
-            )
-            tl_info = mapping.get(key)
-            if tl_info:
-                tl_id, link_index = tl_info
-                elem.set("tl", tl_id)
-                elem.set("linkIndex", str(link_index))
-            line = indent + ET.tostring(elem, encoding="unicode")
-        lines.append(line)
-    result = "\n".join(lines)
-    if xml_text.endswith("\n") and not result.endswith("\n"):
-        result += "\n"
-    return result
 
 
 def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildResult:
@@ -125,13 +78,10 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         connection_links=connections_result.links,
     )
 
-    connections_with_tl = _apply_connection_tl(connections_result.xml, connections_result.links)
-    connections_xml = _strip_crossing_tl(connections_with_tl)
-
     return BuildResult(
         nodes_xml=nodes_xml,
         edges_xml=edges_xml,
-        connections_xml=connections_xml,
+        connections_xml=connections_result.xml,
         connection_links=connections_result.links,
         tll_xml=tll_xml,
     )
