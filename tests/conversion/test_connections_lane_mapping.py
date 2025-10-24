@@ -38,10 +38,10 @@ def test_straight_fans_out_to_rightmost_targets():
     lines, metadata = collector.finalize()
     assert emitted == 4
     assert extract_connections(lines, "Edge.Straight") == {
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="1" toLane="1"/>',
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="3"/>',
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="4"/>',
+        '<connection from="Edge.In" to="Edge.Straight" fromLane="1" toLane="1" tl="TestTL" linkIndex="0"/>',
+        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="2" tl="TestTL" linkIndex="1"/>',
+        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="3" tl="TestTL" linkIndex="2"/>',
+        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="4" tl="TestTL" linkIndex="3"/>',
     }
     assert [link.link_index for link in metadata] == [0, 1, 2, 3]
     assert {link.tl_id for link in metadata} == {"TestTL"}
@@ -70,10 +70,10 @@ def test_left_turns_share_last_target_lane(monkeypatch):
     lines, metadata = collector.finalize()
     assert emitted == 4
     assert extract_connections(lines, "Edge.Left") == {
-        '<connection from="Edge.In" to="Edge.Left" fromLane="1" toLane="1"/>',
-        '<connection from="Edge.In" to="Edge.Left" fromLane="2" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Left" fromLane="3" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Left" fromLane="4" toLane="2"/>',
+        '<connection from="Edge.In" to="Edge.Left" fromLane="1" toLane="1" tl="TestTL" linkIndex="0"/>',
+        '<connection from="Edge.In" to="Edge.Left" fromLane="2" toLane="2" tl="TestTL" linkIndex="1"/>',
+        '<connection from="Edge.In" to="Edge.Left" fromLane="3" toLane="2" tl="TestTL" linkIndex="2"/>',
+        '<connection from="Edge.In" to="Edge.Left" fromLane="4" toLane="2" tl="TestTL" linkIndex="3"/>',
     }
     assert [link.link_index for link in metadata] == [0, 1, 2, 3]
     assert {link.tl_id for link in metadata} == {"TestTL"}
@@ -102,10 +102,10 @@ def test_right_turns_share_outer_lane(monkeypatch):
     lines, metadata = collector.finalize()
     assert emitted == 4
     assert extract_connections(lines, "Edge.Right") == {
-        '<connection from="Edge.In" to="Edge.Right" fromLane="4" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Right" fromLane="3" toLane="1"/>',
-        '<connection from="Edge.In" to="Edge.Right" fromLane="2" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Right" fromLane="1" toLane="2"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="4" toLane="2" tl="TestTL" linkIndex="0"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="3" toLane="1" tl="TestTL" linkIndex="1"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="2" toLane="2" tl="TestTL" linkIndex="2"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="1" toLane="2" tl="TestTL" linkIndex="3"/>',
     }
     assert [link.link_index for link in metadata] == [0, 1, 2, 3]
     assert {link.tl_id for link in metadata} == {"TestTL"}

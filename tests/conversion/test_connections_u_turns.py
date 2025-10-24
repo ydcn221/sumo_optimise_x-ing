@@ -67,8 +67,10 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
 
     assert f'from="{eb_in}" to="{wb_back}"' in xml
     assert f'from="{wb_in}" to="{eb_back}"' in xml
-    connection_lines = [line for line in xml.splitlines() if line.strip().startswith("<connection")]
-    assert all('tl="' not in line for line in connection_lines)
+    connection_lines = [
+        line for line in xml.splitlines() if line.strip().startswith("<connection ")
+    ]
+    assert all(f'tl="{tl}"' in line for line in connection_lines)
     assert any(link.movement.endswith("_U") for link in result.links if link.tl_id == tl)
 
 
