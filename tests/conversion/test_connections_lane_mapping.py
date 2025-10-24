@@ -180,10 +180,14 @@ def test_midblock_crossings_align_after_mainline_connections():
     root = ET.fromstring(result.xml)
     tl_id = "Cluster.Main.200"
 
+    crossings = root.findall("crossing")
+    assert all(elem.get("priority") == "true" for elem in crossings)
+    assert all(elem.get("tl") is None for elem in crossings)
+
     crossing_indexes = sorted(
-        int(elem.get("linkIndex"))
-        for elem in root.findall("crossing")
-        if elem.get("tl") == tl_id
+        link.link_index
+        for link in result.links
+        if link.tl_id == tl_id and link.kind == "crossing"
     )
     assert crossing_indexes == [6, 7]
 

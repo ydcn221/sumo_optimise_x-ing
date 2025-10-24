@@ -72,6 +72,17 @@ class ConnectionRecord:
             attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <connection {" ".join(attrs)}/>'
 
+    def to_xml_with_links(self) -> str:
+        attrs = [
+            f'from="{self.from_edge}"',
+            f'to="{self.to_edge}"',
+            f'fromLane="{self.from_lane}"',
+            f'toLane="{self.to_lane}"',
+        ]
+        if self.link_index is not None:
+            attrs.append(f'linkIndex="{self.link_index}"')
+        return f'  <connection {" ".join(attrs)}/>'
+
 
 @dataclass
 class CrossingRecord:
@@ -99,12 +110,25 @@ class CrossingRecord:
             attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <crossing {" ".join(attrs)}/>'
 
+    def to_xml_with_links(self) -> str:
+        attrs = [
+            f'id="{self.crossing_id}"',
+            f'node="{self.node_id}"',
+            f'edges="{self.edges}"',
+            'priority="true"',
+            f'width="{self.width:.3f}"',
+        ]
+        if self.link_index is not None:
+            attrs.append(f'linkIndex="{self.link_index}"')
+        return f'  <crossing {" ".join(attrs)}/>'
+
 
 class LinkEmissionCollector:
     def __init__(self) -> None:
         self._order = 0
         self.connections: List[ConnectionRecord] = []
         self.crossings: List[CrossingRecord] = []
+        self._enriched_lines: List[str] = []
 
     def _next_order(self) -> int:
         value = self._order
@@ -209,7 +233,10 @@ class LinkEmissionCollector:
                         slot_index=idx,
                         link_index=idx,
                         kind="connection",
-                        element_id=f"{record.from_edge}->{record.to_edge}",
+                        element_id=(
+                            f"{record.from_edge}:{record.from_lane}->"
+                            f"{record.to_edge}:{record.to_lane}"
+                        ),
                     )
                 )
 
@@ -232,14 +259,24 @@ class LinkEmissionCollector:
 
         metadata.sort(key=lambda item: (item.tl_id, item.slot_index))
 
-        items: List[Tuple[int, str]] = []
+        raw_items: List[Tuple[int, str]] = []
+        enriched_items: List[Tuple[int, str]] = []
         for record in unique_connections:
-            items.append((record.order, record.to_xml()))
+            raw_items.append((record.order, record.to_xml()))
+            enriched_items.append((record.order, record.to_xml_with_links()))
         for record in ordered_crossings:
-            items.append((record.order, record.to_xml()))
+            raw_items.append((record.order, record.to_xml()))
+            enriched_items.append((record.order, record.to_xml_with_links()))
 
-        lines = [line for _, line in sorted(items, key=lambda pair: pair[0])]
+        lines = [line for _, line in sorted(raw_items, key=lambda pair: pair[0])]
+        self._enriched_lines = [
+            line for _, line in sorted(enriched_items, key=lambda pair: pair[0])
+        ]
         return lines, metadata
+
+    @property
+    def enriched_lines(self) -> List[str]:
+        return self._enriched_lines
 
 
 def _edge_orientation(edge_id: str) -> Optional[int]:
@@ -1049,7 +1086,8 @@ def render_connections_xml(
             )
 
     inner_lines, metadata = collector.finalize()
-    all_lines = ["<connections>", *inner_lines, "</connections>"]
+    enriched_lines = collector.enriched_lines or inner_lines
+    all_lines = ["<connections>", *enriched_lines, "</connections>"]
     xml = "\n".join(all_lines) + "\n"
     LOG.info("rendered connections (%d lines)", len(all_lines))
     return ConnectionsRenderResult(xml=xml, links=metadata)
