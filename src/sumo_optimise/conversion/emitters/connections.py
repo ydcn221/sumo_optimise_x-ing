@@ -89,10 +89,10 @@ class CrossingRecord:
             f'id="{self.crossing_id}"',
             f'node="{self.node_id}"',
             f'edges="{self.edges}"',
+            'priority="true"',
             f'width="{self.width:.3f}"',
         ]
-        if self.tl_id and self.link_index is not None:
-            attrs.append(f'tl="{self.tl_id}"')
+        if self.link_index is not None:
             attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <crossing {" ".join(attrs)}/>'
 
@@ -181,8 +181,22 @@ class LinkEmissionCollector:
 
         metadata: List[SignalLink] = []
 
-        for tl_id, records in connections_by_tl.items():
-            for idx, record in enumerate(records):
+        def connection_sort_key(record: ConnectionRecord) -> Tuple[int, int, int]:
+            orientation = _connection_orientation(record.from_edge)
+            movement_order = _movement_priority(record.movement)
+            return (orientation, movement_order, record.order)
+
+        def crossing_sort_key(record: CrossingRecord) -> Tuple[int, int, int]:
+            orientation = _crossing_orientation(record.crossing_id, record.edges)
+            movement_order = _crossing_movement_priority(record.movement)
+            return (orientation, movement_order, record.order)
+
+        all_tl_ids = set(connections_by_tl) | set(crossings_by_tl)
+
+        for tl_id in sorted(all_tl_ids):
+            conn_records = connections_by_tl.get(tl_id, [])
+            conn_records.sort(key=connection_sort_key)
+            for idx, record in enumerate(conn_records):
                 record.link_index = idx
                 record.slot_index = idx
                 metadata.append(
@@ -196,17 +210,18 @@ class LinkEmissionCollector:
                     )
                 )
 
-        for tl_id, records in crossings_by_tl.items():
-            base = len(connections_by_tl.get(tl_id, []))
-            for idx, record in enumerate(records):
-                record.link_index = idx
-                record.slot_index = base + idx
+            crossing_records = crossings_by_tl.get(tl_id, [])
+            crossing_records.sort(key=crossing_sort_key)
+            base = len(conn_records)
+            for offset, record in enumerate(crossing_records, start=base):
+                record.link_index = offset
+                record.slot_index = offset
                 metadata.append(
                     SignalLink(
                         tl_id=tl_id,
                         movement=record.movement,
-                        slot_index=record.slot_index,
-                        link_index=idx,
+                        slot_index=offset,
+                        link_index=offset,
                         kind="crossing",
                         element_id=record.crossing_id,
                     )
@@ -222,6 +237,62 @@ class LinkEmissionCollector:
 
         lines = [line for _, line in sorted(items, key=lambda pair: pair[0])]
         return lines, metadata
+
+
+def _edge_orientation(edge_id: str) -> Optional[int]:
+    if not edge_id:
+        return None
+    if ".to.S" in edge_id or ".from.S" in edge_id:
+        return 0
+    if ".WB." in edge_id:
+        return 1
+    if ".to.N" in edge_id or ".from.N" in edge_id:
+        return 2
+    if ".EB." in edge_id:
+        return 3
+    return None
+
+
+def _connection_orientation(from_edge: str) -> int:
+    orientation = _edge_orientation(from_edge)
+    return orientation if orientation is not None else 99
+
+
+def _movement_priority(movement: str) -> int:
+    parts = movement.split("_")
+    if not parts:
+        return 0
+    symbol = parts[-1]
+    order = {"L": 0, "T": 1, "R": 2, "U": 3}
+    return order.get(symbol, 4)
+
+
+def _crossing_orientation(crossing_id: str, edges: str) -> int:
+    if crossing_id.startswith("Cross.Minor."):
+        if crossing_id.endswith(".S"):
+            return 0
+        if crossing_id.endswith(".N"):
+            return 2
+    if crossing_id.startswith("Cross.Main."):
+        if ".East" in crossing_id:
+            return 1
+        if ".West" in crossing_id:
+            return 3
+
+    for edge in edges.split():
+        orientation = _edge_orientation(edge)
+        if orientation is not None:
+            return orientation
+
+    return 99
+
+
+def _crossing_movement_priority(movement: str) -> int:
+    if movement.endswith("_EB"):
+        return 0
+    if movement.endswith("_WB"):
+        return 1
+    return 0
 
 
 def _canon(label: str) -> str:
