@@ -118,9 +118,13 @@ def test_small_demo_connection_indices_match_reference(spec_name: str, reference
         crossing = by_id.get(link.element_id)
         assert crossing is not None
         assert crossing.attrib.get('priority') == 'true'
-        assert 'tl' not in crossing.attrib
+        if link.tl_id:
+            assert crossing.attrib.get('tl') == link.tl_id
+        else:
+            assert 'tl' not in crossing.attrib
         assert crossing.attrib.get('linkIndex') == str(link.link_index)
 
     for crossing in connections_root.findall('.//crossing'):
         assert crossing.attrib.get('priority') == 'true'
-        assert 'tl' not in crossing.attrib
+        if 'tl' in crossing.attrib:
+            assert crossing.attrib['tl'].startswith('Cluster.Main.')

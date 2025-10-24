@@ -129,6 +129,45 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
     assert states == ["gG", "yG", "yr", "rr"]
 
 
+def test_main_right_phase_enables_u_turn_when_available():
+    profile = SignalProfileDef(
+        id="profile",
+        cycle_s=4,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[
+            SignalPhaseDef(duration_s=4, allow_movements=["main_R"]),
+        ],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"profile": profile}}
+    cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
+    links = [
+        SignalLink(
+            tl_id="Cluster.Main.100",
+            movement="main_EB_R",
+            slot_index=0,
+            link_index=0,
+            kind="connection",
+            element_id="veh_r",
+        ),
+        SignalLink(
+            tl_id="Cluster.Main.100",
+            movement="main_EB_U",
+            slot_index=1,
+            link_index=1,
+            kind="connection",
+            element_id="veh_u",
+        ),
+    ]
+
+    xml = _render(clusters=[cluster], profiles=profiles, links=links)
+    states = _extract_states(xml)
+
+    assert states == ["gG"]
+
+
 def test_two_stage_ped_split_distinguishes_halves():
     profile = SignalProfileDef(
         id="profile",

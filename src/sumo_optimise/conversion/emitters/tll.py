@@ -91,6 +91,17 @@ def _expand_vehicle_movements(
             if prefix == "main" and token == f"{direction}_{turn}":
                 expanded.add(movement)
                 continue
+
+    if expanded:
+        for movement in list(expanded):
+            if not movement.startswith("main_"):
+                continue
+            if not movement.endswith("_R"):
+                continue
+            prefix = movement.rsplit("_", 1)[0]
+            u_turn = f"{prefix}_U"
+            if u_turn in veh_movements:
+                expanded.add(u_turn)
     return expanded
 
 
