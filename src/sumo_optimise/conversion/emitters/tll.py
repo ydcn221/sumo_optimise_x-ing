@@ -91,6 +91,17 @@ def _expand_vehicle_movements(
             if prefix == "main" and token == f"{direction}_{turn}":
                 expanded.add(movement)
                 continue
+
+    if expanded:
+        for movement in list(expanded):
+            if not movement.startswith("main_"):
+                continue
+            if not movement.endswith("_R"):
+                continue
+            prefix = movement.rsplit("_", 1)[0]
+            u_turn = f"{prefix}_U"
+            if u_turn in veh_movements:
+                expanded.add(u_turn)
     return expanded
 
 
@@ -108,73 +119,127 @@ def _ped_base(name: str) -> str:
 
 
 def _vehicle_conflicts() -> Dict[str, Dict[str, Set[str]]]:
-    """Return a static conflict map between vehicle movements and crossings."""
+    """Return the conflict map between vehicle movements and crossings."""
 
-    def patt(*values: str) -> Set[str]:
-        return set(values)
+    MovementKey = tuple[str, str]
 
-    main_west = patt("ped_main_west", "ped_main_west_EB", "ped_main_west_WB")
-    main_east = patt("ped_main_east", "ped_main_east_EB", "ped_main_east_WB")
-    mid = patt("ped_mid", "ped_mid_EB", "ped_mid_WB")
+    # Each approach is described by the incoming direction ("EB"/"WB"/"N"/"S")
+    # together with the crosswalk encountered immediately after entering the
+    # intersection.  The value is a tuple containing the crosswalk orientation
+    # (west/east/north/south) and, where relevant, the traffic direction whose
+    # lanes are being crossed.  Minor-road crossings are not split, so the lane
+    # component is ``None`` for those entries.
+    entry_crosswalk: Dict[MovementKey, tuple[str, str | None]] = {
+        ("main", "EB"): ("west", "EB"),
+        ("main", "WB"): ("east", "WB"),
+        ("minor", "N"): ("north", None),
+        ("minor", "S"): ("south", None),
+    }
 
-    return {
-        "main_EB_T": {
-            "mandatory": patt(
-                *main_west,
-                *main_east,
-                "ped_minor_north",
-                "ped_minor_south",
-                *mid,
-            )
+    # Exit crosswalks per turn follow the layout from ``干渉一覧.xlsx``: the
+    # crosswalk immediately downstream of the manoeuvre is conditional for
+    # turning movements and mandatory for straight-ahead movements.  U-turns are
+    # treated like right turns for the downstream crosswalk.
+    exit_crosswalk: Dict[MovementKey, Dict[str, tuple[str, str | None]]] = {
+        ("main", "EB"): {
+            "T": ("east", "EB"),
+            "L": ("north", None),
+            "R": ("south", None),
+            "U": ("west", "WB"),
         },
-        "main_WB_T": {
-            "mandatory": patt(
-                *main_west,
-                *main_east,
-                "ped_minor_north",
-                "ped_minor_south",
-                *mid,
-            )
+        ("main", "WB"): {
+            "T": ("west", "WB"),
+            "L": ("south", None),
+            "R": ("north", None),
+            "U": ("east", "EB"),
         },
-        "main_EB_L": {
-            "mandatory": patt("ped_main_west", "ped_main_west_EB"),
-            "left": patt("ped_minor_north"),
+        ("minor", "N"): {
+            "T": ("south", None),
+            "L": ("east", "EB"),
+            "R": ("west", "WB"),
+            "U": ("north", None),
         },
-        "main_EB_R": {
-            "mandatory": patt("ped_main_west", "ped_main_west_EB"),
-            "right": patt("ped_minor_south"),
-        },
-        "main_WB_L": {
-            "mandatory": patt("ped_main_east", "ped_main_east_WB"),
-            "left": patt("ped_minor_south"),
-        },
-        "main_WB_R": {
-            "mandatory": patt("ped_main_east", "ped_main_east_WB"),
-            "right": patt("ped_minor_north"),
-        },
-        "minor_N_T": {
-            "mandatory": patt("ped_minor_north", *main_west, *main_east),
-        },
-        "minor_N_L": {
-            "mandatory": patt("ped_minor_north"),
-            "left": patt("ped_main_east", "ped_main_east_EB"),
-        },
-        "minor_N_R": {
-            "mandatory": patt("ped_minor_north"),
-            "right": patt("ped_main_west", "ped_main_west_WB"),
-        },
-        "minor_S_T": {
-            "mandatory": patt("ped_minor_south", *main_west, *main_east),
-        },
-        "minor_S_L": {
-            "mandatory": patt("ped_minor_south"),
-            "left": patt("ped_main_west", "ped_main_west_EB"),
-        },
-        "minor_S_R": {
-            "mandatory": patt("ped_minor_south"),
-            "right": patt("ped_main_east", "ped_main_east_WB"),
+        ("minor", "S"): {
+            "T": ("north", None),
+            "L": ("west", "WB"),
+            "R": ("east", "EB"),
+            "U": ("south", None),
         },
     }
+
+    def patterns_for(orientation: str, lane_dir: str | None) -> Set[str]:
+        """Return the pedestrian movement tokens for the given crosswalk."""
+
+        if orientation == "west":
+            tokens = {"ped_main_west"}
+            if lane_dir == "EB":
+                tokens.add("ped_main_west_EB")
+            elif lane_dir == "WB":
+                tokens.add("ped_main_west_WB")
+            else:
+                tokens.update({"ped_main_west_EB", "ped_main_west_WB"})
+            return tokens
+        if orientation == "east":
+            tokens = {"ped_main_east"}
+            if lane_dir == "EB":
+                tokens.add("ped_main_east_EB")
+            elif lane_dir == "WB":
+                tokens.add("ped_main_east_WB")
+            else:
+                tokens.update({"ped_main_east_EB", "ped_main_east_WB"})
+            return tokens
+        if orientation == "north":
+            return {"ped_minor_north"}
+        if orientation == "south":
+            return {"ped_minor_south"}
+        if orientation == "mid":
+            tokens = {"ped_mid"}
+            if lane_dir == "EB":
+                tokens.add("ped_mid_EB")
+            elif lane_dir == "WB":
+                tokens.add("ped_mid_WB")
+            else:
+                tokens.update({"ped_mid_EB", "ped_mid_WB"})
+            return tokens
+        raise ValueError(f"unknown crosswalk orientation: {orientation}")
+
+    movement_turns = ("L", "T", "R", "U")
+
+    conflicts: Dict[str, Dict[str, Set[str]]] = {}
+    for (prefix, direction), entry in entry_crosswalk.items():
+        entry_patterns = patterns_for(*entry)
+        exits = exit_crosswalk[(prefix, direction)]
+        for turn in movement_turns:
+            movement = f"{prefix}_{direction}_{turn}"
+            turn_exit = exits.get(turn)
+            if turn_exit is None:
+                # Movement not available for this approach (e.g. tee junction).
+                continue
+            mandatory = set(entry_patterns)
+            left = set()
+            right = set()
+
+            if turn == "T":
+                mandatory.update(patterns_for(*turn_exit))
+                if prefix == "main":
+                    # Mid-block crossings share the carriageway with the main
+                    # through movement, so treat them as mandatory conflicts.
+                    mandatory.update(patterns_for("mid", direction))
+            elif turn == "L":
+                left.update(patterns_for(*turn_exit))
+            else:  # R and U behave like right turns for downstream crossings
+                right.update(patterns_for(*turn_exit))
+
+            buckets: Dict[str, Set[str]] = {}
+            if mandatory:
+                buckets["mandatory"] = mandatory
+            if left:
+                buckets["left"] = left
+            if right:
+                buckets["right"] = right
+            conflicts[movement] = buckets
+
+    return conflicts
 
 
 _VEHICLE_CONFLICTS = _vehicle_conflicts()

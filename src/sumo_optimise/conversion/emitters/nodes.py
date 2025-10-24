@@ -30,9 +30,20 @@ def render_nodes_xml(
         if any(bool(event.signalized) for event in cluster.events)
     }
 
+    def _attrs_for_main(direction: str, pos: int, y: float) -> str:
+        attrs = [
+            ("id", main_node_id(direction, pos)),
+            ("x", pos),
+            ("y", y),
+        ]
+        if pos in signalised_positions:
+            attrs.append(("type", "traffic_light"))
+            attrs.append(("tl", cluster_id(pos)))
+        return " ".join(f'{name}="{value}"' for name, value in attrs)
+
     for x in breakpoints:
-        lines.append(f'  <node id="{main_node_id("EB", x)}" x="{x}" y="{y_eb}"/>')
-        lines.append(f'  <node id="{main_node_id("WB", x)}" x="{x}" y="{y_wb}"/>')
+        lines.append(f"  <node {_attrs_for_main('EB', x, y_eb)}/>")
+        lines.append(f"  <node {_attrs_for_main('WB', x, y_wb)}/>")
 
     for pos in breakpoints:
         if pos in (0, grid_max):

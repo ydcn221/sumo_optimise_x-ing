@@ -36,6 +36,10 @@ def _extract_join_line(xml: str) -> str:
     raise AssertionError("join line not found in XML")
 
 
+def _extract_node_lines(xml: str) -> list[str]:
+    return [line.strip() for line in xml.splitlines() if line.strip().startswith("<node ")]
+
+
 def test_signalised_cluster_sets_traffic_light_attributes() -> None:
     cluster = Cluster(
         pos_m=100,
@@ -56,6 +60,16 @@ def test_signalised_cluster_sets_traffic_light_attributes() -> None:
         clusters=[cluster],
         breakpoints=_breakpoints(),
         reason_by_pos=_reasons(),
+    )
+
+    node_lines = _extract_node_lines(xml)
+    assert any(
+        'id="Node.Main.EB.100"' in line and 'type="traffic_light"' in line and 'tl="Cluster.Main.100"' in line
+        for line in node_lines
+    )
+    assert any(
+        'id="Node.Main.WB.100"' in line and 'type="traffic_light"' in line and 'tl="Cluster.Main.100"' in line
+        for line in node_lines
     )
 
     join_line = _extract_join_line(xml)
@@ -83,6 +97,13 @@ def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
         clusters=[cluster],
         breakpoints=_breakpoints(),
         reason_by_pos=_reasons(),
+    )
+
+    node_lines = _extract_node_lines(xml)
+    assert all(
+        'type="traffic_light"' not in line and ' tl="' not in line
+        for line in node_lines
+        if 'Node.Main.EB.100' in line or 'Node.Main.WB.100' in line
     )
 
     join_line = _extract_join_line(xml)
