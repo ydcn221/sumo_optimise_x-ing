@@ -15,6 +15,7 @@ from sumo_optimise.conversion.domain.models import (
     LayoutEvent,
     MainRoadConfig,
     PedestrianConflictConfig,
+    ControlledConnection,
     SignalLink,
     SignalPhaseDef,
     SignalProfileDef,
@@ -70,7 +71,10 @@ def _render(
     clusters: List[Cluster],
     profiles: Dict[str, Dict[str, SignalProfileDef]],
     links: List[SignalLink],
+    controlled: List[ControlledConnection] | None = None,
 ) -> str:
+    if controlled is None:
+        controlled = []
     return render_tll_xml(
         defaults=_make_defaults(),
         clusters=clusters,
@@ -81,6 +85,7 @@ def _render(
         lane_overrides=_empty_lane_overrides(),
         signal_profiles_by_kind=profiles,
         connection_links=links,
+        controlled_connections=controlled,
     )
 
 
@@ -265,6 +270,52 @@ def test_movement_stays_green_across_phases():
     states = _extract_states(xml)
 
     assert states == ["G", "y", "r"]
+
+
+def test_controlled_connections_emitted():
+    profile = SignalProfileDef(
+        id="profile",
+        cycle_s=6,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[SignalPhaseDef(duration_s=6, allow_movements=["main_T"])],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"profile": profile}}
+    tl_id = "Cluster.Main.150"
+    cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
+    links = [
+        SignalLink(
+            tl_id=tl_id,
+            movement="main_EB_T",
+            slot_index=0,
+            link_index=0,
+            kind="connection",
+            element_id="Edge.A->Edge.B",
+        )
+    ]
+    controlled = [
+        ControlledConnection(
+            tl_id=tl_id,
+            from_edge="Edge.A",
+            to_edge="Edge.B",
+            from_lane=0,
+            to_lane=1,
+            link_index=0,
+        )
+    ]
+
+    xml = _render(
+        clusters=[cluster],
+        profiles=profiles,
+        links=links,
+        controlled=controlled,
+    )
+    assert (
+        '<connection from="Edge.A" to="Edge.B" fromLane="0" toLane="1" '
+        f'tl="{tl_id}" linkIndex="0"/>'
+    ) in xml
 
 
 def test_pedestrian_conflict_rules_match_reference_csv():

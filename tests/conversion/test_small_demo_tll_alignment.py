@@ -75,7 +75,7 @@ def test_small_demo_connection_indices_match_reference(spec_name: str, reference
     options = _build_options()
     result = build_corridor_artifacts(spec_path, options)
 
-    our_connections = _parse_connection_links(result.connections_xml)
+    our_connections = _parse_connection_links(result.tll_xml)
     reference_text = Path(reference_path).read_text(encoding='utf-8')
     reference_connections = _parse_connection_links(reference_text)
 
@@ -107,24 +107,16 @@ def test_small_demo_connection_indices_match_reference(spec_name: str, reference
             assert len(phase.attrib['state']) == expected_width
 
     connections_root = ET.fromstring(result.connections_xml)
-    by_id: Dict[str, ET.Element] = {
-        crossing.attrib['id']: crossing
+    crossing_indices = [
+        int(crossing.attrib['linkIndex'])
         for crossing in connections_root.findall('.//crossing')
-    }
-
-    for link in result.connection_links:
-        if link.kind != 'crossing':
-            continue
-        crossing = by_id.get(link.element_id)
-        assert crossing is not None
-        assert crossing.attrib.get('priority') == 'true'
-        if link.tl_id:
-            assert crossing.attrib.get('tl') == link.tl_id
-        else:
-            assert 'tl' not in crossing.attrib
-        assert crossing.attrib.get('linkIndex') == str(link.link_index)
+    ]
+    expected_crossing_indices = [
+        link.link_index for link in result.connection_links if link.kind == 'crossing'
+    ]
+    assert sorted(crossing_indices) == sorted(expected_crossing_indices)
 
     for crossing in connections_root.findall('.//crossing'):
+        assert 'id' not in crossing.attrib
         assert crossing.attrib.get('priority') == 'true'
-        if 'tl' in crossing.attrib:
-            assert crossing.attrib['tl'].startswith('Cluster.Main.')
+        assert 'tl' not in crossing.attrib

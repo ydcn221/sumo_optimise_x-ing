@@ -70,7 +70,14 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
     connection_lines = [
         line for line in xml.splitlines() if line.strip().startswith("<connection ")
     ]
-    assert all(f'tl="{tl}"' in line for line in connection_lines)
+    assert all(' tl=' not in line for line in connection_lines)
+    controlled = [conn for conn in result.controlled_connections if conn.tl_id == tl]
+    assert any(
+        conn.from_edge == eb_in and conn.to_edge == wb_back for conn in controlled
+    )
+    assert any(
+        conn.from_edge == wb_in and conn.to_edge == eb_back for conn in controlled
+    )
     assert any(link.movement.endswith("_U") for link in result.links if link.tl_id == tl)
 
 

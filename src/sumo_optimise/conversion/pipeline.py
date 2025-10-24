@@ -76,6 +76,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         lane_overrides=lane_overrides,
         signal_profiles_by_kind=signal_profiles_by_kind,
         connection_links=connections_result.links,
+        controlled_connections=connections_result.controlled_connections,
     )
 
     return BuildResult(
