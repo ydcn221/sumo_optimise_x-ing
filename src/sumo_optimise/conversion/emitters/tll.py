@@ -118,74 +118,72 @@ def _ped_base(name: str) -> str:
     return name
 
 
+_SEGMENT_TO_PEDS: Mapping[str, Set[str]] = {
+    "S-W": {"ped_minor_south"},
+    "S-E": {"ped_minor_south"},
+    "E-S": {"ped_main_east_WB"},
+    "E-N": {"ped_main_east_EB"},
+    "N-E": {"ped_minor_north"},
+    "N-W": {"ped_minor_north"},
+    "W-N": {"ped_main_west_EB"},
+    "W-S": {"ped_main_west_WB"},
+}
+
+
+_MOVEMENT_SEGMENT_STATUS: Mapping[str, Mapping[str, str]] = {
+    "main_EB_L": {"W-N": "never", "N-W": "left"},
+    "main_EB_T": {"W-N": "never", "E-N": "never"},
+    "main_EB_R": {"W-N": "never", "S-E": "right"},
+    "main_EB_U": {"W-N": "never", "W-S": "right"},
+    "main_WB_L": {"E-S": "never", "S-E": "left"},
+    "main_WB_T": {"E-S": "never", "W-S": "never"},
+    "main_WB_R": {"E-S": "never", "N-W": "right"},
+    "main_WB_U": {"E-S": "never", "E-N": "right"},
+    "minor_N_L": {"N-E": "never", "E-N": "left"},
+    "minor_N_T": {"N-E": "never"},
+    "minor_N_R": {"N-E": "never", "W-S": "right"},
+    "minor_N_U": {"N-E": "never", "N-W": "right"},
+    "minor_S_L": {"S-W": "never", "W-S": "left"},
+    "minor_S_T": {"S-W": "never"},
+    "minor_S_R": {"S-W": "never", "E-N": "right"},
+    "minor_S_U": {"S-W": "never", "S-E": "right"},
+}
+
+
 def _vehicle_conflicts() -> Dict[str, Dict[str, Set[str]]]:
     """Return a static conflict map between vehicle movements and crossings."""
 
-    def patt(*values: str) -> Set[str]:
-        return set(values)
+    status_to_key = {"never": "mandatory", "left": "left", "right": "right"}
 
-    main_west = patt("ped_main_west", "ped_main_west_EB", "ped_main_west_WB")
-    main_east = patt("ped_main_east", "ped_main_east_EB", "ped_main_east_WB")
-    mid = patt("ped_mid", "ped_mid_EB", "ped_mid_WB")
+    conflicts: Dict[str, Dict[str, Set[str]]] = {}
+    for movement, segment_map in _MOVEMENT_SEGMENT_STATUS.items():
+        info: Dict[str, Set[str]] = {"mandatory": set(), "left": set(), "right": set()}
+        for segment, status in segment_map.items():
+            ped_names = _SEGMENT_TO_PEDS.get(segment)
+            if not ped_names:
+                continue
+            target_key = status_to_key.get(status)
+            if not target_key:
+                continue
+            for ped_name in ped_names:
+                info[target_key].add(ped_name)
+        conflicts[movement] = info
 
-    return {
-        "main_EB_T": {
-            "mandatory": patt(
-                *main_west,
-                *main_east,
-                "ped_minor_north",
-                "ped_minor_south",
-                *mid,
-            )
-        },
-        "main_WB_T": {
-            "mandatory": patt(
-                *main_west,
-                *main_east,
-                "ped_minor_north",
-                "ped_minor_south",
-                *mid,
-            )
-        },
-        "main_EB_L": {
-            "mandatory": patt("ped_main_west", "ped_main_west_EB"),
-            "left": patt("ped_minor_north"),
-        },
-        "main_EB_R": {
-            "mandatory": patt("ped_main_west", "ped_main_west_EB"),
-            "right": patt("ped_minor_south"),
-        },
-        "main_WB_L": {
-            "mandatory": patt("ped_main_east", "ped_main_east_WB"),
-            "left": patt("ped_minor_south"),
-        },
-        "main_WB_R": {
-            "mandatory": patt("ped_main_east", "ped_main_east_WB"),
-            "right": patt("ped_minor_north"),
-        },
-        "minor_N_T": {
-            "mandatory": patt("ped_minor_north", *main_west, *main_east),
-        },
-        "minor_N_L": {
-            "mandatory": patt("ped_minor_north"),
-            "left": patt("ped_main_east", "ped_main_east_EB"),
-        },
-        "minor_N_R": {
-            "mandatory": patt("ped_minor_north"),
-            "right": patt("ped_main_west", "ped_main_west_WB"),
-        },
-        "minor_S_T": {
-            "mandatory": patt("ped_minor_south", *main_west, *main_east),
-        },
-        "minor_S_L": {
-            "mandatory": patt("ped_minor_south"),
-            "left": patt("ped_main_west", "ped_main_west_EB"),
-        },
-        "minor_S_R": {
-            "mandatory": patt("ped_minor_south"),
-            "right": patt("ped_main_east", "ped_main_east_WB"),
-        },
+    for movement in ("main_EB_T", "main_WB_T"):
+        info = conflicts.setdefault(movement, {"mandatory": set(), "left": set(), "right": set()})
+        info["mandatory"].update({"ped_mid", "ped_mid_EB", "ped_mid_WB"})
+
+    coupled_segments = {
+        "ped_main_west": ("ped_main_west_EB", "ped_main_west_WB"),
+        "ped_main_east": ("ped_main_east_EB", "ped_main_east_WB"),
     }
+    for info in conflicts.values():
+        for merged, components in coupled_segments.items():
+            for key in ("mandatory", "left", "right"):
+                if any(component in info[key] for component in components):
+                    info[key].add(merged)
+
+    return conflicts
 
 
 _VEHICLE_CONFLICTS = _vehicle_conflicts()
