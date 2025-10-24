@@ -1,0 +1,26 @@
+﻿left = 設定によって許可される、左折先との交錯; right = 設定によって許可される、右折先との交錯; never = いかなる設定でも許可されない交錯; 空欄 = 交錯がない/横断歩道がない,,,crossing_position▶,crossing S-W,crossing S-E,crossing E-S,crossing E-N,crossing N-E,crossing N-W,crossing W-N,crossing W-S
+▼Junction type,▼prefix,▼movement,▼<note>▶,<北に分岐して伸ばす`tee`交差点なら存在しない>,<北に分岐して伸ばす`tee`交差点なら存在しない>,<>,<>,<南に分岐して伸ばす`tee`交差点なら存在しない>,<南に分岐して伸ばす`tee`交差点なら存在しない>,<>,<>
+,EB,L,"<交差点が南に延びるT字路なら、leftと衝突する横断歩道(N-E)はない。N-Wもない。そもそも左折後に進む先がない。完全体の十字路の場合で想定している交錯なので、対象となる横断歩道が存在しない場合、ない横断歩道の属性を変えようとして不具合を起こさないようにするべき。以下EB,WBのL,Rとも同じ。>",,,,,,left,never,
+,EB,T,<>,,,,never,,,never,
+,EB,R,<>,,right,,,,,never,
+,EB,U,<>,,,,,,,never,right
+,WB,L,<>,,left,never,,,,,
+,WB,T,<>,,,never,,,,,never
+,WB,R,<>,,,never,,,right,,
+,WB,U,<>,,,never,right,,,,
+,main,L,"<EB, WBと同様に、交差点が南に延びるT字路なら、N-E, N-Wは無いので、注意>",,left,never,,,left,never,
+,main,T,<>,,,never,never,,,never,never
+,main,R,<>,,right,never,,,right,never,
+,main,U,<>,,,never,right,,,never,right
+cross,minor,L,"<mainはいつでも必ずEB, WBが存在する。一方でminorは、交差点のタイプによって、存在するかどうかが分かれる。十字路/北に分岐する十字路/南に〃 で3パターンの交錯が存在する>",never,,,left,never,,,left
+cross,minor,T,<>,never,never,,,never,never,,
+cross,minor,R,<>,never,,,right,never,,,right
+cross,minor,U,<minorからはいつでもUターン禁止にしているはず?理論上の値>,never,right,,,never,right,,
+tee-N,minor,L,<>,,,,left,never,,,
+tee-N,minor,T,<T字路の突き当たりを直進するmovement(ありえない)>,,,,,never,,,
+tee-N,minor,R,<>,,,,,never,,,right
+tee-N,minor,U,<minorからはいつでもUターン禁止にしているはず?理論上の値>,,,,,never,right,,
+tee-S,minor,L,<>,never,,,,,,,left
+tee-S,minor,T,<T字路の突き当たりを直進するmovement(ありえない)>,never,,,,,,,
+tee-S,minor,R,<>,never,,,right,,,,
+tee-S,minor,U,<minorからはいつでもUターン禁止にしているはず?理論上の値>,never,right,,,,,,
