@@ -159,11 +159,24 @@ class SignalLink:
 
 
 @dataclass(frozen=True)
+class ControlledConnection:
+    """Descriptor for a vehicle connection controlled by a traffic light."""
+
+    tl_id: str
+    from_edge: str
+    to_edge: str
+    from_lane: int
+    to_lane: int
+    link_index: int
+
+
+@dataclass(frozen=True)
 class ConnectionsRenderResult:
     """Rendered XML and signal metadata for vehicle connections and crossings."""
 
     xml: str
     links: List[SignalLink]
+    controlled_connections: List[ControlledConnection]
 
 
 @dataclass(frozen=True)

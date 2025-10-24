@@ -12,6 +12,7 @@ from ..domain.models import (
     LaneOverride,
     MainRoadConfig,
     PedestrianConflictConfig,
+    ControlledConnection,
     SignalLink,
     SignalProfileDef,
     SnapRule,
@@ -36,6 +37,17 @@ def _group_links_by_tl(links: Iterable[SignalLink]) -> Dict[str, List[SignalLink
         grouped[link.tl_id].append(link)
     for arr in grouped.values():
         arr.sort(key=lambda item: item.slot_index)
+    return grouped
+
+
+def _group_controlled_connections(
+    connections: Iterable[ControlledConnection],
+) -> Dict[str, List[ControlledConnection]]:
+    grouped: Dict[str, List[ControlledConnection]] = defaultdict(list)
+    for conn in connections:
+        grouped[conn.tl_id].append(conn)
+    for arr in grouped.values():
+        arr.sort(key=lambda item: item.link_index)
     return grouped
 
 
@@ -399,6 +411,7 @@ def render_tll_xml(
     lane_overrides: Sequence[LaneOverride],
     signal_profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]],
     connection_links: Sequence[SignalLink],
+    controlled_connections: Sequence[ControlledConnection],
 ) -> str:
     """Render a ``net.tll.xml`` document with deterministic ordering."""
 
@@ -406,6 +419,7 @@ def render_tll_xml(
 
     programs = _collect_programs(clusters, signal_profiles_by_kind)
     links_by_tl = _group_links_by_tl(connection_links)
+    controlled_by_tl = _group_controlled_connections(controlled_connections)
 
     lines: List[str] = [
         '<tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
@@ -418,6 +432,16 @@ def render_tll_xml(
         program = programs[tl_id]
         tl_lines = _render_tl_logic(program, links_by_tl[tl_id])
         lines.extend(tl_lines)
+
+    for tl_id in sorted(controlled_by_tl):
+        if tl_id not in programs:
+            continue
+        for conn in controlled_by_tl[tl_id]:
+            lines.append(
+                f'    <connection from="{conn.from_edge}" to="{conn.to_edge}" '
+                f'fromLane="{conn.from_lane}" toLane="{conn.to_lane}" '
+                f'tl="{conn.tl_id}" linkIndex="{conn.link_index}"/>'
+            )
 
     lines.append("</tlLogics>")
     return "\n".join(lines)

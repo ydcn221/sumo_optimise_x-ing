@@ -17,6 +17,7 @@ from ..builder.ids import (
 )
 from ..domain.models import (
     ConnectionsRenderResult,
+    ControlledConnection,
     Cluster,
     Defaults,
     EventKind,
@@ -66,10 +67,6 @@ class ConnectionRecord:
             f'fromLane="{self.from_lane}"',
             f'toLane="{self.to_lane}"',
         ]
-        if self.tl_id:
-            attrs.append(f'tl="{self.tl_id}"')
-        if self.link_index is not None:
-            attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <connection {" ".join(attrs)}/>'
 
 
@@ -87,14 +84,11 @@ class CrossingRecord:
 
     def to_xml(self) -> str:
         attrs = [
-            f'id="{self.crossing_id}"',
             f'node="{self.node_id}"',
             f'edges="{self.edges}"',
             'priority="true"',
             f'width="{self.width:.3f}"',
         ]
-        if self.tl_id:
-            attrs.append(f'tl="{self.tl_id}"')
         if self.link_index is not None:
             attrs.append(f'linkIndex="{self.link_index}"')
         return f'  <crossing {" ".join(attrs)}/>'
@@ -155,7 +149,7 @@ class LinkEmissionCollector:
             )
         )
 
-    def finalize(self) -> Tuple[List[str], List[SignalLink]]:
+    def finalize(self) -> Tuple[List[str], List[SignalLink], List[ControlledConnection]]:
         ordered_connections = sorted(self.connections, key=lambda rec: rec.order)
         unique_connections: List[ConnectionRecord] = []
         seen_keys: Set[Tuple[str, str, int, int]] = set()
@@ -183,6 +177,7 @@ class LinkEmissionCollector:
                 crossings_by_tl[record.tl_id].append(record)
 
         metadata: List[SignalLink] = []
+        controlled_connections: List[ControlledConnection] = []
 
         def connection_sort_key(record: ConnectionRecord) -> Tuple[int, int, int]:
             orientation = _connection_orientation(record.from_edge)
@@ -212,6 +207,16 @@ class LinkEmissionCollector:
                         element_id=f"{record.from_edge}->{record.to_edge}",
                     )
                 )
+                controlled_connections.append(
+                    ControlledConnection(
+                        tl_id=tl_id,
+                        from_edge=record.from_edge,
+                        to_edge=record.to_edge,
+                        from_lane=record.from_lane,
+                        to_lane=record.to_lane,
+                        link_index=idx,
+                    )
+                )
 
             crossing_records = crossings_by_tl.get(tl_id, [])
             crossing_records.sort(key=crossing_sort_key)
@@ -239,7 +244,7 @@ class LinkEmissionCollector:
             items.append((record.order, record.to_xml()))
 
         lines = [line for _, line in sorted(items, key=lambda pair: pair[0])]
-        return lines, metadata
+        return lines, metadata, controlled_connections
 
 
 def _edge_orientation(edge_id: str) -> Optional[int]:
@@ -1048,8 +1053,8 @@ def render_connections_xml(
                 movement_prefix="minor_S",
             )
 
-    inner_lines, metadata = collector.finalize()
+    inner_lines, metadata, controlled = collector.finalize()
     all_lines = ["<connections>", *inner_lines, "</connections>"]
     xml = "\n".join(all_lines) + "\n"
     LOG.info("rendered connections (%d lines)", len(all_lines))
-    return ConnectionsRenderResult(xml=xml, links=metadata)
+    return ConnectionsRenderResult(xml=xml, links=metadata, controlled_connections=controlled)
