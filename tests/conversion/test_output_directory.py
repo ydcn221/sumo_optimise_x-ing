@@ -8,6 +8,7 @@ from sqids import Sqids
 
 from sumo_optimise.conversion.domain.models import OutputDirectoryTemplate
 from sumo_optimise.conversion.utils import io
+from sumo_optimise.conversion.utils.constants import TLL_FILE_NAME
 
 
 def _freeze_time(monkeypatch, *, now: datetime.datetime, ns: int) -> None:
@@ -71,7 +72,7 @@ def test_build_artifacts_exposes_tll_path(tmp_path: Path, monkeypatch: pytest.Mo
 
     artifacts = io.ensure_output_directory()
 
-    assert artifacts.tll_path == artifacts.outdir / "net.tll.xml"
+    assert artifacts.tll_path == artifacts.outdir / TLL_FILE_NAME
 
 
 def test_persist_xml_writes_all_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
