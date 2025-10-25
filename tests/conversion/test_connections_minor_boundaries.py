@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sumo_optimise.conversion.builder.ids import main_edge_id, minor_edge_id
+from sumo_optimise.conversion.builder.ids import cluster_id, main_edge_id, minor_edge_id
 from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
@@ -42,6 +42,7 @@ def _build_args(
                 pos_m_raw=float(pos),
                 pos_m=pos,
                 template_id=template_id,
+                signalized=True,
             )
         ],
     )
@@ -65,7 +66,8 @@ def _build_args(
 
 def test_minor_south_branch_uses_available_east_segment_at_zero():
     args = _build_args(pos=0, length=60)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(0, "to", "S")
     east_edge = main_edge_id("EB", 0, 60)
@@ -76,7 +78,8 @@ def test_minor_south_branch_uses_available_east_segment_at_zero():
 def test_minor_north_branch_uses_available_west_segment_at_grid_max():
     length = 80
     args = _build_args(pos=length, length=length)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(length, "to", "N")
     west_edge = main_edge_id("WB", 0, length)
@@ -86,7 +89,8 @@ def test_minor_north_branch_uses_available_west_segment_at_grid_max():
 
 def test_minor_straight_between_branches_is_emitted():
     args = _build_args(pos=30, length=60)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(30, "to", "N")
     straight_edge = minor_edge_id(30, "from", "S")
@@ -96,7 +100,8 @@ def test_minor_straight_between_branches_is_emitted():
 
 def test_minor_straight_removed_when_median_continuous():
     args = _build_args(pos=30, length=60, median=True)
-    xml = render_connections_xml(*args)
+    result = render_connections_xml(*args)
+    xml = result.xml
 
     in_edge = minor_edge_id(30, "to", "N")
     straight_edge = minor_edge_id(30, "from", "S")
@@ -104,3 +109,16 @@ def test_minor_straight_removed_when_median_continuous():
 
     assert f'from="{in_edge}" to="{straight_edge}"' not in xml
     assert f'from="{in_edge}" to="{left_edge}"' in xml
+
+
+def test_link_metadata_orders_connections_for_signal():
+    pos = 30
+    args = _build_args(pos=pos, length=60)
+    result = render_connections_xml(*args)
+
+    tl = cluster_id(pos)
+    links = [link for link in result.links if link.tl_id == tl and link.kind == "connection"]
+    slots = [link.slot_index for link in links]
+    link_indices = [link.link_index for link in links]
+    assert slots == list(range(len(slots)))
+    assert link_indices == list(range(len(link_indices)))
