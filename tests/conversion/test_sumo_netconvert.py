@@ -24,7 +24,7 @@ class _CompletedProcess:
 
 
 def test_run_two_step_netconvert_includes_tll_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure the third netconvert call references the generated ``1-generated.tll.xml`` file."""
+    """Ensure the final netconvert call references the generated ``1-generated.tll.xml`` file."""
 
     commands: list[list[str]] = []
 
@@ -47,6 +47,11 @@ def test_run_two_step_netconvert_includes_tll_file(tmp_path: Path, monkeypatch: 
 
     netconvert.run_two_step_netconvert(outdir, nodes, edges, connections, tll)
 
-    step3 = commands[2]
-    assert "--tllogic-files" in step3
-    assert step3[step3.index("--tllogic-files") + 1] == TLL_FILE_NAME
+    assert len(commands) == 2
+
+    step2 = commands[1]
+    assert "--tllogic-files" in step2
+    assert step2[step2.index("--tllogic-files") + 1] == TLL_FILE_NAME
+
+    step1 = commands[0]
+    assert "--no-internal-links" in step1

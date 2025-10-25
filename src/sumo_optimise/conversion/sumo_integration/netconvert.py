@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..utils.constants import NETWORK_FILE_NAME
+from ..utils.constants import PLAIN_NETCONVERT_PREFIX, NETWORK_FILE_NAME
 from ..utils.errors import NetconvertExecutionError
 from ..utils.logging import get_logger
 
@@ -20,55 +20,48 @@ def run_two_step_netconvert(
     connections_file: Path,
     tll_file: Optional[Path],
 ) -> None:
-    """Execute the three-stage netconvert workflow required by SUMO."""
+    """Execute the two-stage netconvert workflow required by SUMO."""
 
     exe = shutil.which("netconvert")
     if exe is None:
         LOG.warning("netconvert not found in PATH. Skip multi-step conversion.")
         return
 
-    base_network = "2-n+e.net.xml"
-    plain_prefix = "3-cooked"
+    plain_prefix = PLAIN_NETCONVERT_PREFIX
 
     step1 = [
         exe,
+        "--lefthand",
+        "--sidewalks.guess",
+        "--no-internal-links",
         "--node-files",
         nodes_file.name,
         "--edge-files",
         edges_file.name,
-        "--lefthand",
-        "--sidewalks.guess",
-        "--output-file",
-        base_network,
-    ]
-    step2 = [
-        exe,
-        "--sumo-net-file",
-        base_network,
         "--plain-output-prefix",
         plain_prefix,
     ]
-    step3 = [
+    step2 = [
         exe,
+        "--lefthand",
         "--node-files",
         f"{plain_prefix}.nod.xml",
         "--edge-files",
         f"{plain_prefix}.edg.xml",
         "--connection-files",
         connections_file.name,
-        "--lefthand",
     ]
     if tll_file is not None:
-        step3 += [
+        step2 += [
             "--tllogic-files",
             tll_file.name,
         ]
-    step3 += [
+    step2 += [
         "--output-file",
         NETWORK_FILE_NAME,
     ]
 
-    for idx, cmd in enumerate((step1, step2, step3), start=1):
+    for idx, cmd in enumerate((step1, step2), start=1):
         LOG.info("netconvert step %d: %s", idx, " ".join(cmd))
         try:
             proc = subprocess.run(
