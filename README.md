@@ -1,6 +1,6 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `4-n+e+c+t.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
 
 > This repository hosts the modular corridor converter introduced for schema v1.3.
 
@@ -14,7 +14,7 @@ Generate a SUMO network (PlainXML) for a **single, straight main road** with ort
 * **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
 * **Vehicle turn connections** (L/T/R) with deterministic lane mapping (left-to-left, straight fan-out, rightmost sharing).
-* **Three-step `netconvert` integration** (optional) and structured build logs.
+* **Two-step `netconvert` integration** (optional) and structured build logs.
 
 ---
 
@@ -77,7 +77,7 @@ $ python -m pip install -e .
 
 1. **Prepare input JSON** (v1.3). Use your own file or adapt the provided sample under `data/reference/`.
 2. **Run the CLI** to build PlainXML (nodes/edges/connections).
-3. **Optionally run `netconvert`** to produce `4-n+e+c+t.net.xml`.
+3. **Optionally run `netconvert`** to produce `3-n+e+c+t.net.xml`.
 
 ### Minimal build
 
@@ -106,28 +106,24 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 Some setups run it automatically. If not, you can run manually:
 
 ```bash
-# Step 1: build an initial SUMO network
+# Step 1: derive cleaned PlainXML geometry (no internal links)
 $ netconvert --lefthand \
+  --sidewalks.guess \
+  --no-internal-links \
   --node-files 1-generated.nod.xml \
   --edge-files 1-generated.edg.xml \
-  --sidewalks.guess \
-  --output 2-n+e.net.xml
+  --plain-output-prefix 2-cooked
 
-# Step 2: round-trip to PlainXML
-$ netconvert \
-  --sumo-net-file 2-n+e.net.xml \
-  --plain-output-prefix 3-cooked
-
-# Step 3: merge crossings/connections/signals
+# Step 2: merge crossings/connections/signals into the final net
 $ netconvert --lefthand \
-  --node-files 3-cooked.nod.xml \
-  --edge-files 3-cooked.edg.xml \
+  --node-files 2-cooked.nod.xml \
+  --edge-files 2-cooked.edg.xml \
   --connection-files 1-generated.con.xml \
   --tllogic-files 1-generated.tll.xml \
-  --output 4-n+e+c+t.net.xml
+  --output 3-n+e+c+t.net.xml
 ```
 
-Open `4-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
+Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
@@ -195,7 +191,7 @@ Typical flags (names may vary by release):
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
-  * `2-n+e.net.xml`, `3-cooked.*`, and `4-n+e+c+t.net.xml` — if `netconvert` runs.
+  * `2-cooked.*` PlainXML and `3-n+e+c+t.net.xml` — if `netconvert` runs.
 
 ---
 

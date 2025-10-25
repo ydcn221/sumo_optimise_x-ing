@@ -12,6 +12,7 @@ NODES_FILE_NAME = "1-generated.nod.xml"
 EDGES_FILE_NAME = "1-generated.edg.xml"
 CONNECTIONS_FILE_NAME = "1-generated.con.xml"
 TLL_FILE_NAME = "1-generated.tll.xml"
-NETWORK_FILE_NAME = "4-n+e+c+t.net.xml"
+PLAIN_NETCONVERT_PREFIX = "2-cooked"
+NETWORK_FILE_NAME = "3-n+e+c+t.net.xml"
 
 MANIFEST_NAME = "manifest.json"

@@ -36,7 +36,7 @@ sumo_optimise/
       edges.py             # Write 1-generated.edg.xml
       connections.py       # Write 1-generated.con.xml (vehicle connections + crossings)
     sumo_integration/
-      netconvert.py        # Three-step netconvert wrapper (optional)
+      netconvert.py        # Two-step netconvert wrapper (optional)
       netedit.py           # Helper for launching netedit (optional)
     domain/
       models.py            # Dataclasses/Enums: Snap, Main, Templates, Signals, Events, IR
@@ -70,7 +70,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
   * `1-generated.edg.xml` — edges (main segments between breakpoints; minor to/from main).
   * `1-generated.con.xml` — vehicle `<connection>` and pedestrian `<crossing>` elements.
   * `1-generated.tll.xml` — `<tlLogic>` programmes assembled from signal profiles.
-* **Optional:** `2-n+e.net.xml`, `3-cooked.*`, and `4-n+e+c+t.net.xml` via SUMO `netconvert` (three-step).
+* **Optional:** `2-cooked.*` and `3-n+e+c+t.net.xml` via SUMO `netconvert` (two-step).
 
 **Assumptions:** left-hand traffic (LHT), main and minor roads are straight and orthogonal.
 
@@ -81,9 +81,9 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 **Environment (Windows/Unix):**
 
 * Python 3.11 or 3.12 recommended (3.8+ supported).
-* SUMO tools on `PATH` if you need final `4-n+e+c+t.net.xml`:
+* SUMO tools on `PATH` if you need final `3-n+e+c+t.net.xml`:
 
-  * `netconvert` (required for three-step integration).
+  * `netconvert` (required for two-step integration).
   * `netedit` (optional, visualization).
 * Python dependency: `jsonschema` (Draft-07). Install via pip.
 
@@ -107,7 +107,7 @@ python -m sumo_optimise.conversion.cli --input path/to/spec.json
 
 * Created under `plainXML_out/<mmdd_###>/`.
 * Files: `1-generated.nod.xml`, `1-generated.edg.xml`, `1-generated.con.xml`, `1-generated.tll.xml`, `build.log`.
-* If `netconvert` found: `2-n+e.net.xml`, `3-cooked.*`, `4-n+e+c+t.net.xml`.
+* If `netconvert` found: `2-cooked.*`, `3-n+e+c+t.net.xml`.
 
 ---
 
@@ -123,19 +123,18 @@ python -m sumo_optimise.conversion.cli --input path/to/spec.json
    ```
 3. Verify outputs in `plainXML_out/.../` and inspect `build.log` (no ERROR).
 
-### B. Three-step `netconvert` (if skipped automatically)
+### B. Two-step `netconvert` (if skipped automatically)
 
 From the output directory:
 
 ```bash
-netconvert --lefthand --node-files 1-generated.nod.xml --edge-files 1-generated.edg.xml \
-  --sidewalks.guess --output-file 2-n+e.net.xml
+netconvert --lefthand --sidewalks.guess --no-internal-links \
+  --node-files 1-generated.nod.xml --edge-files 1-generated.edg.xml \
+  --plain-output-prefix 2-cooked
 
-netconvert --sumo-net-file 2-n+e.net.xml --plain-output-prefix 3-cooked
-
-netconvert --lefthand --node-files 3-cooked.nod.xml --edge-files 3-cooked.edg.xml \
+netconvert --lefthand --node-files 2-cooked.nod.xml --edge-files 2-cooked.edg.xml \
   --connection-files 1-generated.con.xml --tllogic-files 1-generated.tll.xml \
-  --output-file 4-n+e+c+t.net.xml
+  --output-file 3-n+e+c+t.net.xml
 ```
 
 ### C. Smoke test (no tests folder present)
@@ -225,12 +224,11 @@ After editing:
 
 ## 10) SUMO Integration Notes
 
-* The three-step `netconvert` wrapper **must**:
+* The two-step `netconvert` wrapper **must**:
 
-  * Pass `--lefthand` on the first and third commands.
-  * Use `--sidewalks.guess` on the first pass (nodes+edges ⇒ `2-n+e.net.xml`).
-  * Generate `3-cooked.*` via `--plain-output-prefix` in the second pass.
-  * Merge connections and signal logic in the third pass to produce `4-n+e+c+t.net.xml`.
+  * Pass `--lefthand` on both commands.
+  * Use `--sidewalks.guess` and `--no-internal-links` on the first pass to emit `2-cooked.*` via `--plain-output-prefix`.
+  * Merge connections and signal logic in the second pass to produce `3-n+e+c+t.net.xml`.
 * If `netconvert` is not on PATH:
 
   * Log a clear WARNING and skip; do not fail the whole pipeline.
@@ -243,7 +241,7 @@ After editing:
 * **Module import errors:** ensure `pip install -e .` was executed; run from repo root.
 * **Schema missing:** verify `sumo_optimise/conversion/data/schema.json` exists or pass `--schema` pointing to a valid path.
 * **No outputs:** check `build.log` for `[SCH]` or `[VAL]` errors; fix input spec accordingly.
-* **No `4-n+e+c+t.net.xml`:** `netconvert` likely missing; install SUMO or run the three-step commands manually.
+* **No `3-n+e+c+t.net.xml`:** `netconvert` likely missing; install SUMO or run the two-step commands manually.
 * **Crossing duplication at junction:** confirm absorption logic in semantics and crossing planner; mid-block at same pos as junction should not double-output.
 
 ---
