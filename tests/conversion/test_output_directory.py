@@ -8,6 +8,7 @@ from sqids import Sqids
 
 from sumo_optimise.conversion.domain.models import OutputDirectoryTemplate
 from sumo_optimise.conversion.utils import io
+from sumo_optimise.conversion.utils.constants import TLL_FILE_NAME
 
 
 def _freeze_time(monkeypatch, *, now: datetime.datetime, ns: int) -> None:
@@ -62,3 +63,34 @@ def test_run_template_must_be_relative(tmp_path: Path, monkeypatch: pytest.Monke
 
     with pytest.raises(ValueError):
         io.ensure_output_directory(template)
+
+
+def test_build_artifacts_exposes_tll_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 3, 5, 7, 8, 9, 123456)
+    _freeze_time(monkeypatch, now=frozen, ns=123)
+
+    artifacts = io.ensure_output_directory()
+
+    assert artifacts.tll_path == artifacts.outdir / TLL_FILE_NAME
+
+
+def test_persist_xml_writes_all_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 6, 1, 12, 0, 0)
+    _freeze_time(monkeypatch, now=frozen, ns=321)
+
+    artifacts = io.ensure_output_directory()
+
+    io.persist_xml(
+        artifacts,
+        nodes="<nodes/>",
+        edges="<edges/>",
+        connections="<connections/>",
+        tll="<tlLogics/>",
+    )
+
+    assert artifacts.nodes_path.read_text(encoding="utf-8") == "<nodes/>"
+    assert artifacts.edges_path.read_text(encoding="utf-8") == "<edges/>"
+    assert artifacts.connections_path.read_text(encoding="utf-8") == "<connections/>"
+    assert artifacts.tll_path.read_text(encoding="utf-8") == "<tlLogics/>"

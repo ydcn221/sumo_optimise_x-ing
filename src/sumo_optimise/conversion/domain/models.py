@@ -147,6 +147,39 @@ class BreakpointInfo:
 
 
 @dataclass(frozen=True)
+class SignalLink:
+    """Metadata describing the ordering of a controllable signal element."""
+
+    tl_id: str
+    movement: str
+    slot_index: int
+    link_index: int
+    kind: str
+    element_id: str
+
+
+@dataclass(frozen=True)
+class ControlledConnection:
+    """Descriptor for a vehicle connection controlled by a traffic light."""
+
+    tl_id: str
+    from_edge: str
+    to_edge: str
+    from_lane: int
+    to_lane: int
+    link_index: int
+
+
+@dataclass(frozen=True)
+class ConnectionsRenderResult:
+    """Rendered XML and signal metadata for vehicle connections and crossings."""
+
+    xml: str
+    links: List[SignalLink]
+    controlled_connections: List[ControlledConnection]
+
+
+@dataclass(frozen=True)
 class CorridorSpec:
     version: str
     snap: SnapRule
@@ -171,6 +204,8 @@ class BuildResult:
     nodes_xml: str
     edges_xml: str
     connections_xml: str
+    connection_links: List[SignalLink]
+    tll_xml: str
     manifest_path: Optional[Path] = None
 
 
@@ -179,4 +214,5 @@ class CorridorArtifacts:
     nodes_path: Path
     edges_path: Path
     connections_path: Path
+    tll_path: Path
 
