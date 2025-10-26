@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from ..utils.constants import OUTPUT_DIR_PREFIX
 
@@ -180,6 +180,62 @@ class ConnectionsRenderResult:
 
 
 @dataclass(frozen=True)
+class VehicleEndpoint:
+    """Descriptor for a vehicle endpoint used when building demand flows."""
+
+    id: str
+    pos: int
+    category: str
+    edge_id: str
+    lane_count: int
+    is_inbound: bool
+    tl_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PedestrianEndpoint:
+    """Descriptor for a pedestrian crossing endpoint in the demand model."""
+
+    id: str
+    pos: int
+    movement: str
+    node_id: str
+    edges: Tuple[str, ...]
+    width: float
+    tl_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class VehicleFlow:
+    """Placeholder descriptor for future vehicle demand flows."""
+
+    id: str
+    origin: str
+    destination: str
+    description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PedestrianFlow:
+    """Placeholder descriptor for future pedestrian demand flows."""
+
+    id: str
+    origin: str
+    destination: str
+    description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EndpointCatalog:
+    """Collection of vehicle and pedestrian endpoints/flows for demand planning."""
+
+    vehicle_endpoints: List[VehicleEndpoint]
+    pedestrian_endpoints: List[PedestrianEndpoint]
+    vehicle_flows: List[VehicleFlow] = field(default_factory=list)
+    pedestrian_flows: List[PedestrianFlow] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class CorridorSpec:
     version: str
     snap: SnapRule
@@ -206,6 +262,7 @@ class BuildResult:
     connections_xml: str
     connection_links: List[SignalLink]
     tll_xml: str
+    demand_xml: Optional[str] = None
     manifest_path: Optional[Path] = None
 
 
