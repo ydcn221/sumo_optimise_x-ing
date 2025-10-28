@@ -205,6 +205,48 @@ class PedestrianEndpoint:
     tl_id: Optional[str] = None
 
 
+class PedestrianSegmentKind(str, Enum):
+    ENDPOINT = "endpoint"
+    POSITION = "position"
+    RANGE = "range"
+
+
+class PedestrianRateKind(str, Enum):
+    ABSOLUTE = "per_hour"
+    PER_METER = "per_hour_per_m"
+
+
+@dataclass(frozen=True)
+class VehicleDemandSegment:
+    """Demand magnitude tied to a vehicle endpoint."""
+
+    endpoint_id: str
+    departures_per_hour: float
+    arrivals_per_hour: float
+
+
+@dataclass(frozen=True)
+class PedestrianDemandSegment:
+    """Demand magnitude for pedestrians, covering point or ranged scopes."""
+
+    kind: PedestrianSegmentKind
+    rate_kind: PedestrianRateKind
+    departures: float
+    arrivals: float
+    side: Optional[DirectionMain] = None
+    start_m: Optional[int] = None
+    end_m: Optional[int] = None
+    endpoint_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DemandInput:
+    """Aggregate view of vehicle and pedestrian demand parsed from CSV inputs."""
+
+    vehicles: List[VehicleDemandSegment]
+    pedestrians: List[PedestrianDemandSegment]
+
+
 @dataclass(frozen=True)
 class VehicleFlow:
     """Placeholder descriptor for future vehicle demand flows."""
