@@ -36,3 +36,9 @@ class IoError(BuildError):
 
 class NetconvertExecutionError(BuildError):
     pass
+
+
+class DemandValidationError(BuildError):
+    """Raised when demand CSV inputs fail structural or catalog validation."""
+
+    pass

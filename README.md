@@ -162,6 +162,58 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
+## Demand CSV specification
+
+Demand files supplement the JSON specification when generating SUMO flows. Two
+UTF-8 CSVs are expected (headers required):
+
+### Vehicles
+
+Columns: `endpoint_id`, any column containing `generated`, and any column
+containing `attracted`. Additional tokens may be present (e.g.
+`generated_veh_per_h`) as long as the keywords remain intact.
+
+* `endpoint_id` — identifier returned by the endpoint catalogue
+  (:class:`sumo_optimise.conversion.domain.models.VehicleEndpoint`).
+* `generated*` — vehicles leaving the corridor via the endpoint (veh/h).
+* `attracted*` — vehicles entering the corridor via the endpoint (veh/h).
+
+### Pedestrians
+
+The pedestrian CSV serves two distinct scopes: **catalogued endpoints** and
+**main-road frontage segments**. Column names must contain `generated`/
+`attracted`; per-metre rates additionally require the suffix `per_m`.
+
+* `endpoint_id` — direct reference to a pedestrian endpoint (side inferred from
+  the catalogue metadata; both EB/WB main-road endpoints are listed separately).
+* `location_id` — reference to a main-road frontage. Two schemas are allowed and
+  strictly validated:
+  * Point frontage: `Walk.Main.<side>.P<pos>` (e.g. `Walk.Main.EB.P050`).
+  * Range frontage: `Walk.Main.<side>.R<start>-<end>` (e.g.
+    `Walk.Main.WB.R000-200`).
+* `generated*` / `attracted*` — absolute pedestrian volumes per hour.
+* `generated*_per_m` / `attracted*_per_m` — distributed rates per metre.
+
+Each row must match **exactly one** of the supported layouts:
+
+1. `endpoint_id`, `generated*`, `attracted*`
+   *Demand tied directly to a pedestrian endpoint.*
+2. `location_id` (point), `generated*`, `attracted*`
+   *Point frontage along the main road. The `location_id` encodes both the side
+   (`EB` = north, `WB` = south) and the snapped position. If `position_m` is
+   provided it must match the ID.*
+3. `location_id` (range), `generated*_per_m`, `attracted*_per_m`
+   *Distributed frontage demand. The `location_id` encodes the side and
+   inclusive range. Optional `start_m`/`end_m` columns must match the ID.*
+
+Side matching relies on the endpoint catalogue produced by
+``sumo_optimise.conversion.demand.catalog``. Structural mistakes (missing
+columns, ambiguous positions, unknown IDs, range mismatches) are collected and
+raised as a single ``DemandValidationError`` per CSV after the entire file has
+been inspected.
+
+---
+
 ## CLI usage
 
 Get the full set of options:
