@@ -35,35 +35,35 @@ def _build_options() -> BuildOptions:
 
 _SMALL_DEMO_CASES: Iterable[Tuple[str, str]] = [
     (
-        'small_demo_1.json',
+        'SUMO_OPTX_demo_1.json',
         'data/reference/ideal_XML_demo_1/demo_1_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_1_conflict.json',
+        'SUMO_OPTX_demo_1_conflict.json',
         'data/reference/ideal_XML_demo_1_conflict/demo_1_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_2.json',
+        'SUMO_OPTX_demo_2.json',
         'data/reference/ideal_XML_demo_2/demo_2_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_2_conflict.json',
+        'SUMO_OPTX_demo_2_conflict.json',
         'data/reference/ideal_XML_demo_2_conflict/demo_2_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_3.json',
+        'SUMO_OPTX_demo_3.json',
         'data/reference/ideal_XML_demo_3/demo_3_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_3_conflict.json',
+        'SUMO_OPTX_demo_3_conflict.json',
         'data/reference/ideal_XML_demo_3_conflict/demo_3_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_4.json',
+        'SUMO_OPTX_demo_4.json',
         'data/reference/ideal_XML_demo_4/demo_4_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_4_conflict.json',
+        'SUMO_OPTX_demo_4_conflict.json',
         'data/reference/ideal_XML_demo_4_conflict/demo_4_allowconflict_ideal.tll.xml',
     ),
 ]
