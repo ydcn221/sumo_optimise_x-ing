@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-10-29 22:13:08 by Eclipse SUMO netconvert Version 1.24.0
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <node-files value="1-generated.nod.xml"/>
+        <edge-files value="1-generated.edg.xml"/>
+    </input>
+
+    <output>
+        <plain-output-prefix value="2-cooked"/>
+    </output>
+
+    <processing>
+        <lefthand value="true"/>
+    </processing>
+
+    <junctions>
+        <no-internal-links value="true"/>
+    </junctions>
+
+    <pedestrian>
+        <sidewalks.guess value="true"/>
+    </pedestrian>
+
+</netconvertConfiguration>
+-->
+
+<tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
+    <tlLogic id="Cluster.Main.225" type="static" programID="0" offset="0">
+        <phase duration="42" state="GGrrrGGG"/>
+        <phase duration="3"  state="GGrrrGyy"/>
+        <phase duration="42" state="GGGGgGrr"/>
+        <phase duration="3"  state="GGyyyGrr"/>
+    </tlLogic>
+    <tlLogic id="Cluster.Main.75" type="static" programID="0" offset="0">
+        <phase duration="42" state="rrrGGGrrrGGG"/>
+        <phase duration="3"  state="rrrGyyrrrGyy"/>
+        <phase duration="42" state="GGgGrrGGgGrr"/>
+        <phase duration="3"  state="yyyGrryyyGrr"/>
+    </tlLogic>
+
+    <connection from="Edge.Main.EB.180-225" to="Edge.Minor.225.from.N" fromLane="1" toLane="1" tl="Cluster.Main.225" linkIndex="5"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.Main.EB.225-270" fromLane="2" toLane="1" tl="Cluster.Main.225" linkIndex="6"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.Main.EB.225-270" fromLane="3" toLane="2" tl="Cluster.Main.225" linkIndex="7"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.Minor.75.from.N" fromLane="1" toLane="1" tl="Cluster.Main.75" linkIndex="9"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.Main.EB.75-120" fromLane="2" toLane="1" tl="Cluster.Main.75" linkIndex="10"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.Main.EB.75-120" fromLane="3" toLane="2" tl="Cluster.Main.75" linkIndex="11"/>
+    <connection from="Edge.Main.WB.225-270" to="Edge.Main.WB.180-225" fromLane="1" toLane="1" tl="Cluster.Main.225" linkIndex="0"/>
+    <connection from="Edge.Main.WB.225-270" to="Edge.Main.WB.180-225" fromLane="2" toLane="2" tl="Cluster.Main.225" linkIndex="1"/>
+    <connection from="Edge.Main.WB.75-120" to="Edge.Minor.75.from.S" fromLane="1" toLane="1" tl="Cluster.Main.75" linkIndex="3"/>
+    <connection from="Edge.Main.WB.75-120" to="Edge.Main.WB.30-75" fromLane="2" toLane="1" tl="Cluster.Main.75" linkIndex="4"/>
+    <connection from="Edge.Main.WB.75-120" to="Edge.Main.WB.30-75" fromLane="3" toLane="2" tl="Cluster.Main.75" linkIndex="5"/>
+    <connection from="Edge.Minor.225.to.N" to="Edge.Main.EB.225-270" fromLane="1" toLane="1" tl="Cluster.Main.225" linkIndex="2"/>
+    <connection from="Edge.Minor.225.to.N" to="Edge.Main.EB.225-270" fromLane="2" toLane="2" tl="Cluster.Main.225" linkIndex="3"/>
+    <connection from="Edge.Minor.225.to.N" to="Edge.Minor.225.from.N" fromLane="2" toLane="1" tl="Cluster.Main.225" linkIndex="4"/>
+    <connection from="Edge.Minor.75.to.N" to="Edge.Main.EB.75-120" fromLane="1" toLane="1" tl="Cluster.Main.75" linkIndex="6"/>
+    <connection from="Edge.Minor.75.to.N" to="Edge.Main.EB.75-120" fromLane="2" toLane="2" tl="Cluster.Main.75" linkIndex="7"/>
+    <connection from="Edge.Minor.75.to.N" to="Edge.Minor.75.from.N" fromLane="2" toLane="1" tl="Cluster.Main.75" linkIndex="8"/>
+    <connection from="Edge.Minor.75.to.S" to="Edge.Main.WB.30-75" fromLane="1" toLane="1" tl="Cluster.Main.75" linkIndex="0"/>
+    <connection from="Edge.Minor.75.to.S" to="Edge.Main.WB.30-75" fromLane="2" toLane="2" tl="Cluster.Main.75" linkIndex="1"/>
+    <connection from="Edge.Minor.75.to.S" to="Edge.Minor.75.from.S" fromLane="2" toLane="1" tl="Cluster.Main.75" linkIndex="2"/>
+</tlLogics>
