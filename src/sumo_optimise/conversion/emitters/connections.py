@@ -250,14 +250,26 @@ class LinkEmissionCollector:
 def _edge_orientation(edge_id: str) -> Optional[int]:
     if not edge_id:
         return None
-    if edge_id.startswith("Edge.MinorS."):
-        return 0
-    if ".WB." in edge_id:
-        return 1
-    if edge_id.startswith("Edge.MinorN."):
-        return 2
-    if ".EB." in edge_id:
-        return 3
+
+    parts = edge_id.split(".")
+    if len(parts) < 3 or parts[0] != "Edge":
+        return None
+
+    category = parts[1]
+    if category.startswith("Minor"):
+        if category.endswith("S"):
+            return 0
+        if category.endswith("N"):
+            return 2
+        return None
+
+    if category == "Main":
+        direction = parts[2].upper()
+        if direction == "WB":
+            return 1
+        if direction == "EB":
+            return 3
+
     return None
 
 
@@ -280,7 +292,7 @@ def _crossing_orientation(crossing_id: str, edges: str) -> int:
         parts = crossing_id.split(".")
         if len(parts) >= 3:
             token = parts[2].upper()
-            mapping = {"S": 0, "E": 1, "N": 2, "W": 3}
+            mapping = {"S": 0, "N": 2}
             if token in mapping:
                 return mapping[token]
     if crossing_id.startswith("Cross."):
@@ -300,9 +312,9 @@ def _crossing_orientation(crossing_id: str, edges: str) -> int:
 
 
 def _crossing_movement_priority(movement: str) -> int:
-    if movement.endswith("_EB"):
+    if movement.endswith("_north") or movement.endswith("_EB"):
         return 0
-    if movement.endswith("_WB"):
+    if movement.endswith("_south") or movement.endswith("_WB"):
         return 1
     return 0
 
@@ -728,19 +740,19 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if split_main:
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "West", "EB"),
+                        crossing_id=crossing_id_main_split(pos, "West", "north"),
                         node_id=node,
                         edges=eb_edge,
                         width=width,
-                        movement="ped_main_west_EB",
+                        movement="ped_main_west_north",
                         tl_id=tl_id,
                     )
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "West", "WB"),
+                        crossing_id=crossing_id_main_split(pos, "West", "south"),
                         node_id=node,
                         edges=wb_edge,
                         width=width,
-                        movement="ped_main_west_WB",
+                        movement="ped_main_west_south",
                         tl_id=tl_id,
                     )
                 else:
@@ -758,19 +770,19 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if split_main:
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "East", "EB"),
+                        crossing_id=crossing_id_main_split(pos, "East", "north"),
                         node_id=node,
                         edges=eb_edge,
                         width=width,
-                        movement="ped_main_east_EB",
+                        movement="ped_main_east_north",
                         tl_id=tl_id,
                     )
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "East", "WB"),
+                        crossing_id=crossing_id_main_split(pos, "East", "south"),
                         node_id=node,
                         edges=wb_edge,
                         width=width,
-                        movement="ped_main_east_WB",
+                        movement="ped_main_east_south",
                         tl_id=tl_id,
                     )
                 else:
@@ -847,19 +859,19 @@ def render_connections_xml(
         split_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
         if split_midblock:
             collector.add_crossing(
-                crossing_id=crossing_id_midblock_split(pos, "EB"),
+                crossing_id=crossing_id_midblock_split(pos, "north"),
                 node_id=node,
                 edges=eb_edge,
                 width=width,
-                movement="ped_mid_EB",
+                movement="ped_mid_north",
                 tl_id=tl_id,
             )
             collector.add_crossing(
-                crossing_id=crossing_id_midblock_split(pos, "WB"),
+                crossing_id=crossing_id_midblock_split(pos, "south"),
                 node_id=node,
                 edges=wb_edge,
                 width=width,
-                movement="ped_mid_WB",
+                movement="ped_mid_south",
                 tl_id=tl_id,
             )
         else:

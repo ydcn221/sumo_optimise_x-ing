@@ -44,14 +44,14 @@ _PEDESTRIAN_MOVEMENT_ORDER = {
     "ped_minor_north": 0,
     "ped_minor_south": 1,
     "ped_main_west": 2,
-    "ped_main_west_EB": 2,
-    "ped_main_west_WB": 3,
+    "ped_main_west_north": 2,
+    "ped_main_west_south": 3,
     "ped_main_east": 4,
-    "ped_main_east_EB": 4,
-    "ped_main_east_WB": 5,
+    "ped_main_east_north": 4,
+    "ped_main_east_south": 5,
     "ped_mid": 6,
-    "ped_mid_EB": 6,
-    "ped_mid_WB": 7,
+    "ped_mid_north": 6,
+    "ped_mid_south": 7,
 }
 
 
@@ -80,18 +80,22 @@ def _resolve_template(
     return None
 
 
-def _get_main_edges_west_side(breakpoints: List[int], pos: int) -> Tuple[Optional[str], Optional[str]]:
-    west, _ = find_neighbor_segments(breakpoints, pos)
-    if west is None:
+def _get_main_edges_upstream_side(
+    breakpoints: List[int], pos: int
+) -> Tuple[Optional[str], Optional[str]]:
+    upstream, _ = find_neighbor_segments(breakpoints, pos)
+    if upstream is None:
         return None, None
-    return main_edge_id("EB", west, pos), main_edge_id("WB", pos, west)
+    return main_edge_id("EB", upstream, pos), main_edge_id("WB", pos, upstream)
 
 
-def _get_main_edges_east_side(breakpoints: List[int], pos: int) -> Tuple[Optional[str], Optional[str]]:
-    _, east = find_neighbor_segments(breakpoints, pos)
-    if east is None:
+def _get_main_edges_downstream_side(
+    breakpoints: List[int], pos: int
+) -> Tuple[Optional[str], Optional[str]]:
+    _, downstream = find_neighbor_segments(breakpoints, pos)
+    if downstream is None:
         return None, None
-    return main_edge_id("EB", pos, east), main_edge_id("WB", east, pos)
+    return main_edge_id("EB", pos, downstream), main_edge_id("WB", downstream, pos)
 
 
 def build_endpoint_catalog(
@@ -147,45 +151,45 @@ def build_endpoint_catalog(
             continue
 
         tl_id = _cluster_tl_id(cluster)
-        west, east = find_neighbor_segments(breakpoints, pos)
+        upstream_pos, downstream_pos = find_neighbor_segments(breakpoints, pos)
 
-        if west is not None:
-            lane_in = pick_lanes_for_segment("EB", west, pos, main_road.lanes, lane_overrides)
+        if upstream_pos is not None:
+            lane_in = pick_lanes_for_segment("EB", upstream_pos, pos, main_road.lanes, lane_overrides)
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_EB",
-                edge_id=main_edge_id("EB", west, pos),
+                edge_id=main_edge_id("EB", upstream_pos, pos),
                 lane_count=lane_in,
                 is_inbound=True,
                 tl_id=tl_id,
             )
-        if east is not None:
-            lane_out = pick_lanes_for_segment("EB", pos, east, main_road.lanes, lane_overrides)
+        if downstream_pos is not None:
+            lane_out = pick_lanes_for_segment("EB", pos, downstream_pos, main_road.lanes, lane_overrides)
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_EB",
-                edge_id=main_edge_id("EB", pos, east),
+                edge_id=main_edge_id("EB", pos, downstream_pos),
                 lane_count=lane_out,
                 is_inbound=False,
                 tl_id=tl_id,
             )
 
-        if east is not None:
-            lane_in = pick_lanes_for_segment("WB", pos, east, main_road.lanes, lane_overrides)
+        if downstream_pos is not None:
+            lane_in = pick_lanes_for_segment("WB", pos, downstream_pos, main_road.lanes, lane_overrides)
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_WB",
-                edge_id=main_edge_id("WB", east, pos),
+                edge_id=main_edge_id("WB", downstream_pos, pos),
                 lane_count=lane_in,
                 is_inbound=True,
                 tl_id=tl_id,
             )
-        if west is not None:
-            lane_out = pick_lanes_for_segment("WB", west, pos, main_road.lanes, lane_overrides)
+        if upstream_pos is not None:
+            lane_out = pick_lanes_for_segment("WB", upstream_pos, pos, main_road.lanes, lane_overrides)
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_WB",
-                edge_id=main_edge_id("WB", pos, west),
+                edge_id=main_edge_id("WB", pos, upstream_pos),
                 lane_count=lane_out,
                 is_inbound=False,
                 tl_id=tl_id,
@@ -286,14 +290,14 @@ def build_endpoint_catalog(
             )
 
         if place_west:
-            eb_edge, wb_edge = _get_main_edges_west_side(breakpoints, pos)
+            eb_edge, wb_edge = _get_main_edges_upstream_side(breakpoints, pos)
             if eb_edge and wb_edge:
                 if split_main:
                     pedestrian_endpoints.append(
                         PedestrianEndpoint(
-                            id=crossing_id_main_split(pos, "West", "EB"),
+                            id=crossing_id_main_split(pos, "West", "north"),
                             pos=pos,
-                            movement="ped_main_west_EB",
+                            movement="ped_main_west_north",
                             node_id=node,
                             edges=(eb_edge,),
                             width=defaults.ped_crossing_width_m,
@@ -302,9 +306,9 @@ def build_endpoint_catalog(
                     )
                     pedestrian_endpoints.append(
                         PedestrianEndpoint(
-                            id=crossing_id_main_split(pos, "West", "WB"),
+                            id=crossing_id_main_split(pos, "West", "south"),
                             pos=pos,
-                            movement="ped_main_west_WB",
+                            movement="ped_main_west_south",
                             node_id=node,
                             edges=(wb_edge,),
                             width=defaults.ped_crossing_width_m,
@@ -325,14 +329,14 @@ def build_endpoint_catalog(
                     )
 
         if place_east:
-            eb_edge, wb_edge = _get_main_edges_east_side(breakpoints, pos)
+            eb_edge, wb_edge = _get_main_edges_downstream_side(breakpoints, pos)
             if eb_edge and wb_edge:
                 if split_main:
                     pedestrian_endpoints.append(
                         PedestrianEndpoint(
-                            id=crossing_id_main_split(pos, "East", "EB"),
+                            id=crossing_id_main_split(pos, "East", "north"),
                             pos=pos,
-                            movement="ped_main_east_EB",
+                            movement="ped_main_east_north",
                             node_id=node,
                             edges=(eb_edge,),
                             width=defaults.ped_crossing_width_m,
@@ -341,9 +345,9 @@ def build_endpoint_catalog(
                     )
                     pedestrian_endpoints.append(
                         PedestrianEndpoint(
-                            id=crossing_id_main_split(pos, "East", "WB"),
+                            id=crossing_id_main_split(pos, "East", "south"),
                             pos=pos,
-                            movement="ped_main_east_WB",
+                            movement="ped_main_east_south",
                             node_id=node,
                             edges=(wb_edge,),
                             width=defaults.ped_crossing_width_m,
@@ -374,15 +378,15 @@ def build_endpoint_catalog(
         node = cluster_id(pos)
         tl_id = _cluster_tl_id(cluster)
 
-        west, east = find_neighbor_segments(breakpoints, pos)
-        if west is None or east is None:
+        upstream_pos, downstream_pos = find_neighbor_segments(breakpoints, pos)
+        if upstream_pos is None or downstream_pos is None:
             LOG.warning("midblock at %s lacks adjacent main edges; skipping demand endpoint", pos)
             continue
 
-        eb_in_edge = main_edge_id("EB", west, pos)
-        eb_out_edge = main_edge_id("EB", pos, east)
-        wb_in_edge = main_edge_id("WB", east, pos)
-        wb_out_edge = main_edge_id("WB", pos, west)
+        eb_in_edge = main_edge_id("EB", upstream_pos, pos)
+        eb_out_edge = main_edge_id("EB", pos, downstream_pos)
+        wb_in_edge = main_edge_id("WB", downstream_pos, pos)
+        wb_out_edge = main_edge_id("WB", pos, upstream_pos)
 
         if snap_rule.tie_break == "toward_west":
             eb_edge, wb_edge = eb_in_edge, wb_out_edge
@@ -401,9 +405,9 @@ def build_endpoint_catalog(
         if split_midblock:
             pedestrian_endpoints.append(
                 PedestrianEndpoint(
-                    id=crossing_id_midblock_split(pos, "EB"),
+                    id=crossing_id_midblock_split(pos, "north"),
                     pos=pos,
-                    movement="ped_mid_EB",
+                    movement="ped_mid_north",
                     node_id=node,
                     edges=(eb_edge,),
                     width=defaults.ped_crossing_width_m,
@@ -412,9 +416,9 @@ def build_endpoint_catalog(
             )
             pedestrian_endpoints.append(
                 PedestrianEndpoint(
-                    id=crossing_id_midblock_split(pos, "WB"),
+                    id=crossing_id_midblock_split(pos, "south"),
                     pos=pos,
-                    movement="ped_mid_WB",
+                    movement="ped_mid_south",
                     node_id=node,
                     edges=(wb_edge,),
                     width=defaults.ped_crossing_width_m,

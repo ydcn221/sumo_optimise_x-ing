@@ -217,7 +217,7 @@ def test_two_stage_ped_split_distinguishes_halves():
         ),
         SignalLink(
             tl_id="Cluster.120.Main",
-            movement="ped_main_west_EB",
+            movement="ped_main_west_north",
             slot_index=2,
             link_index=2,
             kind="crossing",
@@ -225,7 +225,7 @@ def test_two_stage_ped_split_distinguishes_halves():
         ),
         SignalLink(
             tl_id="Cluster.120.Main",
-            movement="ped_main_west_WB",
+            movement="ped_main_west_south",
             slot_index=3,
             link_index=3,
             kind="crossing",

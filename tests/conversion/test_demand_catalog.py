@@ -341,7 +341,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="CrossMid.200.N",
             pos=200,
-            movement="ped_mid_EB",
+            movement="ped_mid_north",
             node_id="Cluster.200.Main",
             edges=("Edge.Main.EB.0-200",),
             width=3.5,
@@ -350,7 +350,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="CrossMid.200.S",
             pos=200,
-            movement="ped_mid_WB",
+            movement="ped_mid_south",
             node_id="Cluster.200.Main",
             edges=("Edge.Main.WB.200-0",),
             width=3.5,
@@ -395,7 +395,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.650.W.N",
             pos=650,
-            movement="ped_main_west_EB",
+            movement="ped_main_west_north",
             node_id="Cluster.650.Main",
             edges=("Edge.Main.EB.500-650",),
             width=3.5,
@@ -404,7 +404,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.650.W.S",
             pos=650,
-            movement="ped_main_west_WB",
+            movement="ped_main_west_south",
             node_id="Cluster.650.Main",
             edges=("Edge.Main.WB.650-500",),
             width=3.5,
@@ -413,7 +413,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.650.E.N",
             pos=650,
-            movement="ped_main_east_EB",
+            movement="ped_main_east_north",
             node_id="Cluster.650.Main",
             edges=("Edge.Main.EB.650-780",),
             width=3.5,
@@ -422,7 +422,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.650.E.S",
             pos=650,
-            movement="ped_main_east_WB",
+            movement="ped_main_east_south",
             node_id="Cluster.650.Main",
             edges=("Edge.Main.WB.780-650",),
             width=3.5,
@@ -440,7 +440,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.900.E.N",
             pos=900,
-            movement="ped_main_east_EB",
+            movement="ped_main_east_north",
             node_id="Cluster.900.Main",
             edges=("Edge.Main.EB.900-920",),
             width=3.5,
@@ -449,7 +449,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         PedestrianEndpoint(
             id="Cross.900.E.S",
             pos=900,
-            movement="ped_main_east_WB",
+            movement="ped_main_east_south",
             node_id="Cluster.900.Main",
             edges=("Edge.Main.WB.920-900",),
             width=3.5,

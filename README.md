@@ -103,12 +103,12 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 
   **Identifier schema (excerpt)**
 
-  * Main nodes: `Node.{pos}.MainN` (eastbound carriageway) / `Node.{pos}.MainS` (westbound carriageway)
+  * Main nodes: `Node.{pos}.MainN` (northern carriageway, formerly EB) / `Node.{pos}.MainS` (southern carriageway, formerly WB)
   * Minor dead-ends: `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge`
   * Cluster joins: `Cluster.{pos}.Main`
   * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`)
   * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}`
-  * Junction crossings: `Cross.{pos}.{dir}` or `Cross.{pos}.{dir}.{half}`
+  * Junction crossings: `Cross.{pos}.{dir}` or `Cross.{pos}.{dir}.{half}` with split halves expressed as `{N|S}`
   * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}`
 
 ### Build + netconvert (if `netconvert` is on PATH)

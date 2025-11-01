@@ -18,7 +18,7 @@ def render_nodes_xml(
     breakpoints: List[int],
     reason_by_pos: Dict[int, BreakpointInfo],
 ) -> str:
-    y_eb, y_wb = build_main_carriageway_y(main_road)
+    y_north, y_south = build_main_carriageway_y(main_road)
     grid_max = breakpoints[-1] if breakpoints else 0
 
     lines: List[str] = []
@@ -30,9 +30,9 @@ def render_nodes_xml(
         if any(bool(event.signalized) for event in cluster.events)
     }
 
-    def _attrs_for_main(direction: str, pos: int, y: float) -> str:
+    def _attrs_for_main(half: str, pos: int, y: float) -> str:
         attrs = [
-            ("id", main_node_id(direction, pos)),
+            ("id", main_node_id(pos, half)),
             ("x", pos),
             ("y", y),
         ]
@@ -42,20 +42,20 @@ def render_nodes_xml(
         return " ".join(f'{name}="{value}"' for name, value in attrs)
 
     for x in breakpoints:
-        lines.append(f"  <node {_attrs_for_main('EB', x, y_eb)}/>")
-        lines.append(f"  <node {_attrs_for_main('WB', x, y_wb)}/>")
+        lines.append(f"  <node {_attrs_for_main('north', x, y_north)}/>")
+        lines.append(f"  <node {_attrs_for_main('south', x, y_south)}/>")
 
     for pos in breakpoints:
         if pos in (0, grid_max):
             continue
-        eb = main_node_id("EB", pos)
-        wb = main_node_id("WB", pos)
+        north_node = main_node_id(pos, "north")
+        south_node = main_node_id(pos, "south")
         reasons_text = ",".join(sorted(reason_by_pos[pos].reasons))
         attrs = [
             ("id", cluster_id(pos)),
             ("x", pos),
             ("y", 0),
-            ("nodes", f"{eb} {wb}"),
+            ("nodes", f"{north_node} {south_node}"),
         ]
         if pos in signalised_positions:
             attrs.append(("type", "traffic_light"))
