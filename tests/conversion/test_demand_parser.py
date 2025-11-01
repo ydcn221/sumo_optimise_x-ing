@@ -33,7 +33,7 @@ def _build_catalog() -> EndpointCatalog:
             id="Endpoint.Vehicle.main_WB.100.out",
             pos=100,
             category="main_WB",
-            edge_id="Edge.Main.WB.100-150",
+            edge_id="Edge.Main.WB.150-100",
             lane_count=2,
             is_inbound=False,
         ),
@@ -41,51 +41,51 @@ def _build_catalog() -> EndpointCatalog:
 
     pedestrian_endpoints = [
         PedestrianEndpoint(
-            id="Cross.Main.0.West.EB",
+            id="Cross.0.W.N",
             pos=0,
             movement="ped_main_west_EB",
-            node_id="Cluster.Main.0",
+            node_id="Cluster.0.Main",
             edges=("Edge.Main.EB.-50-0",),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.Main.0.West.WB",
+            id="Cross.0.W.S",
             pos=0,
             movement="ped_main_west_WB",
-            node_id="Cluster.Main.0",
-            edges=("Edge.Main.WB.-50-0",),
+            node_id="Cluster.0.Main",
+            edges=("Edge.Main.WB.0--50",),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.Main.50.West.EB",
+            id="Cross.50.W.N",
             pos=50,
             movement="ped_main_west_EB",
-            node_id="Cluster.Main.50",
+            node_id="Cluster.50.Main",
             edges=("Edge.Main.EB.0-50",),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.Main.50.West.WB",
+            id="Cross.50.W.S",
             pos=50,
             movement="ped_main_west_WB",
-            node_id="Cluster.Main.50",
-            edges=("Edge.Main.WB.0-50",),
+            node_id="Cluster.50.Main",
+            edges=("Edge.Main.WB.50-0",),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.Main.100.West.EB",
+            id="Cross.100.W.N",
             pos=100,
             movement="ped_main_west_EB",
-            node_id="Cluster.Main.100",
+            node_id="Cluster.100.Main",
             edges=("Edge.Main.EB.50-100",),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.Main.100.West.WB",
+            id="Cross.100.W.S",
             pos=100,
             movement="ped_main_west_WB",
-            node_id="Cluster.Main.100",
-            edges=("Edge.Main.WB.50-100",),
+            node_id="Cluster.100.Main",
+            edges=("Edge.Main.WB.100-50",),
             width=3.5,
         ),
     ]
@@ -114,7 +114,7 @@ def test_parse_demand_happy_path() -> None:
     rows = [
         ",".join(
             [
-                "Cross.Main.50.West.EB",
+                "Cross.50.W.N",
                 "",
                 "",
                 "",
@@ -172,11 +172,11 @@ def test_parse_demand_happy_path() -> None:
     first, second, third = demand.pedestrians
 
     assert first.kind is PedestrianSegmentKind.ENDPOINT
-    assert first.endpoint_id == "Cross.Main.50.West.EB"
+    assert first.endpoint_id == "Cross.50.W.N"
     assert first.rate_kind is PedestrianRateKind.ABSOLUTE
 
     assert second.kind is PedestrianSegmentKind.POSITION
-    assert second.endpoint_id == "Cross.Main.50.West.EB"
+    assert second.endpoint_id == "Cross.50.W.N"
     assert second.side is DirectionMain.EB
     assert second.departures == 40
 
@@ -243,7 +243,7 @@ def test_pedestrian_row_must_choose_single_layout() -> None:
 
     pedestrian_csv = StringIO(
         """endpoint_id,location_id,generated_peds_per_h,attracted_peds_per_h\n"
-        "Cross.Main.50.West.EB,Walk.Main.EB.P050,10,10\n"
+        "Cross.50.W.N,Walk.Main.EB.P050,10,10\n"
         """
     )
 

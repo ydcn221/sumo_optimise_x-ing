@@ -190,9 +190,9 @@ Agents must preserve or extend these checks in `conversion/checks/semantics.py`:
 * **File encoding:** write text as UTF-8. If generating CSV artifacts (e.g., warnings), **use `utf-8-sig`** for Excel compatibility on Windows.
 * **IDs and names (in `builder/ids.py`):**
 
-  * Nodes: `Node.EB.{pos}`, `Node.WB.{pos}`, `Cluster.Main.{pos}`, `Node.Minor.{pos}.{N|S}`.
-  * Edges: `Edge.Main.{EB|WB}.{start}-{end}`, `Edge.Minor.{pos}.{to|from}.{N|S}`.
-  * Crossings: stable prefixes for main/minor; include position and side.
+  * Nodes: `Node.{pos}.MainN`, `Node.{pos}.MainS`, `Cluster.{pos}.Main`, `Node.{pos}.MinorNEdge`, `Node.{pos}.MinorSEdge`.
+  * Edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`), `Edge.Minor{N|S}.{NB|SB}.{pos}`.
+  * Crossings: `Cross.{pos}.{dir}` / `Cross.{pos}.{dir}.{half}`, `CrossMid.{pos}` / `CrossMid.{pos}.{N|S}`.
 * **Enums & tokens:** directions (`EB/WB`, `NORTH/SOUTH`), movements (`L/T/R/PED`), kinds (`TEE/CROSS/XWALK_MIDBLOCK`), median (`CONTINUOUS/NONE`), tie-break (`TOWARD_WEST/TOWARD_EAST`).
 * **Logging:** use project logger; levels: INFO (milestones), WARNING (non-fatal), ERROR (abort). Include category tags like `[SCH]`, `[VAL]`, `[NETCONVERT]`.
 * **No I/O in logic:** only `cli/*`, `utils/io.py`, and `sumo_integration/*` should touch the filesystem or `subprocess`.

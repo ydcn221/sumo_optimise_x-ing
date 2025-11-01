@@ -64,17 +64,17 @@ def test_signalised_cluster_sets_traffic_light_attributes() -> None:
 
     node_lines = _extract_node_lines(xml)
     assert any(
-        'id="Node.Main.EB.100"' in line and 'type="traffic_light"' in line and 'tl="Cluster.Main.100"' in line
+        'id="Node.100.MainN"' in line and 'type="traffic_light"' in line and 'tl="Cluster.100.Main"' in line
         for line in node_lines
     )
     assert any(
-        'id="Node.Main.WB.100"' in line and 'type="traffic_light"' in line and 'tl="Cluster.Main.100"' in line
+        'id="Node.100.MainS"' in line and 'type="traffic_light"' in line and 'tl="Cluster.100.Main"' in line
         for line in node_lines
     )
 
     join_line = _extract_join_line(xml)
     assert 'type="traffic_light"' in join_line
-    assert 'tl="Cluster.Main.100"' in join_line
+    assert 'tl="Cluster.100.Main"' in join_line
 
 
 def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
@@ -103,7 +103,7 @@ def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
     assert all(
         'type="traffic_light"' not in line and ' tl="' not in line
         for line in node_lines
-        if 'Node.Main.EB.100' in line or 'Node.Main.WB.100' in line
+        if 'Node.100.MainN' in line or 'Node.100.MainS' in line
     )
 
     join_line = _extract_join_line(xml)

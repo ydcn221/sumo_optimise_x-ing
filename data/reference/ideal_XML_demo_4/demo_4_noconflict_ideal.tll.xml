@@ -1,58 +1,22 @@
-<?xml version="1.0" encoding="UTF-8"?>
-
-<!-- generated on 2025-10-19 01:01:10 by Eclipse SUMO netedit Version 1.24.0
-<neteditConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/neteditConfiguration.xsd">
-
-    <input>
-        <node-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_4\demo_4_allowconflict_ideal.nod.xml"/>
-        <edge-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_4\demo_4_allowconflict_ideal.edg.xml"/>
-        <connection-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_4\demo_4_allowconflict_ideal.con.xml"/>
-        <tllogic-files value="D:\Documents\codes\python\B4_crossing_optimise\sumo_optimise_x-ing\plainXML_out\small_demo_4\demo_4_allowconflict_ideal.tll.xml"/>
-    </input>
-
-    <processing>
-        <geometry.min-radius.fix.railways value="false"/>
-        <geometry.avoid-overlap value="false"/>
-        <geometry.max-grade.fix value="false"/>
-        <offset.disable-normalization value="true"/>
-        <lefthand value="1"/>
-    </processing>
-
-    <junctions>
-        <no-internal-links value="false"/>
-        <no-turnarounds value="true"/>
-        <junctions.corner-detail value="5"/>
-        <junctions.limit-turn-speed value="5.50"/>
-        <rectangular-lane-cut value="0"/>
-    </junctions>
-
-    <pedestrian>
-        <walkingareas value="0"/>
-    </pedestrian>
-
-</neteditConfiguration>
--->
-
 <tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
-    <tlLogic id="Cluster.Main.150" type="static" programID="0" offset="0">
-        <phase duration="7"  state="rrrrrGGGrGrG"/>
-        <phase duration="3"  state="rrrrryGrrGrr"/>
-        <phase duration="7"  state="rrGrrrGrGGGr"/>
-        <phase duration="3"  state="rrGrrrGrrGrr"/>
-        <phase duration="7"  state="rrGrrGGrrGrr"/>
-        <phase duration="3"  state="rryrryrrrrrr"/>
-        <phase duration="7"  state="rGrrGrrrGrrG"/>
-        <phase duration="3"  state="ryrryrrrrrrr"/>
-        <phase duration="7"  state="GrrGrrrGrrGr"/>
-        <phase duration="3"  state="yrryrrrGrrGr"/>
-        <phase duration="7"  state="rrrrrrGGGGGG"/>
-        <phase duration="3"  state="rrrrrrGGrGrG"/>
+    <tlLogic id="Cluster.150.Main" type="static" programID="0" offset="0">
+        <phase duration="7" state="rrrrrGGrGGrG"/>
+        <phase duration="3" state="rrrrryGrrGrr"/>
+        <phase duration="7" state="rrGrrrGGrGGr"/>
+        <phase duration="3" state="rrGrrrGrrGrr"/>
+        <phase duration="7" state="rrGrrGGrrGrr"/>
+        <phase duration="3" state="rryrryrrrrrr"/>
+        <phase duration="7" state="rGrrGrrGrrrG"/>
+        <phase duration="3" state="ryrryrrrrrrr"/>
+        <phase duration="7" state="GrrGrrrrGrGr"/>
+        <phase duration="3" state="yrryrrrrGrGr"/>
+        <phase duration="7" state="rrrrrrGGGGGG"/>
+        <phase duration="3" state="rrrrrrGrGGrG"/>
     </tlLogic>
-
-    <connection from="Edge.Main.EB.100-150" to="Edge.Minor.150.from.N" fromLane="1" toLane="1" tl="Cluster.Main.150" linkIndex="4"/>
-    <connection from="Edge.Main.EB.100-150" to="Edge.Main.EB.150-200" fromLane="2" toLane="1" tl="Cluster.Main.150" linkIndex="5"/>
-    <connection from="Edge.Main.WB.150-200" to="Edge.Minor.150.from.S" fromLane="1" toLane="1" tl="Cluster.Main.150" linkIndex="1"/>
-    <connection from="Edge.Main.WB.150-200" to="Edge.Main.WB.100-150" fromLane="2" toLane="1" tl="Cluster.Main.150" linkIndex="2"/>
-    <connection from="Edge.Minor.150.to.N" to="Edge.Main.EB.150-200" fromLane="1" toLane="1" tl="Cluster.Main.150" linkIndex="3"/>
-    <connection from="Edge.Minor.150.to.S" to="Edge.Main.WB.100-150" fromLane="1" toLane="1" tl="Cluster.Main.150" linkIndex="0"/>
+    <connection from="Edge.MinorS.NB.150" to="Edge.Main.WB.150-100" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="0"/>
+    <connection from="Edge.Main.WB.200-150" to="Edge.MinorS.SB.150" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="1"/>
+    <connection from="Edge.Main.WB.200-150" to="Edge.Main.WB.150-100" fromLane="2" toLane="1" tl="Cluster.150.Main" linkIndex="2"/>
+    <connection from="Edge.MinorN.SB.150" to="Edge.Main.EB.150-200" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="3"/>
+    <connection from="Edge.Main.EB.100-150" to="Edge.MinorN.NB.150" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="4"/>
+    <connection from="Edge.Main.EB.100-150" to="Edge.Main.EB.150-200" fromLane="2" toLane="1" tl="Cluster.150.Main" linkIndex="5"/>
 </tlLogics>
