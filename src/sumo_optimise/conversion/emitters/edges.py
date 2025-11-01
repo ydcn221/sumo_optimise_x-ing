@@ -43,7 +43,7 @@ def render_edges_xml(
         )
         lanes_wb = pick_lanes_for_segment("WB", west, east, main_road.lanes, lane_overrides)
         lines.append(
-            f'  <edge id="{main_edge_id("WB", west, east)}" '
+            f'  <edge id="{main_edge_id("WB", east, west)}" '
             f'from="{main_node_id("WB", east)}" to="{main_node_id("WB", west)}" '
             f'numLanes="{lanes_wb}" speed="{speed_mps:.3f}"/>'
         )

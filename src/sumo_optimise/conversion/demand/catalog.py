@@ -84,14 +84,14 @@ def _get_main_edges_west_side(breakpoints: List[int], pos: int) -> Tuple[Optiona
     west, _ = find_neighbor_segments(breakpoints, pos)
     if west is None:
         return None, None
-    return main_edge_id("EB", west, pos), main_edge_id("WB", west, pos)
+    return main_edge_id("EB", west, pos), main_edge_id("WB", pos, west)
 
 
 def _get_main_edges_east_side(breakpoints: List[int], pos: int) -> Tuple[Optional[str], Optional[str]]:
     _, east = find_neighbor_segments(breakpoints, pos)
     if east is None:
         return None, None
-    return main_edge_id("EB", pos, east), main_edge_id("WB", pos, east)
+    return main_edge_id("EB", pos, east), main_edge_id("WB", east, pos)
 
 
 def build_endpoint_catalog(
@@ -175,7 +175,7 @@ def build_endpoint_catalog(
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_WB",
-                edge_id=main_edge_id("WB", pos, east),
+                edge_id=main_edge_id("WB", east, pos),
                 lane_count=lane_in,
                 is_inbound=True,
                 tl_id=tl_id,
@@ -185,7 +185,7 @@ def build_endpoint_catalog(
             add_vehicle_endpoint(
                 pos=pos,
                 category="main_WB",
-                edge_id=main_edge_id("WB", west, pos),
+                edge_id=main_edge_id("WB", pos, west),
                 lane_count=lane_out,
                 is_inbound=False,
                 tl_id=tl_id,
@@ -381,8 +381,8 @@ def build_endpoint_catalog(
 
         eb_in_edge = main_edge_id("EB", west, pos)
         eb_out_edge = main_edge_id("EB", pos, east)
-        wb_in_edge = main_edge_id("WB", pos, east)
-        wb_out_edge = main_edge_id("WB", west, pos)
+        wb_in_edge = main_edge_id("WB", east, pos)
+        wb_out_edge = main_edge_id("WB", pos, west)
 
         if snap_rule.tie_break == "toward_west":
             eb_edge, wb_edge = eb_in_edge, wb_out_edge

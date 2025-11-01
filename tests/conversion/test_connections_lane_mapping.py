@@ -148,8 +148,8 @@ def test_crossing_link_index_offsets_after_vehicle_links():
         tl_id="TestTL",
     )
     collector.add_crossing(
-        crossing_id="Cross.0",
-        node_id="Cluster.Main.0",
+        crossing_id="Cross.0.N",
+        node_id="Cluster.0.Main",
         edges="Edge.A Edge.B",
         width=4.0,
         movement="ped_minor",
@@ -200,7 +200,7 @@ def test_midblock_crossings_align_after_mainline_connections():
     )
 
     root = ET.fromstring(result.xml)
-    tl_id = "Cluster.Main.200"
+    tl_id = "Cluster.200.Main"
 
     crossing_indexes = sorted(int(elem.get("linkIndex")) for elem in root.findall("crossing"))
     assert crossing_indexes == [6, 7]

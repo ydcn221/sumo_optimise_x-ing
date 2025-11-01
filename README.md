@@ -101,6 +101,16 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
   * `1-generated.tll.xml` — traffic-light logic programmes
   * `build.log` — structured log
 
+  **Identifier schema (excerpt)**
+
+  * Main nodes: `Node.{pos}.MainN` (eastbound carriageway) / `Node.{pos}.MainS` (westbound carriageway)
+  * Minor dead-ends: `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge`
+  * Cluster joins: `Cluster.{pos}.Main`
+  * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`)
+  * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}`
+  * Junction crossings: `Cross.{pos}.{dir}` or `Cross.{pos}.{dir}.{half}`
+  * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}`
+
 ### Build + netconvert (if `netconvert` is on PATH)
 
 Some setups run it automatically. If not, you can run manually:

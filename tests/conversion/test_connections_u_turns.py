@@ -60,8 +60,8 @@ def test_render_connections_emits_u_turn_links_for_main_approach():
     xml = result.xml
 
     eb_in = main_edge_id("EB", 0, 100)
-    wb_back = main_edge_id("WB", 0, 100)
-    wb_in = main_edge_id("WB", 100, 200)
+    wb_back = main_edge_id("WB", 100, 0)
+    wb_in = main_edge_id("WB", 200, 100)
     eb_back = main_edge_id("EB", 100, 200)
     tl = cluster_id(100)
 
@@ -86,8 +86,8 @@ def test_render_connections_suppresses_u_turn_when_disallowed():
     result = render_connections_xml(*args)
     xml = result.xml
 
-    assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
-    assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml
+    assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.100-0"' not in xml
+    assert 'from="Edge.Main.WB.200-100" to="Edge.Main.EB.100-200"' not in xml
     assert not any(link.movement.endswith("_U") for link in result.links)
 
 
@@ -96,6 +96,6 @@ def test_render_connections_suppresses_u_turn_when_median_continuous():
     result = render_connections_xml(*args)
     xml = result.xml
 
-    assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.0-100"' not in xml
-    assert 'from="Edge.Main.WB.100-200" to="Edge.Main.EB.100-200"' not in xml
+    assert 'from="Edge.Main.EB.0-100" to="Edge.Main.WB.100-0"' not in xml
+    assert 'from="Edge.Main.WB.200-100" to="Edge.Main.EB.100-200"' not in xml
     assert not any(link.movement.endswith("_U") for link in result.links)

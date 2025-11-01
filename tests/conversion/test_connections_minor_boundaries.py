@@ -82,7 +82,7 @@ def test_minor_north_branch_uses_available_west_segment_at_grid_max():
     xml = result.xml
 
     in_edge = minor_edge_id(length, "to", "N")
-    west_edge = main_edge_id("WB", 0, length)
+    west_edge = main_edge_id("WB", length, 0)
 
     assert f'from="{in_edge}" to="{west_edge}"' in xml
 

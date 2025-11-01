@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Set
 
+from ..builder.ids import cluster_id
 from ..domain.models import (
     Cluster,
     Defaults,
@@ -57,7 +58,7 @@ def _collect_programs(
 ) -> Dict[str, _TlProgram]:
     programs: Dict[str, _TlProgram] = {}
     for cluster in clusters:
-        tl_id = f"Cluster.Main.{cluster.pos_m}"
+        tl_id = cluster_id(cluster.pos_m)
         for event in cluster.events:
             if not bool(event.signalized):
                 continue
