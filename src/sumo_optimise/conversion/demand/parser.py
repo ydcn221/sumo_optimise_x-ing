@@ -767,10 +767,15 @@ def _parse_range_location_id(
 
 def _pedestrian_sides(endpoint: PedestrianEndpoint) -> List[DirectionMain]:
     movement = endpoint.movement
-    if movement.endswith("_EB"):
-        return [DirectionMain.EB]
-    if movement.endswith("_WB"):
-        return [DirectionMain.WB]
+    suffix_map = {
+        "_EB": DirectionMain.EB,
+        "_north": DirectionMain.EB,
+        "_WB": DirectionMain.WB,
+        "_south": DirectionMain.WB,
+    }
+    for suffix, side in suffix_map.items():
+        if movement.endswith(suffix):
+            return [side]
     if movement.startswith("ped_main") or movement.startswith("ped_mid"):
         return [DirectionMain.EB, DirectionMain.WB]
     return []

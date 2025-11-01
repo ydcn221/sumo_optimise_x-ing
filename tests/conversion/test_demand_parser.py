@@ -43,7 +43,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.0.W.N",
             pos=0,
-            movement="ped_main_west_EB",
+            movement="ped_main_west_north",
             node_id="Cluster.0.Main",
             edges=("Edge.Main.EB.-50-0",),
             width=3.5,
@@ -51,7 +51,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.0.W.S",
             pos=0,
-            movement="ped_main_west_WB",
+            movement="ped_main_west_south",
             node_id="Cluster.0.Main",
             edges=("Edge.Main.WB.0--50",),
             width=3.5,
@@ -59,7 +59,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.50.W.N",
             pos=50,
-            movement="ped_main_west_EB",
+            movement="ped_main_west_north",
             node_id="Cluster.50.Main",
             edges=("Edge.Main.EB.0-50",),
             width=3.5,
@@ -67,7 +67,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.50.W.S",
             pos=50,
-            movement="ped_main_west_WB",
+            movement="ped_main_west_south",
             node_id="Cluster.50.Main",
             edges=("Edge.Main.WB.50-0",),
             width=3.5,
@@ -75,7 +75,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.100.W.N",
             pos=100,
-            movement="ped_main_west_EB",
+            movement="ped_main_west_north",
             node_id="Cluster.100.Main",
             edges=("Edge.Main.EB.50-100",),
             width=3.5,
@@ -83,7 +83,7 @@ def _build_catalog() -> EndpointCatalog:
         PedestrianEndpoint(
             id="Cross.100.W.S",
             pos=100,
-            movement="ped_main_west_WB",
+            movement="ped_main_west_south",
             node_id="Cluster.100.Main",
             edges=("Edge.Main.WB.100-50",),
             width=3.5,

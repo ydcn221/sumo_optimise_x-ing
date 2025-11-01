@@ -9,6 +9,16 @@ MinorOrientation = Literal["N", "S"]
 MinorFlow = Literal["NB", "SB"]
 MainSide = Literal["West", "East"]
 Cardinal = Literal["N", "S", "E", "W"]
+_MAIN_HALF_MAP = {
+    "N": "MainN",
+    "NORTH": "MainN",
+    "MAINN": "MainN",
+    "EB": "MainN",
+    "S": "MainS",
+    "SOUTH": "MainS",
+    "MAINS": "MainS",
+    "WB": "MainS",
+}
 
 
 def _cardinal(direction: str) -> Cardinal:
@@ -71,15 +81,17 @@ def _minor_flow_token(flow: str, orientation: MinorOrientation) -> MinorFlow:
     return mapping[token][orientation]  # type: ignore[return-value]
 
 
-def main_node_id(direction: MainDirection, pos: int) -> str:
+def _main_half_suffix(token: str) -> str:
+    return _MAIN_HALF_MAP[token]
+
+
+def main_node_id(pos: int, half: str) -> str:
     """Return the ID for a main-road breakpoint node."""
 
-    if direction == "EB":
-        suffix = "MainN"
-    elif direction == "WB":
-        suffix = "MainS"
-    else:  # defensive: keep legacy callers honest
-        raise ValueError(f"Unsupported main direction: {direction!r}")
+    token = half.strip().upper()
+    if token not in _MAIN_HALF_MAP:
+        raise ValueError(f"Unsupported main-half token: {half!r}")
+    suffix = _main_half_suffix(token)
     return f"Node.{pos}.{suffix}"
 
 
