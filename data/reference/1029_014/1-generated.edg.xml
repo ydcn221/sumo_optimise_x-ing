@@ -1,0 +1,22 @@
+<edges>
+  <edge id="Edge.Main.EB.0-30" from="Node.0.MainN" to="Node.30.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.WB.30-0" from="Node.30.MainS" to="Node.0.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.EB.30-75" from="Node.30.MainN" to="Node.75.MainN" numLanes="3" speed="13.889"/>
+  <edge id="Edge.Main.WB.75-30" from="Node.75.MainS" to="Node.30.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.EB.75-120" from="Node.75.MainN" to="Node.120.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.WB.120-75" from="Node.120.MainS" to="Node.75.MainS" numLanes="3" speed="13.889"/>
+  <edge id="Edge.Main.EB.120-180" from="Node.120.MainN" to="Node.180.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.WB.180-120" from="Node.180.MainS" to="Node.120.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.EB.180-225" from="Node.180.MainN" to="Node.225.MainN" numLanes="3" speed="13.889"/>
+  <edge id="Edge.Main.WB.225-180" from="Node.225.MainS" to="Node.180.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.EB.225-270" from="Node.225.MainN" to="Node.270.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.WB.270-225" from="Node.270.MainS" to="Node.225.MainS" numLanes="3" speed="13.889"/>
+  <edge id="Edge.Main.EB.270-300" from="Node.270.MainN" to="Node.300.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.Main.WB.300-270" from="Node.300.MainS" to="Node.270.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.MinorN.SB.75" from="Node.75.MinorNEdge" to="Node.75.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.MinorN.NB.75" from="Node.75.MainN" to="Node.75.MinorNEdge" numLanes="1" speed="13.889"/>
+  <edge id="Edge.MinorS.NB.75" from="Node.75.MinorSEdge" to="Node.75.MainS" numLanes="2" speed="13.889"/>
+  <edge id="Edge.MinorS.SB.75" from="Node.75.MainS" to="Node.75.MinorSEdge" numLanes="1" speed="13.889"/>
+  <edge id="Edge.MinorN.SB.225" from="Node.225.MinorNEdge" to="Node.225.MainN" numLanes="2" speed="13.889"/>
+  <edge id="Edge.MinorN.NB.225" from="Node.225.MainN" to="Node.225.MinorNEdge" numLanes="1" speed="13.889"/>
+</edges>
