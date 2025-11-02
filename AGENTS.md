@@ -193,7 +193,8 @@ Agents must preserve or extend these checks in `conversion/checks/semantics.py`:
   * Nodes: `Node.{pos}.MainN`, `Node.{pos}.MainS`, `Cluster.{pos}.Main`, `Node.{pos}.MinorNEdge`, `Node.{pos}.MinorSEdge`.
     Use `main_node_id(pos, half)` with `half` tokens such as `"north"`/`"south"` for the two main-road carriageways.
   * Edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`), `Edge.Minor{N|S}.{NB|SB}.{pos}`.
-  * Crossings: `Cross.{pos}.{dir}` / `Cross.{pos}.{dir}.{half}` (split halves expressed as `{N|S}`), `CrossMid.{pos}` / `CrossMid.{pos}.{N|S}`.
+  * Crossings: `Cross.{pos}.{cardinal}` / `Cross.{pos}.{cardinal}.{half}` where split halves resolve to `{N|S}` for east/west
+    approaches and `{E|W}` for north/south approaches. Mid-blocks use `CrossMid.{pos}` / `CrossMid.{pos}.{N|S}`.
 * **Enums & tokens:** directions (`EB/WB`, `NORTH/SOUTH`), movements (`L/T/R/PED`), kinds (`TEE/CROSS/XWALK_MIDBLOCK`), median (`CONTINUOUS/NONE`), tie-break (`TOWARD_WEST/TOWARD_EAST`).
 * **Logging:** use project logger; levels: INFO (milestones), WARNING (non-fatal), ERROR (abort). Include category tags like `[SCH]`, `[VAL]`, `[NETCONVERT]`.
 * **No I/O in logic:** only `cli/*`, `utils/io.py`, and `sumo_integration/*` should touch the filesystem or `subprocess`.

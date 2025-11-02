@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-11-02 08:34:09 by Eclipse SUMO netconvert Version 1.18.0
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <node-files value="1-generated.nod.xml"/>
+        <edge-files value="1-generated.edg.xml"/>
+    </input>
+
+    <output>
+        <plain-output-prefix value="2-cooked"/>
+    </output>
+
+    <processing>
+        <lefthand value="true"/>
+    </processing>
+
+    <junctions>
+        <no-internal-links value="true"/>
+    </junctions>
+
+    <pedestrian>
+        <sidewalks.guess value="true"/>
+    </pedestrian>
+
+</configuration>
+-->
+
+<nodes version="1.16" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <location netOffset="0.00,50.00" convBoundary="0.00,-0.00,300.00,100.00" origBoundary="0.00,-50.00,300.00,50.00" projParameter="!"/>
+
+    <node id="Cluster.120.Main" x="120.00" y="50.00" type="priority"/>
+    <node id="Cluster.180.Main" x="180.00" y="50.00" type="priority"/>
+    <node id="Cluster.225.Main" x="225.00" y="50.00" type="traffic_light" tl="Cluster.225.Main"/>
+    <node id="Cluster.270.Main" x="270.00" y="50.00" type="priority"/>
+    <node id="Cluster.30.Main" x="30.00" y="50.00" type="priority"/>
+    <node id="Cluster.75.Main" x="75.00" y="50.00" type="traffic_light" tl="Cluster.75.Main"/>
+    <node id="Node.0.MainN" x="0.00" y="53.00" type="dead_end"/>
+    <node id="Node.0.MainS" x="0.00" y="47.00" type="dead_end"/>
+    <node id="Node.225.MinorNEdge" x="225.00" y="100.00" type="priority"/>
+    <node id="Node.300.MainN" x="300.00" y="53.00" type="dead_end"/>
+    <node id="Node.300.MainS" x="300.00" y="47.00" type="dead_end"/>
+    <node id="Node.75.MinorNEdge" x="75.00" y="100.00" type="priority"/>
+    <node id="Node.75.MinorSEdge" x="75.00" y="-0.00" type="priority"/>
+</nodes>

@@ -108,7 +108,8 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
   * Cluster joins: `Cluster.{pos}.Main`
   * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`)
   * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}`
-  * Junction crossings: `Cross.{pos}.{dir}` or `Cross.{pos}.{dir}.{half}` with split halves expressed as `{N|S}`
+  * Junction crossings: `Cross.{pos}.{cardinal}` (cardinal in `{N|E|S|W}`). Split approaches use `Cross.{pos}.{cardinal}.{half}`,
+    where the half token resolves to `{N|S}` for east/west crossings and `{E|W}` for north/south crossings.
   * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}`
 
 ### Build + netconvert (if `netconvert` is on PATH)
