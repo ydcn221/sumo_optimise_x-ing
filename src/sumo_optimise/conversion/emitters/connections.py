@@ -257,9 +257,15 @@ def _edge_orientation(edge_id: str) -> Optional[int]:
 
     category = parts[1]
     if category.startswith("Minor"):
-        if category.endswith("S"):
+        remainder = category[len("Minor"):].upper()
+        flow = parts[2].upper() if len(parts) >= 3 else ""
+
+        if remainder in {"S", "N"}:
+            return 0 if remainder == "S" else 2
+
+        if flow == "NB":
             return 0
-        if category.endswith("N"):
+        if flow == "SB":
             return 2
         return None
 
@@ -271,6 +277,20 @@ def _edge_orientation(edge_id: str) -> Optional[int]:
             return 3
 
     return None
+
+
+def _cardinal_from_token(token: str) -> Optional[str]:
+    lookup = {
+        "N": "N",
+        "S": "S",
+        "E": "E",
+        "W": "W",
+        "NORTH": "N",
+        "SOUTH": "S",
+        "EAST": "E",
+        "WEST": "W",
+    }
+    return lookup.get(token.upper())
 
 
 def _connection_orientation(from_edge: str) -> int:
@@ -288,20 +308,21 @@ def _movement_priority(movement: str) -> int:
 
 
 def _crossing_orientation(crossing_id: str, edges: str) -> int:
+    mapping = {"S": 0, "W": 1, "N": 2, "E": 3}
+
     if crossing_id.startswith("CrossMid."):
         parts = crossing_id.split(".")
-        if len(parts) >= 3:
-            token = parts[2].upper()
-            mapping = {"S": 0, "N": 2}
-            if token in mapping:
-                return mapping[token]
+        for token in parts[2:]:
+            cardinal = _cardinal_from_token(token)
+            if cardinal and cardinal in mapping:
+                return mapping[cardinal]
+
     if crossing_id.startswith("Cross."):
         parts = crossing_id.split(".")
-        if len(parts) >= 3:
-            token = parts[2].upper()
-            mapping = {"S": 0, "E": 1, "N": 2, "W": 3}
-            if token in mapping:
-                return mapping[token]
+        for token in parts[2:]:
+            cardinal = _cardinal_from_token(token)
+            if cardinal and cardinal in mapping:
+                return mapping[cardinal]
 
     for edge in edges.split():
         orientation = _edge_orientation(edge)
@@ -312,10 +333,23 @@ def _crossing_orientation(crossing_id: str, edges: str) -> int:
 
 
 def _crossing_movement_priority(movement: str) -> int:
-    if movement.endswith("_north") or movement.endswith("_EB"):
+    if not movement:
         return 0
-    if movement.endswith("_south") or movement.endswith("_WB"):
-        return 1
+
+    tokens = [token.lower() for token in movement.split("_") if token]
+    priority_map = {
+        "north": 0,
+        "n": 0,
+        "eb": 0,
+        "south": 1,
+        "s": 1,
+        "wb": 1,
+    }
+
+    for token in reversed(tokens):
+        if token in priority_map:
+            return priority_map[token]
+
     return 0
 
 
