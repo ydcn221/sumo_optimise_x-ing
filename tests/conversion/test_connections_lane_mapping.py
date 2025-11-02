@@ -1,5 +1,6 @@
 from xml.etree import ElementTree as ET
 
+from sumo_optimise.conversion.builder.ids import cluster_id, crossing_id_minor
 import sumo_optimise.conversion.emitters.connections as mod
 from sumo_optimise.conversion.domain.models import (
     Cluster,
@@ -148,8 +149,8 @@ def test_crossing_link_index_offsets_after_vehicle_links():
         tl_id="TestTL",
     )
     collector.add_crossing(
-        crossing_id="Cross.0.N",
-        node_id="Cluster.0.Main",
+        crossing_id=crossing_id_minor(0, "N"),
+        node_id=cluster_id(0),
         edges="Edge.A Edge.B",
         width=4.0,
         movement="ped_minor",
@@ -200,7 +201,7 @@ def test_midblock_crossings_align_after_mainline_connections():
     )
 
     root = ET.fromstring(result.xml)
-    tl_id = "Cluster.200.Main"
+    tl_id = cluster_id(200)
 
     crossing_indexes = sorted(int(elem.get("linkIndex")) for elem in root.findall("crossing"))
     assert crossing_indexes == [6, 7]

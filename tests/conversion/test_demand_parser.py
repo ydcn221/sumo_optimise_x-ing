@@ -2,6 +2,11 @@ from io import StringIO
 
 import pytest
 
+from sumo_optimise.conversion.builder.ids import (
+    cluster_id,
+    crossing_id_main_split,
+    main_edge_id,
+)
 from sumo_optimise.conversion.demand.parser import (
     parse_demand,
     parse_pedestrian_demand,
@@ -25,7 +30,7 @@ def _build_catalog() -> EndpointCatalog:
             id="Endpoint.Vehicle.main_EB.100.in",
             pos=100,
             category="main_EB",
-            edge_id="Edge.Main.EB.50-100",
+            edge_id=main_edge_id("EB", 50, 100),
             lane_count=2,
             is_inbound=True,
         ),
@@ -33,59 +38,68 @@ def _build_catalog() -> EndpointCatalog:
             id="Endpoint.Vehicle.main_WB.100.out",
             pos=100,
             category="main_WB",
-            edge_id="Edge.Main.WB.150-100",
+            edge_id=main_edge_id("WB", 150, 100),
             lane_count=2,
             is_inbound=False,
         ),
     ]
 
+    cluster_0 = cluster_id(0)
+    cluster_50 = cluster_id(50)
+    cluster_100 = cluster_id(100)
+    west_0_n = crossing_id_main_split(0, "West", "north")
+    west_0_s = crossing_id_main_split(0, "West", "south")
+    west_50_n = crossing_id_main_split(50, "West", "north")
+    west_50_s = crossing_id_main_split(50, "West", "south")
+    west_100_n = crossing_id_main_split(100, "West", "north")
+    west_100_s = crossing_id_main_split(100, "West", "south")
     pedestrian_endpoints = [
         PedestrianEndpoint(
-            id="Cross.0.W.N",
+            id=west_0_n,
             pos=0,
             movement="ped_main_west_north",
-            node_id="Cluster.0.Main",
-            edges=("Edge.Main.EB.-50-0",),
+            node_id=cluster_0,
+            edges=(main_edge_id("EB", -50, 0),),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.0.W.S",
+            id=west_0_s,
             pos=0,
             movement="ped_main_west_south",
-            node_id="Cluster.0.Main",
-            edges=("Edge.Main.WB.0--50",),
+            node_id=cluster_0,
+            edges=(main_edge_id("WB", 0, -50),),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.50.W.N",
+            id=west_50_n,
             pos=50,
             movement="ped_main_west_north",
-            node_id="Cluster.50.Main",
-            edges=("Edge.Main.EB.0-50",),
+            node_id=cluster_50,
+            edges=(main_edge_id("EB", 0, 50),),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.50.W.S",
+            id=west_50_s,
             pos=50,
             movement="ped_main_west_south",
-            node_id="Cluster.50.Main",
-            edges=("Edge.Main.WB.50-0",),
+            node_id=cluster_50,
+            edges=(main_edge_id("WB", 50, 0),),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.100.W.N",
+            id=west_100_n,
             pos=100,
             movement="ped_main_west_north",
-            node_id="Cluster.100.Main",
-            edges=("Edge.Main.EB.50-100",),
+            node_id=cluster_100,
+            edges=(main_edge_id("EB", 50, 100),),
             width=3.5,
         ),
         PedestrianEndpoint(
-            id="Cross.100.W.S",
+            id=west_100_s,
             pos=100,
             movement="ped_main_west_south",
-            node_id="Cluster.100.Main",
-            edges=("Edge.Main.WB.100-50",),
+            node_id=cluster_100,
+            edges=(main_edge_id("WB", 100, 50),),
             width=3.5,
         ),
     ]
@@ -111,10 +125,11 @@ def test_parse_demand_happy_path() -> None:
         "generated_peds_per_h,attracted_peds_per_h,"
         "generated_peds_per_h_per_m,attracted_peds_per_h_per_m\n"
     )
+    west_50_n = crossing_id_main_split(50, "West", "north")
     rows = [
         ",".join(
             [
-                "Cross.50.W.N",
+                west_50_n,
                 "",
                 "",
                 "",
@@ -172,11 +187,11 @@ def test_parse_demand_happy_path() -> None:
     first, second, third = demand.pedestrians
 
     assert first.kind is PedestrianSegmentKind.ENDPOINT
-    assert first.endpoint_id == "Cross.50.W.N"
+    assert first.endpoint_id == west_50_n
     assert first.rate_kind is PedestrianRateKind.ABSOLUTE
 
     assert second.kind is PedestrianSegmentKind.POSITION
-    assert second.endpoint_id == "Cross.50.W.N"
+    assert second.endpoint_id == west_50_n
     assert second.side is DirectionMain.EB
     assert second.departures == 40
 

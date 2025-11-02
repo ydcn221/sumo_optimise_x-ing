@@ -247,6 +247,64 @@ class LinkEmissionCollector:
         return lines, metadata, controlled_connections
 
 
+def _cardinal_to_orientation(cardinal: str) -> Optional[int]:
+    mapping = {"S": 0, "W": 1, "N": 2, "E": 3}
+    return mapping.get(cardinal)
+
+
+def _direction_token_to_cardinal(token: str) -> Optional[str]:
+    normalized = token.strip().upper()
+    if not normalized:
+        return None
+
+    direct = {
+        "N": "N",
+        "NORTH": "N",
+        "NB": "N",
+        "NORTHBOUND": "N",
+        "S": "S",
+        "SOUTH": "S",
+        "SB": "S",
+        "SOUTHBOUND": "S",
+        "E": "E",
+        "EAST": "E",
+        "EB": "E",
+        "EASTBOUND": "E",
+        "W": "W",
+        "WEST": "W",
+        "WB": "W",
+        "WESTBOUND": "W",
+    }
+    if normalized in direct:
+        return direct[normalized]
+
+    for separator in ("_", "-", "/"):
+        if separator in normalized:
+            for segment in normalized.split(separator):
+                cardinal = _direction_token_to_cardinal(segment)
+                if cardinal:
+                    return cardinal
+            return None
+
+    prefixes = ("MAIN", "MINOR", "EDGE", "NODE", "CROSS")
+    for prefix in prefixes:
+        if normalized.startswith(prefix) and len(normalized) > len(prefix):
+            remainder = normalized[len(prefix) :]
+            cardinal = _direction_token_to_cardinal(remainder)
+            if cardinal:
+                return cardinal
+
+    suffixes = ("BOUND", "SIDE", "HALF", "APPROACH")
+    for suffix in suffixes:
+        if normalized.endswith(suffix) and len(normalized) > len(suffix):
+            remainder = normalized[: -len(suffix)]
+            cardinal = _direction_token_to_cardinal(remainder)
+            if cardinal:
+                return cardinal
+
+    return None
+
+
 def _edge_orientation(edge_id: str) -> Optional[int]:
     if not edge_id:
         return None
@@ -257,18 +315,20 @@ def _edge_orientation(edge_id: str) -> Optional[int]:
 
     category = parts[1]
     if category.startswith("Minor"):
-        if category.endswith("S"):
-            return 0
-        if category.endswith("N"):
-            return 2
-        return None
+        cardinal = _direction_token_to_cardinal(category)
+        if cardinal in {"N", "S"}:
+            return _cardinal_to_orientation(cardinal)
 
     if category == "Main":
-        direction = parts[2].upper()
-        if direction == "WB":
-            return 1
-        if direction == "EB":
-            return 3
+        direction_token = parts[2] if len(parts) > 2 else ""
+        cardinal = _direction_token_to_cardinal(direction_token)
+        if cardinal in {"E", "W"}:
+            return _cardinal_to_orientation(cardinal)
+
+    for token in parts[2:]:
+        cardinal = _direction_token_to_cardinal(token)
+        if cardinal in {"N", "S", "E", "W"}:
+            return _cardinal_to_orientation(cardinal)
 
     return None
 
@@ -288,20 +348,14 @@ def _movement_priority(movement: str) -> int:
 
 
 def _crossing_orientation(crossing_id: str, edges: str) -> int:
-    if crossing_id.startswith("CrossMid."):
-        parts = crossing_id.split(".")
-        if len(parts) >= 3:
-            token = parts[2].upper()
-            mapping = {"S": 0, "N": 2}
-            if token in mapping:
-                return mapping[token]
-    if crossing_id.startswith("Cross."):
-        parts = crossing_id.split(".")
-        if len(parts) >= 3:
-            token = parts[2].upper()
-            mapping = {"S": 0, "E": 1, "N": 2, "W": 3}
-            if token in mapping:
-                return mapping[token]
+    parts = crossing_id.split(".")
+    if parts and parts[0] in {"Cross", "CrossMid"} and len(parts) >= 3:
+        for token in parts[2:]:
+            cardinal = _direction_token_to_cardinal(token)
+            if cardinal:
+                orientation = _cardinal_to_orientation(cardinal)
+                if orientation is not None:
+                    return orientation
 
     for edge in edges.split():
         orientation = _edge_orientation(edge)
@@ -312,9 +366,14 @@ def _crossing_orientation(crossing_id: str, edges: str) -> int:
 
 
 def _crossing_movement_priority(movement: str) -> int:
-    if movement.endswith("_north") or movement.endswith("_EB"):
+    if not movement:
         return 0
-    if movement.endswith("_south") or movement.endswith("_WB"):
+
+    suffix = movement.rsplit("_", 1)[-1]
+    cardinal = _direction_token_to_cardinal(suffix)
+    if cardinal in {"N", "E"}:
+        return 0
+    if cardinal in {"S", "W"}:
         return 1
     return 0
 

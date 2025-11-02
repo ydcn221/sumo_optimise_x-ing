@@ -1,6 +1,7 @@
 """Tests for PlainXML node emission."""
 from __future__ import annotations
 
+from sumo_optimise.conversion.builder.ids import cluster_id, main_node_id
 from sumo_optimise.conversion.domain.models import (
     BreakpointInfo,
     Cluster,
@@ -62,19 +63,22 @@ def test_signalised_cluster_sets_traffic_light_attributes() -> None:
         reason_by_pos=_reasons(),
     )
 
+    north_node = main_node_id(100, "N")
+    south_node = main_node_id(100, "S")
+    tl_id = cluster_id(100)
     node_lines = _extract_node_lines(xml)
     assert any(
-        'id="Node.100.MainN"' in line and 'type="traffic_light"' in line and 'tl="Cluster.100.Main"' in line
+        f'id="{north_node}"' in line and 'type="traffic_light"' in line and f'tl="{tl_id}"' in line
         for line in node_lines
     )
     assert any(
-        'id="Node.100.MainS"' in line and 'type="traffic_light"' in line and 'tl="Cluster.100.Main"' in line
+        f'id="{south_node}"' in line and 'type="traffic_light"' in line and f'tl="{tl_id}"' in line
         for line in node_lines
     )
 
     join_line = _extract_join_line(xml)
     assert 'type="traffic_light"' in join_line
-    assert 'tl="Cluster.100.Main"' in join_line
+    assert f'tl="{tl_id}"' in join_line
 
 
 def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
@@ -99,11 +103,13 @@ def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
         reason_by_pos=_reasons(),
     )
 
+    north_node = main_node_id(100, "N")
+    south_node = main_node_id(100, "S")
     node_lines = _extract_node_lines(xml)
     assert all(
         'type="traffic_light"' not in line and ' tl="' not in line
         for line in node_lines
-        if 'Node.100.MainN' in line or 'Node.100.MainS' in line
+        if f'id="{north_node}"' in line or f'id="{south_node}"' in line
     )
 
     join_line = _extract_join_line(xml)
