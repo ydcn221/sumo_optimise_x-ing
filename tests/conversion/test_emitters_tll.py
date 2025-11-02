@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 from typing import Dict, List
 
+from sumo_optimise.conversion.builder.ids import cluster_id
 from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
@@ -114,7 +115,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.100.Main",
+            tl_id=cluster_id(100),
             movement="main_EB_R",
             slot_index=0,
             link_index=0,
@@ -122,7 +123,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
             element_id="veh",
         ),
         SignalLink(
-            tl_id="Cluster.100.Main",
+            tl_id=cluster_id(100),
             movement="ped_minor_north",
             slot_index=1,
             link_index=1,
@@ -153,7 +154,7 @@ def test_main_right_phase_enables_u_turn_when_available():
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.100.Main",
+            tl_id=cluster_id(100),
             movement="main_EB_R",
             slot_index=0,
             link_index=0,
@@ -161,7 +162,7 @@ def test_main_right_phase_enables_u_turn_when_available():
             element_id="veh_r",
         ),
         SignalLink(
-            tl_id="Cluster.100.Main",
+            tl_id=cluster_id(100),
             movement="main_EB_U",
             slot_index=1,
             link_index=1,
@@ -200,7 +201,7 @@ def test_two_stage_ped_split_distinguishes_halves():
     )
     links = [
         SignalLink(
-            tl_id="Cluster.120.Main",
+            tl_id=cluster_id(120),
             movement="main_EB_L",
             slot_index=0,
             link_index=0,
@@ -208,7 +209,7 @@ def test_two_stage_ped_split_distinguishes_halves():
             element_id="vehL",
         ),
         SignalLink(
-            tl_id="Cluster.120.Main",
+            tl_id=cluster_id(120),
             movement="minor_N_R",
             slot_index=1,
             link_index=1,
@@ -216,7 +217,7 @@ def test_two_stage_ped_split_distinguishes_halves():
             element_id="vehR",
         ),
         SignalLink(
-            tl_id="Cluster.120.Main",
+            tl_id=cluster_id(120),
             movement="ped_main_west_north",
             slot_index=2,
             link_index=2,
@@ -224,7 +225,7 @@ def test_two_stage_ped_split_distinguishes_halves():
             element_id="ped_w_eb",
         ),
         SignalLink(
-            tl_id="Cluster.120.Main",
+            tl_id=cluster_id(120),
             movement="ped_main_west_south",
             slot_index=3,
             link_index=3,
@@ -257,7 +258,7 @@ def test_movement_stays_green_across_phases():
     cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.150.Main",
+            tl_id=cluster_id(150),
             movement="main_EB_T",
             slot_index=0,
             link_index=0,
@@ -283,7 +284,7 @@ def test_controlled_connections_emitted():
         pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
-    tl_id = "Cluster.150.Main"
+    tl_id = cluster_id(150)
     cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
