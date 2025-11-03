@@ -83,10 +83,10 @@ $ python -m pip install -e .
 
 ```bash
 # POSIX
-$ python -m sumo_optimise.conversion.cli --input path/to/spec.json
+$ python -m sumo_optimise.conversion.cli.main --input path/to/spec.json
 
 # PowerShell
-PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
+PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 ```
 
 **Default behavior**
@@ -229,7 +229,7 @@ been inspected.
 Get the full set of options:
 
 ```bash
-$ python -m sumo_optimise.conversion.cli --help
+$ python -m sumo_optimise.conversion.cli.main --help
 ```
 
 Typical flags (names may vary by release):
