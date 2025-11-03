@@ -103,14 +103,13 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
 
   **Identifier schema (excerpt)**
 
-  * Main nodes: `Node.{pos}.MainN` (northern carriageway, formerly EB) / `Node.{pos}.MainS` (southern carriageway, formerly WB)
-  * Minor dead-ends: `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge`
-  * Cluster joins: `Cluster.{pos}.Main`
-  * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}` (westbound segments list `begin > end`)
-  * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}`
-  * Junction crossings: `Cross.{pos}.{cardinal}` (cardinal in `{N|E|S|W}`). Split approaches use `Cross.{pos}.{cardinal}.{half}`,
-    where the half token resolves to `{N|S}` for east/west crossings and `{E|W}` for north/south crossings.
-  * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}`
+  * Main nodes: `Node.{pos}.MainN` / `Node.{pos}.MainS` for the north/south carriageway halves (the EB/WB suffixes are retired in favour of the cardinal halves handled by `main_node_id`).
+  * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}`. `begin` / `end` must follow the travel direction (`begin < end` for EB, `begin > end` for WB) and the helper raises when callers pass mismatched order.
+  * Minor dead-ends: `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge`.
+  * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}` generated from `minor_edge_id(pos, flow, orientation)`; pass `flow="to"` / `"from"` and let the helper normalise to `NB` / `SB`.
+  * Cluster joins: `Cluster.{pos}.Main`—reused as the TLS identifier for signalised joins.
+  * Junction crossings: `Cross.{pos}.{cardinal}`, with optional split halves yielding `Cross.{pos}.{cardinal}.{N|S|E|W}` via `crossing_id_main_split`.
+  * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
 
 ### Build + netconvert (if `netconvert` is on PATH)
 
