@@ -11,7 +11,7 @@ sumo_optimise/
   conversion/
     pipeline.py            # Orchestrates the build (entry from CLI)
     cli/
-      main.py              # CLI entrypoint: python -m sumo_optimise.conversion.cli
+      main.py              # CLI entrypoint: python -m sumo_optimise.conversion.cli.main
     parser/
       spec_loader.py       # Load JSON + schema, map to domain models
     checks/
