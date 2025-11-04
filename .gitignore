@@ -34,4 +34,3 @@ tests/data
 
 # Jupyter等（使わないなら不要）
 .ipynb_checkpoints/
-.serena/
