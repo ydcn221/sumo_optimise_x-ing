@@ -1,7 +1,7 @@
 {
   "version": "1.3",
   "snap": {"step_m": 5, "tie_break": "toward_west"},
-  "defaults": {"minor_road_length_m": 120, "ped_crossing_width_m": 3.5, "sidewalk_width_m": 2.0, "speed_kmh": 50},
+  "defaults": {"minor_road_length_m": 120, "ped_crossing_width_m": 3.5, "ped_endpoint_offset_m": 0.1, "sidewalk_width_m": 2.0, "speed_kmh": 50},
   "main_road": {"length_m": 1500, "center_gap_m": 6.0, "lanes": 3},
   "junction_templates": {
     "tee": [

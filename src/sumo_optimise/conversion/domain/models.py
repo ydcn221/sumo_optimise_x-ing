@@ -76,6 +76,7 @@ class Defaults:
     minor_road_length_m: int
     ped_crossing_width_m: float
     speed_kmh: int
+    ped_endpoint_offset_m: float = 0.10
     sidewalk_width_m: Optional[float] = None
 
 
@@ -322,11 +323,11 @@ class JunctionDirectionRatios:
 class DemandOptions:
     """CLI-level options controlling demand ingestion and emission."""
 
-    endpoint_csv: Optional[Path]
-    junction_csv: Optional[Path]
-    pattern: PersonFlowPattern = PersonFlowPattern.PERSONS_PER_HOUR
+    ped_endpoint_csv: Optional[Path] = None
+    ped_direction_ratio_csv: Optional[Path] = None
+    veh_endpoint_csv: Optional[Path] = None
+    veh_direction_ratio_csv: Optional[Path] = None
     simulation_end_time: float = 3600.0
-    endpoint_offset_m: float = 0.10
 
 
 @dataclass(frozen=True)

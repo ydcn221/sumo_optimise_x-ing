@@ -31,6 +31,12 @@
       "properties": {
         "minor_road_length_m": { "type": "integer", "minimum": 1, "description": "従道路を交差点中心から伸ばす長さ[m]" },
         "ped_crossing_width_m": { "type": "number", "minimum": 1, "description": "横断歩道の幅[m]" },
+        "ped_endpoint_offset_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "歩行者のspawn/arrival位置でエッジ端から離す距離[m]",
+          "default": 0.1
+        },
         "sidewalk_width_m": { "type": "number", "minimum": 0, "description": "道路脇の歩道の幅[m]" },
         "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" }
       },

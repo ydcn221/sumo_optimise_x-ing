@@ -6,10 +6,9 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
-from sumo_optimise.conversion.cli.main import _build_options, _resolve_demand_options, _resolve_output_template, parse_args
+from sumo_optimise.conversion.cli.main import _build_options, _resolve_output_template, parse_args
 from sumo_optimise.conversion.domain.models import (
     CardinalDirection,
-    DemandOptions,
     Defaults,
     EndpointDemandRow,
     JunctionDirectionRatios,
@@ -126,20 +125,21 @@ def test_compute_od_flows_positive_and_negative() -> None:
 def test_render_person_flows_emits_expected_xml() -> None:
     row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=1200.0, row_index=2)
     flows = [("Node.0.MainN", "Node.100.MainS", 1200.0, row)]
-    options = DemandOptions(
-        endpoint_csv=Path("DemandPerEndpoint.csv"),
-        junction_csv=Path("JunctionDirectionRatio.csv"),
-        pattern=PersonFlowPattern.PERSONS_PER_HOUR,
-        simulation_end_time=7200.0,
-        endpoint_offset_m=0.10,
-    )
     defaults = Defaults(
         minor_road_length_m=120,
         ped_crossing_width_m=3.5,
         speed_kmh=50,
+        ped_endpoint_offset_m=0.10,
         sidewalk_width_m=2.0,
     )
-    xml = render_person_flows(flows, options=options, breakpoints=[0, 100], defaults=defaults)
+    xml = render_person_flows(
+        flows,
+        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        simulation_end_time=7200.0,
+        endpoint_offset_m=defaults.ped_endpoint_offset_m,
+        breakpoints=[0, 100],
+        defaults=defaults,
+    )
 
     assert '<personFlow id="pf_Node.0.MainN__Node.100.MainS__0"' in xml
     assert 'personsPerHour="1200.000000"' in xml
@@ -166,29 +166,103 @@ def test_render_person_flows_maps_minor_side_edges() -> None:
             ),
         ),
     ]
-    options = DemandOptions(
-        endpoint_csv=Path("DemandPerEndpoint.csv"),
-        junction_csv=Path("JunctionDirectionRatio.csv"),
-        pattern=PersonFlowPattern.PERSONS_PER_HOUR,
-        simulation_end_time=7200.0,
-        endpoint_offset_m=0.10,
-    )
     defaults = Defaults(
         minor_road_length_m=120,
         ped_crossing_width_m=3.5,
         speed_kmh=50,
+        ped_endpoint_offset_m=0.10,
         sidewalk_width_m=2.0,
     )
 
-    xml = render_person_flows(flows, options=options, breakpoints=[0, 200], defaults=defaults)
+    xml = render_person_flows(
+        flows,
+        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        simulation_end_time=7200.0,
+        endpoint_offset_m=defaults.ped_endpoint_offset_m,
+        breakpoints=[0, 200],
+        defaults=defaults,
+    )
 
     assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.MinorS.NB.1000" arrivalPos="0.10"/>' in xml
     assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.MinorS.SB.1000" arrivalPos="119.90"/>' in xml
 
 
+def test_render_person_flows_minor_endpoint_offsets() -> None:
+    flows = [
+        (
+            "Node.350.MinorNEndpoint.WestSide",
+            "Node.0.MainN",
+            150.0,
+            EndpointDemandRow(
+                endpoint_id="Node.350.MinorNEndpoint.WestSide", flow_per_hour=150.0, row_index=1
+            ),
+        ),
+        (
+            "Node.350.MinorNEndpoint.EastSide",
+            "Node.0.MainN",
+            150.0,
+            EndpointDemandRow(
+                endpoint_id="Node.350.MinorNEndpoint.EastSide", flow_per_hour=150.0, row_index=2
+            ),
+        ),
+        (
+            "Node.0.MainN",
+            "Node.350.MinorNEndpoint.WestSide",
+            150.0,
+            EndpointDemandRow(
+                endpoint_id="Node.350.MinorNEndpoint.WestSide", flow_per_hour=-150.0, row_index=3
+            ),
+        ),
+        (
+            "Node.0.MainN",
+            "Node.350.MinorNEndpoint.EastSide",
+            150.0,
+            EndpointDemandRow(
+                endpoint_id="Node.350.MinorNEndpoint.EastSide", flow_per_hour=-150.0, row_index=4
+            ),
+        ),
+    ]
+
+    defaults = Defaults(
+        minor_road_length_m=120,
+        ped_crossing_width_m=3.5,
+        speed_kmh=50,
+        ped_endpoint_offset_m=0.10,
+        sidewalk_width_m=2.0,
+    )
+
+    xml = render_person_flows(
+        flows,
+        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        simulation_end_time=7200.0,
+        endpoint_offset_m=defaults.ped_endpoint_offset_m,
+        breakpoints=[0, 500],
+        defaults=defaults,
+    )
+
+    assert (
+        '<personFlow id="pf_Node.350.MinorNEndpoint.WestSide__Node.0.MainN__0" '
+        'begin="0.00" end="7200.00" departPos="119.90" personsPerHour="150.000000">'
+        in xml
+    )
+    assert (
+        '<personFlow id="pf_Node.350.MinorNEndpoint.EastSide__Node.0.MainN__0" '
+        'begin="0.00" end="7200.00" departPos="0.10" personsPerHour="150.000000">'
+        in xml
+    )
+    assert '<personTrip from="Edge.Main.EB.0-500" to="Edge.MinorN.NB.350" arrivalPos="119.90"/>' in xml
+    assert '<personTrip from="Edge.Main.EB.0-500" to="Edge.MinorN.SB.350" arrivalPos="0.10"/>' in xml
+
+
 def test_load_endpoint_demands_and_ratios() -> None:
-    endpoint_csv = StringIO("EndpointID,PedFlow,Label\nNode.0.MainN,100,Peak\nNode.100.MainS,-50,\n")
-    rows = load_endpoint_demands(endpoint_csv)
+    endpoint_csv = StringIO(
+        "Pattern,persons_per_hour\n"
+        "EndpointID,PedFlow,Label\n"
+        "Node.0.MainN,100,Peak\n"
+        "Node.100.MainS,-50,\n"
+    )
+    pattern, rows = load_endpoint_demands(endpoint_csv)
+    assert pattern is PersonFlowPattern.PERSONS_PER_HOUR
     assert [row.endpoint_id for row in rows] == ["Node.0.MainN", "Node.100.MainS"]
     assert rows[0].flow_per_hour == 100
     assert rows[1].flow_per_hour == -50
@@ -220,24 +294,26 @@ def test_cli_accepts_demand_options() -> None:
     args = parse_args(
         [
             "spec.json",
-            "--demand-endpoints",
-            "Demand.csv",
-            "--demand-junctions",
-            "Ratio.csv",
-            "--demand-pattern",
-            "period",
+            "--ped-demand-endpoint",
+            "PedDemand.csv",
+            "--ped-direction-ratio",
+            "PedRatio.csv",
+            "--veh-demand-endpoint",
+            "VehDemand.csv",
+            "--veh-turn-ratio",
+            "VehRatio.csv",
             "--demand-sim-end",
             "5400",
-            "--demand-endpoint-offset",
-            "0.25",
         ]
     )
     template = _resolve_output_template(args)
     options = _build_options(args, template)
     assert options.demand is not None
-    assert options.demand.pattern is PersonFlowPattern.PERIOD
+    assert options.demand.ped_endpoint_csv == Path("PedDemand.csv")
+    assert options.demand.ped_direction_ratio_csv == Path("PedRatio.csv")
+    assert options.demand.veh_endpoint_csv == Path("VehDemand.csv")
+    assert options.demand.veh_direction_ratio_csv == Path("VehRatio.csv")
     assert options.demand.simulation_end_time == 5400
-    assert options.demand.endpoint_offset_m == 0.25
 
 
 def test_cli_requires_both_demand_csvs() -> None:
@@ -246,9 +322,13 @@ def test_cli_requires_both_demand_csvs() -> None:
     options = _build_options(args, template)
     assert options.demand is None
 
-    partial_args = parse_args(["spec.json", "--demand-endpoints", "Demand.csv"])
+    partial_args = parse_args(["spec.json", "--ped-demand-endpoint", "Demand.csv"])
     with pytest.raises(SystemExit):
         _build_options(partial_args, OutputDirectoryTemplate())
+
+    vehicle_partial = parse_args(["spec.json", "--veh-demand-endpoint", "Veh.csv"])
+    with pytest.raises(SystemExit):
+        _build_options(vehicle_partial, OutputDirectoryTemplate())
 
 
 def test_ratio_zeroing_keeps_forward_direction() -> None:

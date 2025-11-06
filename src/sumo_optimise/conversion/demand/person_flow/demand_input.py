@@ -10,6 +10,7 @@ from ...domain.models import (
     EndpointDemandRow,
     JunctionDirectionRatios,
     PedestrianSide,
+    PersonFlowPattern,
 )
 from ...utils.errors import DemandValidationError
 
@@ -19,6 +20,7 @@ JunctionRatioSource = Union[Path, TextIO]
 _ENDPOINT_ID_COLUMN = "EndpointID"
 _FLOW_COLUMN = "PedFlow"
 _LABEL_COLUMN = "Label"
+_PATTERN_KEY = "Pattern"
 
 _RATIO_ID_COLUMN = "JunctionID"
 _RATIO_COLUMNS: Dict[str, Tuple[CardinalDirection, PedestrianSide]] = {
@@ -60,22 +62,56 @@ def _open_source(source: Union[Path, TextIO], *, context: str) -> Tuple[TextIO, 
     return source, False
 
 
-def load_endpoint_demands(source: EndpointDemandSource) -> List[EndpointDemandRow]:
-    """Parse endpoint demand rows from the provided CSV source."""
+def _parse_pattern_row(row: Sequence[str], errors: _ErrorCollector) -> Optional[PersonFlowPattern]:
+    key = (row[0] or "").strip() if row else ""
+    if key != _PATTERN_KEY:
+        errors.add("row 1: first column must be 'Pattern'")
+        return None
+    if len(row) < 2 or not row[1].strip():
+        errors.add("row 1: Pattern value is required")
+        return None
+    token = row[1].strip().lower()
+    for pattern in PersonFlowPattern:
+        if token == pattern.value:
+            return pattern
+    errors.add(
+        "row 1: Pattern value must be one of "
+        + ", ".join(pattern.value for pattern in PersonFlowPattern)
+    )
+    return None
+
+
+def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPattern, List[EndpointDemandRow]]:
+    """Parse endpoint demand rows and declared pattern from the provided CSV source."""
 
     stream, should_close = _open_source(source, context="Endpoint demand CSV")
     errors = _ErrorCollector("invalid endpoint demand rows")
     rows: List[EndpointDemandRow] = []
+    pattern: Optional[PersonFlowPattern] = None
 
     try:
-        reader = csv.DictReader(stream)
+        csv_reader = csv.reader(stream)
+        first_row = next(csv_reader, None)
+        if first_row is None:
+            errors.add("file is empty; expected a 'Pattern,<value>' row")
+            errors.raise_if_any()
+        pattern = _parse_pattern_row(first_row, errors)
+        errors.raise_if_any()
+
+        header_row = next(csv_reader, None)
+        if header_row is None:
+            errors.add("missing header row; expected EndpointID and PedFlow columns on row 2")
+            errors.raise_if_any()
+
         expected = {_ENDPOINT_ID_COLUMN, _FLOW_COLUMN}
-        missing = expected - set(reader.fieldnames or [])
+        missing = expected - set(cell.strip() for cell in header_row if cell)
         if missing:
             errors.add(f"missing columns: {', '.join(sorted(missing))}")
             errors.raise_if_any()
 
-        for index, raw_row in enumerate(reader, start=2):
+        reader = csv.DictReader(stream, fieldnames=header_row)
+
+        for index, raw_row in enumerate(reader, start=3):
             endpoint_id = (raw_row.get(_ENDPOINT_ID_COLUMN) or "").strip()
             flow_token = (raw_row.get(_FLOW_COLUMN) or "").strip()
             label = (raw_row.get(_LABEL_COLUMN) or "").strip() or None
@@ -104,7 +140,12 @@ def load_endpoint_demands(source: EndpointDemandSource) -> List[EndpointDemandRo
             stream.close()
 
     errors.raise_if_any()
-    return rows
+    if pattern is None:
+        errors.add("pattern declaration missing or invalid")
+        errors.raise_if_any()
+        # errors.raise_if_any() will raise; return fallback to satisfy type checker
+        pattern = PersonFlowPattern.PERSONS_PER_HOUR
+    return pattern, rows
 
 
 def load_junction_ratios(source: JunctionRatioSource) -> Dict[str, JunctionDirectionRatios]:

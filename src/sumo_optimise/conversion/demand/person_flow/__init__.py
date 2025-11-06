@@ -30,13 +30,15 @@ def prepare_person_flow_routes(
 ) -> Optional[str]:
     """Generate the personFlow routes document if demand inputs are provided."""
 
-    if not options.endpoint_csv or not options.junction_csv:
+    ped_endpoint = options.ped_endpoint_csv
+    ped_ratio = options.ped_direction_ratio_csv
+    if not ped_endpoint or not ped_ratio:
         return None
 
-    LOG.info("loading endpoint demand CSV: %s", options.endpoint_csv)
-    endpoint_rows = load_endpoint_demands(options.endpoint_csv)
-    LOG.info("loading junction ratio CSV: %s", options.junction_csv)
-    ratio_map = load_junction_ratios(options.junction_csv)
+    LOG.info("loading pedestrian endpoint demand CSV: %s", ped_endpoint)
+    pattern, endpoint_rows = load_endpoint_demands(ped_endpoint)
+    LOG.info("loading pedestrian direction ratio CSV: %s", ped_ratio)
+    ratio_map = load_junction_ratios(ped_ratio)
 
     LOG.info("building pedestrian graph (nodes=%d, edges=%d)", len(breakpoints), len(breakpoints) - 1)
     graph = build_pedestrian_graph(
@@ -53,7 +55,9 @@ def prepare_person_flow_routes(
 
     return render_person_flows(
         od_flows,
-        options=options,
+        ped_pattern=pattern,
+        simulation_end_time=options.simulation_end_time,
+        endpoint_offset_m=defaults.ped_endpoint_offset_m,
         breakpoints=breakpoints,
         defaults=defaults,
     )

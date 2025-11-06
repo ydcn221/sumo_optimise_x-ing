@@ -6,13 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ...builder.ids import main_edge_id, minor_edge_id
-from ...domain.models import (
-    DemandOptions,
-    Defaults,
-    EndpointDemandRow,
-    PedestrianSide,
-    PersonFlowPattern,
-)
+from ...domain.models import Defaults, EndpointDemandRow, PedestrianSide, PersonFlowPattern
 from ...utils.errors import DemandValidationError
 from .identifier import parse_minor_endpoint_id
 
@@ -124,15 +118,32 @@ class EndpointPlacementResolver:
         remote_is_start = flow == "to"
         return edge_id, remote_is_start
 
+    def _minor_local_is_start(self, orientation: str, side: PedestrianSide) -> bool:
+        if orientation == "N":
+            if side == PedestrianSide.WEST_SIDE:
+                return False
+            if side == PedestrianSide.EAST_SIDE:
+                return True
+        elif orientation == "S":
+            if side == PedestrianSide.WEST_SIDE:
+                return True
+            if side == PedestrianSide.EAST_SIDE:
+                return False
+        raise DemandValidationError(
+            f"unsupported minor endpoint placement for orientation={orientation!r}, side={side!r}"
+        )
+
     def _minor_depart(self, pos: int, orientation: str, side: PedestrianSide) -> EndpointPlacement:
         edge_id, _ = self._minor_edge_for_side(pos, orientation, side)
         length = float(self._defaults.minor_road_length_m)
-        return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
+        local_is_start = self._minor_local_is_start(orientation, side)
+        return EndpointPlacement(edge_id=edge_id, is_start=local_is_start, length=length)
 
     def _minor_arrival(self, pos: int, orientation: str, side: PedestrianSide) -> EndpointPlacement:
-        edge_id, remote_is_start = self._minor_edge_for_side(pos, orientation, side)
+        edge_id, _ = self._minor_edge_for_side(pos, orientation, side)
         length = float(self._defaults.minor_road_length_m)
-        return EndpointPlacement(edge_id=edge_id, is_start=remote_is_start, length=length)
+        local_is_start = self._minor_local_is_start(orientation, side)
+        return EndpointPlacement(edge_id=edge_id, is_start=local_is_start, length=length)
 
     def resolve_depart(self, endpoint_id: str) -> EndpointPlacement:
         parsed_minor = parse_minor_endpoint_id(endpoint_id)
@@ -185,7 +196,9 @@ def _clamp_position(length: float, offset: float, *, at_start: bool) -> float:
 def render_person_flows(
     flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
     *,
-    options: DemandOptions,
+    ped_pattern: PersonFlowPattern,
+    simulation_end_time: float,
+    endpoint_offset_m: float,
     breakpoints: Sequence[int],
     defaults: Defaults,
 ) -> str:
@@ -209,12 +222,12 @@ def render_person_flows(
         depart = resolver.resolve_depart(origin)
         arrive = resolver.resolve_arrival(destination)
 
-        depart_pos = _clamp_position(depart.length, options.endpoint_offset_m, at_start=depart.is_start)
-        arrival_pos = _clamp_position(arrive.length, options.endpoint_offset_m, at_start=arrive.is_start)
-        pattern_attr = _format_pattern_attribute(options.pattern, value)
+        depart_pos = _clamp_position(depart.length, endpoint_offset_m, at_start=depart.is_start)
+        arrival_pos = _clamp_position(arrive.length, endpoint_offset_m, at_start=arrive.is_start)
+        pattern_attr = _format_pattern_attribute(ped_pattern, value)
 
         lines.append(
-            f'  <personFlow id="{pf_id}" begin="0.00" end="{options.simulation_end_time:.2f}" '
+            f'  <personFlow id="{pf_id}" begin="0.00" end="{simulation_end_time:.2f}" '
             f'departPos="{depart_pos:.2f}" {pattern_attr}>'
         )
         lines.append(

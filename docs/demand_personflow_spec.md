@@ -7,7 +7,8 @@ and junction turning ratios into SUMO `personFlow` definitions.
 
 - **Endpoint demand CSV (`DemandPerEndpoint.csv`)**
   - Encoding: `utf-8-sig`
-  - Columns: `EndpointID`, `PedFlow`, optional `Label`
+  - Row 1 declares the flow pattern: `Pattern,persons_per_hour` (or `period`, `poisson`)
+  - Row 2 is the header: `EndpointID`, `PedFlow`, optional `Label`
   - `PedFlow` is signed (`+` origin, `-` sink) in persons/hour
   - Rows are processed independently and never aggregated
 
@@ -34,8 +35,14 @@ and junction turning ratios into SUMO `personFlow` definitions.
    end.
 4. **Route emission** – each OD pair becomes a `<personFlow>` with a matching
    `<personTrip>`. Supported patterns: `personsPerHour`, fixed `period`, or
-   Poisson arrival (`period="exp(λ)"`). `departPos`/`arrivalPos` default to
-   0.10 m from the start/end of the chosen edge.
+   Poisson arrival (`period="exp(λ)"`). The configured `defaults.ped_endpoint_offset_m`
+   applies relative to the correct end of the lane: start-side endpoints
+   (main-road north halves at the west terminus, main-road south halves at the
+   east terminus, minor north east-side endpoints, minor south west-side
+   endpoints) use `departPos/arrivalPos = offset`, while end-side endpoints
+   (main-road south halves at the west terminus, main-road north halves at the
+   east terminus, minor north west-side endpoints, minor south east-side
+   endpoints) use `departPos/arrivalPos = length - offset`.
 
 ## Output
 
@@ -45,11 +52,10 @@ and junction turning ratios into SUMO `personFlow` definitions.
 
 ## CLI options
 
-- `--demand-endpoints` – path to the endpoint demand CSV
-- `--demand-junctions` – path to the junction ratio CSV
-- `--demand-pattern {persons_per_hour,period,poisson}`
-- `--demand-sim-end` – simulation end time (seconds)
-- `--demand-endpoint-offset` – spawn/arrival offset (metres)
+- `--ped-demand-endpoint` – path to the pedestrian endpoint demand CSV
+- `--ped-direction-ratio` – path to the pedestrian direction-ratio CSV
+- `--veh-demand-endpoint` / `--veh-turn-ratio` – reserved for the upcoming vehicle flow inputs
+- `--demand-sim-end` – simulation end time (seconds) shared by pedestrian and future vehicle flows
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
   spreadsheet preparation
 - Endpoint IDs distinguish sidewalk sides on minor approaches:
@@ -61,6 +67,10 @@ and junction turning ratios into SUMO `personFlow` definitions.
   so exported routes stay consistent with the physical sidewalk layout.
 
 Both CSV options are required to activate the demand pipeline.
+
+- The spawn/arrival offset is defined within the corridor JSON (`defaults.ped_endpoint_offset_m`).
+- The flow pattern must be declared in the first row of the endpoint CSV; the CLI no longer accepts
+  `--demand-pattern`.
 
 ## File naming
 

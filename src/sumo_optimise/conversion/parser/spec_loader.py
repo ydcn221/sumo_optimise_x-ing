@@ -115,6 +115,7 @@ def parse_defaults(spec_json: Dict) -> Defaults:
         minor_road_length_m=int(d["minor_road_length_m"]),
         ped_crossing_width_m=float(d["ped_crossing_width_m"]),
         speed_kmh=int(d["speed_kmh"]),
+        ped_endpoint_offset_m=float(d.get("ped_endpoint_offset_m", 0.10)),
         sidewalk_width_m=float(d["sidewalk_width_m"]) if "sidewalk_width_m" in d else None,
     )
 

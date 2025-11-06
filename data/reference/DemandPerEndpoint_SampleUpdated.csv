@@ -1,2 +1,18 @@
-﻿EndpointID,PedFlow,Label
-Node.0.MainN,1000,
+﻿Pattern, poisson
+EndpointID,PedFlow,Label
+Node.0.MainN,500,
+Node.0.MainS,500,
+Node.1000.MinorNEndpoint.EastSide,500,
+Node.1000.MinorNEndpoint.WestSide,500,
+Node.1000.MinorSEndpoint.EastSide,500,
+Node.1000.MinorSEndpoint.WestSide,500,
+Node.1500.MainN,500,
+Node.1500.MainS,500,
+Node.350.MinorNEndpoint.EastSide,500,
+Node.350.MinorNEndpoint.WestSide,500,
+Node.650.MinorNEndpoint.EastSide,500,
+Node.650.MinorNEndpoint.WestSide,500,
+Node.650.MinorSEndpoint.EastSide,500,
+Node.650.MinorSEndpoint.WestSide,500,
+Node.900.MinorSEndpoint.EastSide,500,
+Node.900.MinorSEndpoint.WestSide,500,

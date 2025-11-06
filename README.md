@@ -146,16 +146,16 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 ```bash
 $ python -m sumo_optimise.conversion.cli.main \
     path/to/spec.json \
-    --demand-endpoints data/reference/DemandPerEndpoint.csv \
-    --demand-junctions data/reference/JunctionDirectionRatio.csv \
-    --demand-pattern persons_per_hour \
-    --demand-sim-end 3600 \
-    --demand-endpoint-offset 0.10
+    --ped-demand-endpoint data/reference/DemandPerEndpoint.csv \
+    --ped-direction-ratio data/reference/JunctionDirectionRatio.csv \
+    --demand-sim-end 3600
 ```
 
 Key points:
 
-- `DemandPerEndpoint.csv` lists one endpoint per row with signed
+- `DemandPerEndpoint.csv` declares the flow pattern on the first row
+  (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
+  row (`EndpointID,PedFlow,Label`) and one endpoint per subsequent row with signed
   persons/hour volumes (positive = origin, negative = sink).
 - Minor approaches expose separate east/west sidewalk endpoints:
   `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
@@ -169,7 +169,14 @@ Key points:
   re-normalised.
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
   approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
-  `plainXML_out/.../1-generated.rou.xml` with a consistent `departPos` / `arrivalPos`.
+  `plainXML_out/.../1-generated.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
+  (corridor JSON) is applied at the lane start for west-end north halves, east-end south halves,
+  minor north east-side endpoints, and minor south west-side endpoints, and at
+  `length - offset` for their opposite halves so that flows spawn and terminate
+  at the physically correct sidewalk ends.
+- Vehicle demand (endpoint demand + turn ratios) will share the same command-line
+  structure via `--veh-demand-endpoint` / `--veh-turn-ratio`; the loaders are prepared
+  but emission will ship in a future release.
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
   `DemandPerEndpoint_template.csv` / `JunctionDirectionRatio_template.csv` with
   prefilled IDs in the run directory.

@@ -20,8 +20,9 @@ def test_write_demand_templates(tmp_path: Path) -> None:
 
     with endpoint_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))
-    assert reader[0] == ["EndpointID", "PedFlow", "Label"]
-    assert reader[1] == ["Node.0.MainN", "", ""]
+    assert reader[0] == ["Pattern", "persons_per_hour"]
+    assert reader[1] == ["EndpointID", "PedFlow", "Label"]
+    assert reader[2] == ["Node.0.MainN", "", ""]
 
     with junction_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))
