@@ -19,6 +19,7 @@ from sumo_optimise.conversion.domain.models import (
 )
 from sumo_optimise.conversion.demand.person_flow.demand_input import load_endpoint_demands, load_junction_ratios
 from sumo_optimise.conversion.demand.person_flow.flow_propagation import compute_od_flows
+from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoint_id
 from sumo_optimise.conversion.demand.person_flow.route_output import render_person_flows
 
 
@@ -195,3 +196,134 @@ def test_cli_requires_both_demand_csvs() -> None:
     partial_args = parse_args(["spec.json", "--demand-endpoints", "Demand.csv"])
     with pytest.raises(SystemExit):
         _build_options(partial_args, OutputDirectoryTemplate())
+
+
+def test_ratio_zeroing_keeps_forward_direction() -> None:
+    graph = nx.MultiGraph()
+    graph.add_node(
+        "Node.0.MainN",
+        coord=(0.0, 2.0),
+        is_endpoint=True,
+        cluster_id="Cluster.0.Main",
+    )
+    graph.add_node(
+        "Node.100.MainN",
+        coord=(100.0, 2.0),
+        is_endpoint=False,
+        cluster_id="Cluster.100.Main",
+    )
+    graph.add_node(
+        "Node.200.MainN",
+        coord=(200.0, 2.0),
+        is_endpoint=True,
+        cluster_id="Cluster.200.Main",
+    )
+    graph.add_edge(
+        "Node.0.MainN",
+        "Node.100.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=100.0,
+    )
+    graph.add_edge(
+        "Node.100.MainN",
+        "Node.200.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=100.0,
+    )
+
+    weights = {}
+    for direction in CardinalDirection:
+        for side in PedestrianSide:
+            weights[(direction, side)] = 0.0
+    weights[(CardinalDirection.EAST, PedestrianSide.NORTH_SIDE)] = 1.0
+    ratios = {"Cluster.100.Main": JunctionDirectionRatios("Cluster.100.Main", weights)}
+
+    row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=500.0)
+    flows = compute_od_flows(graph, ratios, [row])
+
+    assert flows == [("Node.0.MainN", "Node.200.MainN", 500.0, row)]
+
+
+def _make_ratio(overrides: dict[tuple[CardinalDirection, PedestrianSide], float], junction: str) -> JunctionDirectionRatios:
+    weights = {}
+    for direction in CardinalDirection:
+        for side in PedestrianSide:
+            weights[(direction, side)] = overrides.get((direction, side), 0.0)
+    return JunctionDirectionRatios(junction_id=junction, weights=weights)
+
+
+def test_mainline_flow_directed_to_east_end() -> None:
+    graph = nx.MultiGraph()
+    graph.add_node("Node.0.MainN", coord=(0.0, 2.0), is_endpoint=True, cluster_id="Cluster.0.Main")
+    graph.add_node("Node.100.MainN", coord=(100.0, 2.0), is_endpoint=False, cluster_id="Cluster.100.Main")
+    graph.add_node("Node.200.MainN", coord=(200.0, 2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+
+    graph.add_edge(
+        "Node.0.MainN",
+        "Node.100.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=100.0,
+    )
+    graph.add_edge(
+        "Node.100.MainN",
+        "Node.200.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=100.0,
+    )
+
+    ratios = {
+        "Cluster.100.Main": _make_ratio(
+            {
+                (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
+            },
+            "Cluster.100.Main",
+        )
+    }
+
+    row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=300.0)
+    flows = compute_od_flows(graph, ratios, [row])
+
+    assert flows == [("Node.0.MainN", "Node.200.MainN", 300.0, row)]
+
+
+def test_minor_side_flow_directed_to_east_main_endpoint() -> None:
+    graph = nx.MultiGraph()
+    junction = "Cluster.100.Main"
+    origin = minor_endpoint_id(100, "N", PedestrianSide.EAST_SIDE)
+
+    graph.add_node(origin, coord=(100.0, 10.0), is_endpoint=True, cluster_id=junction, side=PedestrianSide.EAST_SIDE)
+    graph.add_node("Node.100.MainN", coord=(100.0, 2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.200.MainN", coord=(200.0, 2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+
+    graph.add_edge(
+        origin,
+        "Node.100.MainN",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
+        length=8.0,
+    )
+    graph.add_edge(
+        "Node.100.MainN",
+        "Node.200.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=100.0,
+    )
+
+    ratios = {
+        junction: _make_ratio(
+            {
+                (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 2.0,
+            },
+            junction,
+        )
+    }
+
+    row = EndpointDemandRow(endpoint_id=origin, flow_per_hour=180.0)
+    flows = compute_od_flows(graph, ratios, [row])
+
+    assert flows == [(origin, "Node.200.MainN", 180.0, row)]

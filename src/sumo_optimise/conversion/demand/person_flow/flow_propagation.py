@@ -63,7 +63,17 @@ def _state_key(node: str, incoming: Optional[EdgeRef]) -> StateKey:
     return (node, incoming)
 
 
-def _incoming_direction(
+def _opposite_cardinal(cardinal: CardinalDirection) -> CardinalDirection:
+    mapping = {
+        CardinalDirection.NORTH: CardinalDirection.SOUTH,
+        CardinalDirection.SOUTH: CardinalDirection.NORTH,
+        CardinalDirection.EAST: CardinalDirection.WEST,
+        CardinalDirection.WEST: CardinalDirection.EAST,
+    }
+    return mapping[cardinal]
+
+
+def _incoming_entry_direction(
     graph: GraphType,
     incoming: Optional[EdgeRef],
 ) -> Optional[CardinalDirection]:
@@ -71,7 +81,8 @@ def _incoming_direction(
         return None
     prev_node, node, key = incoming
     edge_data = graph[prev_node][node][key]
-    return _edge_direction(graph, prev_node, node, edge_data)
+    travel_dir = _edge_direction(graph, prev_node, node, edge_data)
+    return _opposite_cardinal(travel_dir)
 
 
 def _distribute_with_ratios(
@@ -149,9 +160,9 @@ def _propagate_single(
             results[node] += flow
             continue
 
-        incoming_direction = _incoming_direction(graph, incoming)
+        incoming_direction = _incoming_entry_direction(graph, incoming)
 
-        if cluster_id and cluster_id in ratios:
+        if cluster_id and cluster_id in ratios and not is_endpoint:
             ratio = ratios[cluster_id]
             distributions = _distribute_with_ratios(
                 graph,
