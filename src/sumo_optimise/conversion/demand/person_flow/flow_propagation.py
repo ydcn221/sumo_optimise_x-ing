@@ -22,6 +22,27 @@ StateKey = Tuple[str, Optional[EdgeRef]]
 RatioMap = Mapping[str, JunctionDirectionRatios]
 
 
+def _main_endpoint_signature(node_id: str) -> Optional[Tuple[str, str]]:
+    parts = node_id.split(".")
+    if len(parts) < 3:
+        return None
+    pos_token = parts[1]
+    suffix = parts[2]
+    if suffix not in {"MainN", "MainS"}:
+        return None
+    return pos_token, suffix
+
+
+def _is_main_u_turn(origin: str, destination: str) -> bool:
+    origin_sig = _main_endpoint_signature(origin)
+    dest_sig = _main_endpoint_signature(destination)
+    if not origin_sig or not dest_sig:
+        return False
+    origin_pos, origin_half = origin_sig
+    dest_pos, dest_half = dest_sig
+    return origin_pos == dest_pos and origin_half != dest_half
+
+
 def _edge_direction(
     graph: GraphType,
     from_node: str,
@@ -191,6 +212,8 @@ def compute_od_flows(
             for destination, value in raw_map.items():
                 if destination == origin or value <= EPS:
                     continue
+                if _is_main_u_turn(origin, destination):
+                    continue
                 results.append((origin, destination, value, row))
         else:
             sink = endpoint_id
@@ -198,6 +221,8 @@ def compute_od_flows(
                 if intermediate == sink or value <= EPS:
                     continue
                 # Reverse for sinks: actual origin is intermediate.
+                if _is_main_u_turn(intermediate, sink):
+                    continue
                 results.append((intermediate, sink, value, row))
 
     return results
