@@ -53,9 +53,12 @@ and junction turning ratios into SUMO `personFlow` definitions.
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
   spreadsheet preparation
 - Endpoint IDs distinguish sidewalk sides on minor approaches:
-  `Node.{pos}.MinorNEdge.{EastSide|WestSide}` and
-  `Node.{pos}.MinorSEdge.{EastSide|WestSide}`. This allows demand to target
-  the specific entrance side used in the junction ratio CSV.
+  `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
+  `Node.{pos}.MinorSEndpoint.{EastSide|WestSide}`. This allows demand to target
+  the specific entrance side used in the junction ratio CSV. West-side endpoints
+  resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`) and
+  east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
+  so exported routes stay consistent with the physical sidewalk layout.
 
 Both CSV options are required to activate the demand pipeline.
 

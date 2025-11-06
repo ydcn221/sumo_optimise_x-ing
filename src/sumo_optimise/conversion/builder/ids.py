@@ -119,10 +119,10 @@ def main_edge_id(direction: MainDirection, begin_pos: int, end_pos: int) -> str:
 
 
 def minor_end_node_id(pos: int, orientation: MinorOrientation) -> str:
-    """Return the dead-end node ID for a minor approach."""
+    """Return the endpoint node ID for a minor approach."""
 
     cardinal = _cardinal(orientation)
-    label = "MinorNEdge" if cardinal == "N" else "MinorSEdge"
+    label = "MinorNEndpoint" if cardinal == "N" else "MinorSEndpoint"
     return f"Node.{pos}.{label}"
 
 

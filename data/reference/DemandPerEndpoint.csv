@@ -1,5 +1,0 @@
-﻿EndpointID,PedFlow,Label
-Node.0.MainN,1800,Morning_peak
-Node.1000.MainS,-1200,Mall_sink
-Node.350.MinorNEdge,600,North_feeder
-Node.650.MinorSEdge,-300,South_attractor

@@ -53,7 +53,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 
 ### Node identifiers
 - Main carriageway breakpoints resolve via `builder.ids.main_node_id(pos, half)` and emit `Node.{pos}.{MainN|MainS}`. The suffixes `MainN` and `MainS` replace the old `MainEB` / `MainWB` tokens—always prefer the cardinal halves, even if the caller still speaks in east/west.
-- Minor stubs terminate at `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge` from `minor_end_node_id`. These are the only dead-end node identifiers emitted for approaches.
+- Minor stubs terminate at `Node.{pos}.MinorNEndpoint` / `Node.{pos}.MinorSEndpoint` from `minor_end_node_id`. These are the only dead-end node identifiers emitted for approaches.
 
 ### Edge identifiers
 - Mainline segments come from `main_edge_id(direction, begin_pos, end_pos)` and render `Edge.Main.{EB|WB}.{begin}-{end}`. `begin_pos` / `end_pos` were renamed from west/east specific names so that callers pass values in **travel order**: eastbound edges require `begin_pos < end_pos`, westbound requires `begin_pos > end_pos`.

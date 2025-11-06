@@ -105,7 +105,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 
   * Main nodes: `Node.{pos}.MainN` / `Node.{pos}.MainS` for the north/south carriageway halves (the EB/WB suffixes are retired in favour of the cardinal halves handled by `main_node_id`).
   * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}`. `begin` / `end` must follow the travel direction (`begin < end` for EB, `begin > end` for WB) and the helper raises when callers pass mismatched order.
-  * Minor dead-ends: `Node.{pos}.MinorNEdge` / `Node.{pos}.MinorSEdge`.
+  * Minor endpoints: `Node.{pos}.MinorNEndpoint` / `Node.{pos}.MinorSEndpoint`.
   * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}` generated from `minor_edge_id(pos, flow, orientation)`; pass `flow="to"` / `"from"` and let the helper normalise to `NB` / `SB`.
   * Cluster joins: `Cluster.{pos}.Main`—reused as the TLS identifier for signalised joins.
   * Junction crossings: `Cross.{pos}.{cardinal}`, with optional split halves yielding `Cross.{pos}.{cardinal}.{N|S|E|W}` via `crossing_id_main_split`.
@@ -158,9 +158,12 @@ Key points:
 - `DemandPerEndpoint.csv` lists one endpoint per row with signed
   persons/hour volumes (positive = origin, negative = sink).
 - Minor approaches expose separate east/west sidewalk endpoints:
-  `Node.{pos}.MinorNEdge.{EastSide|WestSide}` and
-  `Node.{pos}.MinorSEdge.{EastSide|WestSide}`. Use these to balance
+  `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
+  `Node.{pos}.MinorSEndpoint.{EastSide|WestSide}`. Use these to balance
   approach-specific demand.
+- West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
+  while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
+  keeping the demand export aligned with the physical sidewalk placement.
 - `JunctionDirectionRatio.csv` provides raw weights for each direction/side
   combination; U-turn branches are suppressed automatically and the remainder
   re-normalised.

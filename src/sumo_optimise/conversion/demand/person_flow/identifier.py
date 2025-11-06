@@ -21,7 +21,7 @@ def minor_endpoint_id(pos: int, orientation: str, side: PedestrianSide) -> str:
     if suffix is None:
         raise ValueError(f"Unsupported minor side: {side!r}")
     prefix = "MinorN" if card == "N" else "MinorS"
-    return f"Node.{pos}.{prefix}Edge.{suffix}"
+    return f"Node.{pos}.{prefix}Endpoint.{suffix}"
 
 
 def parse_minor_endpoint_id(endpoint_id: str) -> Optional[Tuple[int, str, PedestrianSide]]:
@@ -35,13 +35,13 @@ def parse_minor_endpoint_id(endpoint_id: str) -> Optional[Tuple[int, str, Pedest
     except ValueError:
         return None
     orientation_token = tokens[2]
-    if orientation_token not in {"MinorNEdge", "MinorSEdge"}:
+    if orientation_token not in {"MinorNEndpoint", "MinorSEndpoint"}:
         return None
     suffix = tokens[3]
     side = _SIDE_LOOKUP.get(suffix)
     if side is None:
         return None
-    orientation = "N" if orientation_token == "MinorNEdge" else "S"
+    orientation = "N" if orientation_token == "MinorNEndpoint" else "S"
     return pos, orientation, side
 
 

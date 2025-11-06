@@ -36,6 +36,9 @@ def render_nodes_xml(
             ("x", pos),
             ("y", y),
         ]
+        if breakpoints:
+            if pos == breakpoints[0] or pos == breakpoints[-1]:
+                attrs.append(("fringe", "outer"))
         if pos in signalised_positions:
             attrs.append(("type", "traffic_light"))
             attrs.append(("tl", cluster_id(pos)))
@@ -77,10 +80,14 @@ def render_nodes_xml(
                 offset_m = defaults.minor_road_length_m
                 y_end = +offset_m if ns == "N" else -offset_m
                 end_id = minor_end_node_id(pos, ns)
-                lines.append(
-                    f'  <node id="{end_id}" x="{pos}" y="{y_end}"/>'
-                    f'  <!-- minor dead_end ({ns}), offset={offset_m} from y=0 -->'
-                )
+                attrs = [
+                    ("id", end_id),
+                    ("x", pos),
+                    ("y", y_end),
+                    ("fringe", "outer"),
+                ]
+                attr_text = " ".join(f'{name}="{value}"' for name, value in attrs)
+                lines.append(f"  <node {attr_text}/>  <!-- minor dead_end ({ns}), offset={offset_m} from y=0 -->")
 
     lines.append("</nodes>")
     xml = "\n".join(lines) + "\n"

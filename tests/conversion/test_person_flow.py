@@ -64,10 +64,24 @@ def _simple_graph() -> nx.MultiGraph:
         length=4.0,
     )
     graph.add_edge(
+        "Node.0.MainN",
+        "Node.0.MainS",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
+        length=4.0,
+    )
+    graph.add_edge(
         "Node.100.MainN",
         "Node.100.MainS",
         orientation="NS",
         side=PedestrianSide.WEST_SIDE,
+        length=4.0,
+    )
+    graph.add_edge(
+        "Node.100.MainN",
+        "Node.100.MainS",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
         length=4.0,
     )
     return graph
@@ -78,7 +92,7 @@ def _junction_ratio() -> JunctionDirectionRatios:
     for direction in CardinalDirection:
         for side in PedestrianSide:
             weights[(direction, side)] = 0.0
-    weights[(CardinalDirection.SOUTH, PedestrianSide.WEST_SIDE)] = 1.0
+    weights[(CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE)] = 1.0
     weights[(CardinalDirection.NORTH, PedestrianSide.WEST_SIDE)] = 1.0
     weights[(CardinalDirection.WEST, PedestrianSide.NORTH_SIDE)] = 1.0
     return JunctionDirectionRatios(junction_id="Cluster.100.Main", weights=weights)
@@ -131,6 +145,45 @@ def test_render_person_flows_emits_expected_xml() -> None:
     assert 'personsPerHour="1200.000000"' in xml
     assert 'departPos="0.10"' in xml
     assert '<personTrip from="Edge.Main.EB.0-100" to="Edge.Main.WB.100-0"' in xml
+
+
+def test_render_person_flows_maps_minor_side_edges() -> None:
+    flows = [
+        (
+            "Node.0.MainN",
+            "Node.1000.MinorSEndpoint.WestSide",
+            300.0,
+            EndpointDemandRow(
+                endpoint_id="Node.1000.MinorSEndpoint.WestSide", flow_per_hour=-300.0, row_index=1
+            ),
+        ),
+        (
+            "Node.0.MainN",
+            "Node.1000.MinorSEndpoint.EastSide",
+            300.0,
+            EndpointDemandRow(
+                endpoint_id="Node.1000.MinorSEndpoint.EastSide", flow_per_hour=-300.0, row_index=2
+            ),
+        ),
+    ]
+    options = DemandOptions(
+        endpoint_csv=Path("DemandPerEndpoint.csv"),
+        junction_csv=Path("JunctionDirectionRatio.csv"),
+        pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        simulation_end_time=7200.0,
+        endpoint_offset_m=0.10,
+    )
+    defaults = Defaults(
+        minor_road_length_m=120,
+        ped_crossing_width_m=3.5,
+        speed_kmh=50,
+        sidewalk_width_m=2.0,
+    )
+
+    xml = render_person_flows(flows, options=options, breakpoints=[0, 200], defaults=defaults)
+
+    assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.MinorS.NB.1000" arrivalPos="0.10"/>' in xml
+    assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.MinorS.SB.1000" arrivalPos="119.90"/>' in xml
 
 
 def test_load_endpoint_demands_and_ratios() -> None:
@@ -327,3 +380,162 @@ def test_minor_side_flow_directed_to_east_main_endpoint() -> None:
     flows = compute_od_flows(graph, ratios, [row])
 
     assert flows == [(origin, "Node.200.MainN", 180.0, row)]
+
+
+def test_crosswalk_follows_east_side_ratios() -> None:
+    graph = nx.MultiGraph()
+    junction = "Cluster.150.Main"
+
+    graph.add_node("Node.150.MainN", coord=(150.0, 2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.150.MainS", coord=(150.0, -2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.200.MainN", coord=(200.0, 2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+    graph.add_node("Node.200.MainS", coord=(200.0, -2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.200.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=50.0,
+    )
+    graph.add_edge(
+        "Node.150.MainS",
+        "Node.200.MainS",
+        orientation="EW",
+        side=PedestrianSide.SOUTH_SIDE,
+        length=50.0,
+    )
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.150.MainS",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
+        length=4.0,
+    )
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.150.MainS",
+        orientation="NS",
+        side=PedestrianSide.WEST_SIDE,
+        length=4.0,
+    )
+
+    ratios = {
+        junction: _make_ratio(
+            {
+                (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
+                (CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE): 2.0,
+            },
+            junction,
+        )
+    }
+
+    row = EndpointDemandRow(endpoint_id="Node.150.MainN", flow_per_hour=300.0)
+    flows = compute_od_flows(graph, ratios, [row])
+
+    assert sorted((origin, dest, round(value, 6)) for origin, dest, value, _ in flows) == [
+        ("Node.150.MainN", "Node.200.MainN", 100.0),
+        ("Node.150.MainN", "Node.200.MainS", 200.0),
+    ]
+
+
+def test_crosswalk_follows_west_side_for_north_half() -> None:
+    graph = nx.MultiGraph()
+    junction = "Cluster.150.Main"
+
+    graph.add_node("Node.150.MainN", coord=(150.0, 2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.150.MainS", coord=(150.0, -2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.200.MainN", coord=(200.0, 2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+    graph.add_node("Node.200.MainS", coord=(200.0, -2.0), is_endpoint=True, cluster_id="Cluster.200.Main")
+
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.200.MainN",
+        orientation="EW",
+        side=PedestrianSide.NORTH_SIDE,
+        length=50.0,
+    )
+    graph.add_edge(
+        "Node.150.MainS",
+        "Node.200.MainS",
+        orientation="EW",
+        side=PedestrianSide.SOUTH_SIDE,
+        length=50.0,
+    )
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.150.MainS",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
+        length=4.0,
+    )
+    graph.add_edge(
+        "Node.150.MainN",
+        "Node.150.MainS",
+        orientation="NS",
+        side=PedestrianSide.WEST_SIDE,
+        length=4.0,
+    )
+
+    ratios = {
+        junction: _make_ratio(
+            {
+                (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
+            },
+            junction,
+        )
+    }
+
+    row = EndpointDemandRow(endpoint_id="Node.150.MainS", flow_per_hour=180.0)
+    flows = compute_od_flows(graph, ratios, [row])
+
+    assert flows == [("Node.150.MainS", "Node.200.MainN", 180.0, row)]
+
+
+def test_crosswalk_handles_multiple_directions_without_conflict() -> None:
+    graph = nx.MultiGraph()
+    junction = "Cluster.200.Main"
+
+    graph.add_node("Node.200.MainN", coord=(200.0, 2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.200.MainS", coord=(200.0, -2.0), is_endpoint=False, cluster_id=junction)
+    graph.add_node("Node.100.MainS", coord=(100.0, -2.0), is_endpoint=True, cluster_id="Cluster.100.Main")
+    graph.add_node("Node.300.MainS", coord=(300.0, -2.0), is_endpoint=True, cluster_id="Cluster.300.Main")
+
+    graph.add_edge(
+        "Node.200.MainN",
+        "Node.200.MainS",
+        orientation="NS",
+        side=PedestrianSide.EAST_SIDE,
+        length=4.0,
+    )
+    graph.add_edge(
+        "Node.200.MainS",
+        "Node.300.MainS",
+        orientation="EW",
+        side=PedestrianSide.SOUTH_SIDE,
+        length=100.0,
+    )
+    graph.add_edge(
+        "Node.200.MainS",
+        "Node.100.MainS",
+        orientation="EW",
+        side=PedestrianSide.SOUTH_SIDE,
+        length=100.0,
+    )
+
+    ratios = {
+        junction: _make_ratio(
+            {
+                (CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE): 1.0,
+                (CardinalDirection.WEST, PedestrianSide.SOUTH_SIDE): 1.0,
+            },
+            junction,
+        )
+    }
+
+    row = EndpointDemandRow(endpoint_id="Node.200.MainN", flow_per_hour=300.0)
+    flows = compute_od_flows(graph, ratios, [row])
+    summary = {(origin, dest): value for origin, dest, value, _ in flows}
+
+    assert summary[("Node.200.MainN", "Node.300.MainS")] == pytest.approx(150.0)
+    assert summary[("Node.200.MainN", "Node.100.MainS")] == pytest.approx(150.0)

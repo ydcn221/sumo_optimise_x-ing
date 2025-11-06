@@ -1,7 +1,7 @@
 """Tests for PlainXML node emission."""
 from __future__ import annotations
 
-from sumo_optimise.conversion.builder.ids import cluster_id, main_node_id
+from sumo_optimise.conversion.builder.ids import cluster_id, main_node_id, minor_end_node_id
 from sumo_optimise.conversion.domain.models import (
     BreakpointInfo,
     Cluster,
@@ -39,6 +39,13 @@ def _extract_join_line(xml: str) -> str:
 
 def _extract_node_lines(xml: str) -> list[str]:
     return [line.strip() for line in xml.splitlines() if line.strip().startswith("<node ")]
+
+
+def _line_for(node_lines: list[str], node_id: str) -> str:
+    for line in node_lines:
+        if f'id="{node_id}"' in line:
+            return line
+    raise AssertionError(f"{node_id} not found in node lines")
 
 
 def test_signalised_cluster_sets_traffic_light_attributes() -> None:
@@ -115,3 +122,45 @@ def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
     join_line = _extract_join_line(xml)
     assert 'type="traffic_light"' not in join_line
     assert ' tl="' not in join_line
+
+
+def test_main_endpoints_marked_as_outer_fringe() -> None:
+    xml = render_nodes_xml(
+        main_road=_make_main_road(),
+        defaults=_make_defaults(),
+        clusters=[],
+        breakpoints=_breakpoints(),
+        reason_by_pos=_reasons(),
+    )
+
+    node_lines = _extract_node_lines(xml)
+    west_n = main_node_id(0, "N")
+    west_s = main_node_id(0, "S")
+    east_n = main_node_id(200, "N")
+    east_s = main_node_id(200, "S")
+    assert 'fringe="outer"' in _line_for(node_lines, west_n)
+    assert 'fringe="outer"' in _line_for(node_lines, west_s)
+    assert 'fringe="outer"' in _line_for(node_lines, east_n)
+    assert 'fringe="outer"' in _line_for(node_lines, east_s)
+    assert 'fringe="outer"' not in _line_for(node_lines, main_node_id(100, "N"))
+    assert 'fringe="outer"' not in _line_for(node_lines, main_node_id(100, "S"))
+
+
+def test_minor_endpoints_marked_as_outer_fringe() -> None:
+    cluster = Cluster(
+        pos_m=100,
+        events=[LayoutEvent(type=EventKind.CROSS, pos_m_raw=100.0, pos_m=100)],
+    )
+    xml = render_nodes_xml(
+        main_road=_make_main_road(),
+        defaults=_make_defaults(),
+        clusters=[cluster],
+        breakpoints=_breakpoints(),
+        reason_by_pos=_reasons(),
+    )
+
+    node_lines = _extract_node_lines(xml)
+    north = minor_end_node_id(100, "N")
+    south = minor_end_node_id(100, "S")
+    assert 'fringe="outer"' in _line_for(node_lines, north)
+    assert 'fringe="outer"' in _line_for(node_lines, south)

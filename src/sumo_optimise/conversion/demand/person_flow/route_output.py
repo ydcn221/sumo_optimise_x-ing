@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ...builder.ids import main_edge_id, minor_edge_id
-from ...domain.models import DemandOptions, EndpointDemandRow, PersonFlowPattern, Defaults
+from ...domain.models import (
+    DemandOptions,
+    Defaults,
+    EndpointDemandRow,
+    PedestrianSide,
+    PersonFlowPattern,
+)
 from ...utils.errors import DemandValidationError
 from .identifier import parse_minor_endpoint_id
 
@@ -96,21 +102,43 @@ class EndpointPlacementResolver:
         length = float(pos - prev_pos)
         return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
 
-    def _minor_depart(self, pos: int, orientation: str) -> EndpointPlacement:
-        edge_id = minor_edge_id(pos, "to", orientation)
+    def _minor_edge_for_side(
+        self,
+        pos: int,
+        orientation: str,
+        side: PedestrianSide,
+    ) -> Tuple[str, bool]:
+        if side == PedestrianSide.WEST_SIDE:
+            desired_token = "NB"
+        elif side == PedestrianSide.EAST_SIDE:
+            desired_token = "SB"
+        else:
+            raise DemandValidationError(f"unsupported minor side: {side}")
+        if orientation not in {"N", "S"}:
+            raise DemandValidationError(f"unsupported minor orientation: {orientation}")
+        if desired_token == "NB":
+            flow = "from" if orientation == "N" else "to"
+        else:
+            flow = "to" if orientation == "N" else "from"
+        edge_id = minor_edge_id(pos, flow, orientation)
+        remote_is_start = flow == "to"
+        return edge_id, remote_is_start
+
+    def _minor_depart(self, pos: int, orientation: str, side: PedestrianSide) -> EndpointPlacement:
+        edge_id, _ = self._minor_edge_for_side(pos, orientation, side)
         length = float(self._defaults.minor_road_length_m)
         return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
 
-    def _minor_arrival(self, pos: int, orientation: str) -> EndpointPlacement:
-        edge_id = minor_edge_id(pos, "from", orientation)
+    def _minor_arrival(self, pos: int, orientation: str, side: PedestrianSide) -> EndpointPlacement:
+        edge_id, remote_is_start = self._minor_edge_for_side(pos, orientation, side)
         length = float(self._defaults.minor_road_length_m)
-        return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
+        return EndpointPlacement(edge_id=edge_id, is_start=remote_is_start, length=length)
 
     def resolve_depart(self, endpoint_id: str) -> EndpointPlacement:
         parsed_minor = parse_minor_endpoint_id(endpoint_id)
         if parsed_minor:
-            pos, orientation, _ = parsed_minor
-            return self._minor_depart(pos, orientation)
+            pos, orientation, side = parsed_minor
+            return self._minor_depart(pos, orientation, side)
         pos, suffix = self._parse_endpoint(endpoint_id)
         if suffix == "MainN":
             return self._main_north_depart(pos)
@@ -121,8 +149,8 @@ class EndpointPlacementResolver:
     def resolve_arrival(self, endpoint_id: str) -> EndpointPlacement:
         parsed_minor = parse_minor_endpoint_id(endpoint_id)
         if parsed_minor:
-            pos, orientation, _ = parsed_minor
-            return self._minor_arrival(pos, orientation)
+            pos, orientation, side = parsed_minor
+            return self._minor_arrival(pos, orientation, side)
         pos, suffix = self._parse_endpoint(endpoint_id)
         if suffix == "MainN":
             return self._main_north_arrival(pos)
