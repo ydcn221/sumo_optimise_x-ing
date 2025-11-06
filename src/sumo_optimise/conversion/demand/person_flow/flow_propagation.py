@@ -181,6 +181,27 @@ def _propagate_single(
             if not filtered:
                 results[node] += flow
                 continue
+            if incoming:
+                prev_node, current_node, incoming_key = incoming
+                incoming_data = graph[prev_node][current_node][incoming_key]
+                incoming_orientation = incoming_data.get("orientation")
+                incoming_side = incoming_data.get("side")
+                if incoming_orientation is not None:
+                    oriented = [
+                        (neighbor, key_edge, edge_data)
+                        for neighbor, key_edge, edge_data in filtered
+                        if edge_data.get("orientation") == incoming_orientation
+                    ]
+                    if oriented:
+                        filtered = oriented
+                        if incoming_side is not None:
+                            same_side = [
+                                (neighbor, key_edge, edge_data)
+                                for neighbor, key_edge, edge_data in filtered
+                                if edge_data.get("side") == incoming_side
+                            ]
+                            if same_side:
+                                filtered = same_side
             share = 1.0 / len(filtered)
             distributions = [(neighbor, key_edge, share) for neighbor, key_edge, _ in filtered]
 
