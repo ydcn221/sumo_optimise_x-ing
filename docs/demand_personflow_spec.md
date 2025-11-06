@@ -50,6 +50,8 @@ and junction turning ratios into SUMO `personFlow` definitions.
 - `--demand-pattern {persons_per_hour,period,poisson}`
 - `--demand-sim-end` – simulation end time (seconds)
 - `--demand-endpoint-offset` – spawn/arrival offset (metres)
+- `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
+  spreadsheet preparation
 
 Both CSV options are required to activate the demand pipeline.
 
@@ -57,4 +59,3 @@ Both CSV options are required to activate the demand pipeline.
 
 - The generated routes file follows the same numbering convention as the other
   PlainXML artefacts and is referenced in manifests for downstream tooling.
-

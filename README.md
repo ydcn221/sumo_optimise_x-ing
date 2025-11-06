@@ -163,6 +163,9 @@ Key points:
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
   approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
   `plainXML_out/.../1-generated.rou.xml` with a consistent `departPos` / `arrivalPos`.
+- Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
+  `DemandPerEndpoint_template.csv` / `JunctionDirectionRatio_template.csv` with
+  prefilled IDs in the run directory.
 
 See the spec for data schemas, propagation rules, and output semantics.
 

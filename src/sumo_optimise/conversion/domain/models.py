@@ -348,6 +348,7 @@ class BuildOptions:
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
     demand: Optional[DemandOptions] = None
+    generate_demand_templates: bool = False
 
 
 @dataclass
@@ -359,6 +360,8 @@ class BuildResult:
     tll_xml: str
     demand_xml: Optional[str] = None
     manifest_path: Optional[Path] = None
+    endpoint_ids: Optional[List[str]] = None
+    junction_ids: Optional[List[str]] = None
 
 
 @dataclass

@@ -68,6 +68,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.10,
         help="Offset from edge extremities when spawning/arriving persons (default: 0.10m)",
     )
+    parser.add_argument(
+        "--generate-demand-templates",
+        action="store_true",
+        help="Emit CSV templates for endpoint demand and junction ratios instead of populated data",
+    )
     return parser.parse_args(argv)
 
 
@@ -89,6 +94,7 @@ def _build_options(args: argparse.Namespace, output_template: OutputDirectoryTem
         console_log=not args.no_console_log,
         output_template=output_template,
         demand=demand_options,
+        generate_demand_templates=args.generate_demand_templates,
     )
 
 

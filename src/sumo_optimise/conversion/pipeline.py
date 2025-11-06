@@ -7,10 +7,13 @@ from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
 from .demand.catalog import build_endpoint_catalog
 from .demand.person_flow import prepare_person_flow_routes
+from .demand.person_flow.graph_builder import build_pedestrian_graph
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
 from .emitters.tll import render_tll_xml
 from .emitters.nodes import render_nodes_xml
+from .demand.person_flow.templates import write_demand_templates
+from .builder.ids import cluster_id
 from .parser.spec_loader import (
     build_clusters,
     load_json_file,
@@ -67,6 +70,27 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         snap_rule=snap_rule,
     )
 
+    junction_ids = sorted(
+        {
+            cluster_id(cluster.pos_m)
+            for cluster in clusters
+            if any(event.type.value in ("tee", "cross") for event in cluster.events)
+        }
+    )
+
+    endpoint_ids: list[str] | None = None
+    if options.generate_demand_templates:
+        graph = build_pedestrian_graph(
+            main_road=main_road,
+            defaults=defaults,
+            clusters=clusters,
+            breakpoints=breakpoints,
+            catalog=endpoint_catalog,
+        )
+        endpoint_ids = sorted(
+            node_id for node_id, data in graph.nodes(data=True) if data.get("is_endpoint")
+        )
+
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
     edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
     connections_result = render_connections_xml(
@@ -109,6 +133,8 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         connection_links=connections_result.links,
         tll_xml=tll_xml,
         demand_xml=demand_xml,
+        endpoint_ids=endpoint_ids,
+        junction_ids=junction_ids,
     )
 
 
@@ -126,6 +152,13 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         tll=result.tll_xml,
         demand=result.demand_xml,
     )
+
+    if options.generate_demand_templates:
+        write_demand_templates(
+            artifacts.outdir,
+            result.endpoint_ids or [],
+            result.junction_ids or [],
+        )
 
     manifest = {
         "source": str(spec_path.resolve()),
