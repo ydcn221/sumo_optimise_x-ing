@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
+from .demand.catalog import build_endpoint_catalog
+from .demand.person_flow import prepare_person_flow_routes
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
 from .emitters.tll import render_tll_xml
@@ -55,6 +57,16 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
     lane_overrides = compute_lane_overrides(main_road, clusters, junction_template_by_id, snap_rule)
     breakpoints, reason_by_pos = collect_breakpoints_and_reasons(main_road, clusters, lane_overrides, snap_rule)
 
+    endpoint_catalog = build_endpoint_catalog(
+        defaults=defaults,
+        main_road=main_road,
+        clusters=clusters,
+        breakpoints=breakpoints,
+        junction_template_by_id=junction_template_by_id,
+        lane_overrides=lane_overrides,
+        snap_rule=snap_rule,
+    )
+
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
     edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
     connections_result = render_connections_xml(
@@ -79,12 +91,24 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         controlled_connections=connections_result.controlled_connections,
     )
 
+    demand_xml = None
+    if options.demand:
+        demand_xml = prepare_person_flow_routes(
+            options=options.demand,
+            main_road=main_road,
+            defaults=defaults,
+            clusters=clusters,
+            breakpoints=breakpoints,
+            catalog=endpoint_catalog,
+        )
+
     return BuildResult(
         nodes_xml=nodes_xml,
         edges_xml=edges_xml,
         connections_xml=connections_result.xml,
         connection_links=connections_result.links,
         tll_xml=tll_xml,
+        demand_xml=demand_xml,
     )
 
 
@@ -100,6 +124,7 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         edges=result.edges_xml,
         connections=result.connections_xml,
         tll=result.tll_xml,
+        demand=result.demand_xml,
     )
 
     manifest = {

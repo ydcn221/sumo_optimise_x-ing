@@ -137,6 +137,37 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
+## Demand-driven pedestrian flows
+
+`v0.3.0` ships a first-class `personFlow` generator driven by signed endpoint
+ demand and junction turning ratios. The feature is documented in
+ **`docs/demand_personflow_spec.md`** and activated via the CLI:
+
+```bash
+$ python -m sumo_optimise.conversion.cli.main \
+    path/to/spec.json \
+    --demand-endpoints data/reference/DemandPerEndpoint.csv \
+    --demand-junctions data/reference/JunctionDirectionRatio.csv \
+    --demand-pattern persons_per_hour \
+    --demand-sim-end 3600 \
+    --demand-endpoint-offset 0.10
+```
+
+Key points:
+
+- `DemandPerEndpoint.csv` lists one endpoint per row with signed
+  persons/hour volumes (positive = origin, negative = sink).
+- `JunctionDirectionRatio.csv` provides raw weights for each direction/side
+  combination; U-turn branches are suppressed automatically and the remainder
+  re-normalised.
+- A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
+  approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
+  `plainXML_out/.../1-generated.rou.xml` with a consistent `departPos` / `arrivalPos`.
+
+See the spec for data schemas, propagation rules, and output semantics.
+
+---
+
 ## Input specification (v1.3 overview)
 
 * `version`: `"1.3"`

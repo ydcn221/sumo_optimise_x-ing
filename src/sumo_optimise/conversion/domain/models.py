@@ -35,6 +35,20 @@ class Movement(str, Enum):
     PEDESTRIAN = "PED"
 
 
+class CardinalDirection(str, Enum):
+    NORTH = "North"
+    SOUTH = "South"
+    EAST = "East"
+    WEST = "West"
+
+
+class PedestrianSide(str, Enum):
+    NORTH_SIDE = "NorthSide"
+    SOUTH_SIDE = "SouthSide"
+    EAST_SIDE = "EastSide"
+    WEST_SIDE = "WestSide"
+
+
 class EventKind(str, Enum):
     TEE = "tee"
     CROSS = "cross"
@@ -277,6 +291,44 @@ class EndpointCatalog:
     pedestrian_flows: List[PedestrianFlow] = field(default_factory=list)
 
 
+class PersonFlowPattern(str, Enum):
+    PERSONS_PER_HOUR = "persons_per_hour"
+    PERIOD = "period"
+    POISSON = "poisson"
+
+
+@dataclass(frozen=True)
+class EndpointDemandRow:
+    """Parsed demand row for a specific endpoint."""
+
+    endpoint_id: str
+    flow_per_hour: float
+    label: Optional[str] = None
+    row_index: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class JunctionDirectionRatios:
+    """Ratio weights for distributing pedestrian flows at a junction."""
+
+    junction_id: str
+    weights: Dict[Tuple[CardinalDirection, PedestrianSide], float]
+
+    def weight(self, direction: CardinalDirection, side: PedestrianSide) -> float:
+        return self.weights.get((direction, side), 0.0)
+
+
+@dataclass(frozen=True)
+class DemandOptions:
+    """CLI-level options controlling demand ingestion and emission."""
+
+    endpoint_csv: Optional[Path]
+    junction_csv: Optional[Path]
+    pattern: PersonFlowPattern = PersonFlowPattern.PERSONS_PER_HOUR
+    simulation_end_time: float = 3600.0
+    endpoint_offset_m: float = 0.10
+
+
 @dataclass(frozen=True)
 class CorridorSpec:
     version: str
@@ -295,6 +347,7 @@ class BuildOptions:
     run_netedit: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
+    demand: Optional[DemandOptions] = None
 
 
 @dataclass
@@ -314,4 +367,3 @@ class CorridorArtifacts:
     edges_path: Path
     connections_path: Path
     tll_path: Path
-
