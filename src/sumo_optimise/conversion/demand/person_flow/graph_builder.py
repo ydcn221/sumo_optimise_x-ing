@@ -6,9 +6,10 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
 import networkx as nx
 
-from ...builder.ids import cluster_id, main_node_id, minor_end_node_id
+from ...builder.ids import cluster_id, main_node_id
 from ...domain.models import EndpointCatalog, PedestrianSide, Cluster, Defaults, MainRoadConfig
 from ...planner.geometry import build_main_carriageway_y
+from .identifier import minor_endpoint_id
 
 GraphType = nx.MultiGraph
 
@@ -70,25 +71,29 @@ def _add_minor_nodes(
     offset = float(defaults.minor_road_length_m)
     for pos, sides in branches.items():
         if "north" in sides:
-            node_id = minor_end_node_id(pos, "N")
-            graph.add_node(
-                node_id,
-                coord=(float(pos), y_base + offset),
-                pos=pos,
-                node_type="minor_north_end",
-                cluster_id=cluster_id(pos),
-                is_endpoint=True,
-            )
+            for side in (PedestrianSide.EAST_SIDE, PedestrianSide.WEST_SIDE):
+                node_id = minor_endpoint_id(pos, "N", side)
+                graph.add_node(
+                    node_id,
+                    coord=(float(pos), y_base + offset),
+                    pos=pos,
+                    node_type="minor_north_end",
+                    cluster_id=cluster_id(pos),
+                    is_endpoint=True,
+                    side=side,
+                )
         if "south" in sides:
-            node_id = minor_end_node_id(pos, "S")
-            graph.add_node(
-                node_id,
-                coord=(float(pos), y_base - offset),
-                pos=pos,
-                node_type="minor_south_end",
-                cluster_id=cluster_id(pos),
-                is_endpoint=True,
-            )
+            for side in (PedestrianSide.EAST_SIDE, PedestrianSide.WEST_SIDE):
+                node_id = minor_endpoint_id(pos, "S", side)
+                graph.add_node(
+                    node_id,
+                    coord=(float(pos), y_base - offset),
+                    pos=pos,
+                    node_type="minor_south_end",
+                    cluster_id=cluster_id(pos),
+                    is_endpoint=True,
+                    side=side,
+                )
 
 
 def _ensure_node(graph: GraphType, node_id: str) -> None:
@@ -146,8 +151,8 @@ def _add_minor_connectors(
         node_main_n = main_node_id(pos, "north")
         node_main_s = main_node_id(pos, "south")
         if "north" in sides:
-            node_minor = minor_end_node_id(pos, "N")
             for side in (PedestrianSide.EAST_SIDE, PedestrianSide.WEST_SIDE):
+                node_minor = minor_endpoint_id(pos, "N", side)
                 graph.add_edge(
                     node_main_n,
                     node_minor,
@@ -156,8 +161,8 @@ def _add_minor_connectors(
                     length=length,
                 )
         if "south" in sides:
-            node_minor = minor_end_node_id(pos, "S")
             for side in (PedestrianSide.EAST_SIDE, PedestrianSide.WEST_SIDE):
+                node_minor = minor_endpoint_id(pos, "S", side)
                 graph.add_edge(
                     node_main_s,
                     node_minor,

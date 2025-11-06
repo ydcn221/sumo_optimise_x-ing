@@ -4,7 +4,8 @@ import csv
 from pathlib import Path
 
 from sumo_optimise.conversion.demand.person_flow.templates import write_demand_templates
-from sumo_optimise.conversion.domain.models import BuildOptions
+from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoint_id
+from sumo_optimise.conversion.domain.models import BuildOptions, PedestrianSide
 from sumo_optimise.conversion.pipeline import build_corridor_artifacts
 
 
@@ -38,3 +39,5 @@ def test_build_corridor_artifacts_collects_template_ids(tmp_path: Path) -> None:
 
     assert result.endpoint_ids
     assert result.junction_ids
+    assert minor_endpoint_id(350, "N", PedestrianSide.EAST_SIDE) in result.endpoint_ids
+    assert minor_endpoint_id(350, "N", PedestrianSide.WEST_SIDE) in result.endpoint_ids

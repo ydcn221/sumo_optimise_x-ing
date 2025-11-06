@@ -9,7 +9,6 @@ from ..builder.ids import (
     crossing_id_main_split,
     crossing_id_midblock,
     crossing_id_midblock_split,
-    crossing_id_minor,
     main_edge_id,
     minor_edge_id,
 )
@@ -22,6 +21,7 @@ from ..domain.models import (
     LaneOverride,
     MainRoadConfig,
     PedestrianEndpoint,
+    PedestrianSide,
     SideMinor,
     SnapRule,
     VehicleEndpoint,
@@ -29,6 +29,7 @@ from ..domain.models import (
 from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.lanes import find_neighbor_segments, pick_lanes_for_segment
 from ..utils.logging import get_logger
+from .person_flow.identifier import minor_endpoint_id
 
 LOG = get_logger()
 
@@ -273,21 +274,22 @@ def build_endpoint_catalog(
 
         for branch_name in branches:
             ns = "N" if branch_name == "north" else "S"
-            cid = crossing_id_minor(pos, ns)
-            pedestrian_endpoints.append(
-                PedestrianEndpoint(
-                    id=cid,
-                    pos=pos,
-                    movement=f"ped_minor_{branch_name}",
-                    node_id=node,
-                    edges=(
-                        f"{minor_edge_id(pos, 'to', ns)}",
-                        f"{minor_edge_id(pos, 'from', ns)}",
-                    ),
-                    width=defaults.ped_crossing_width_m,
-                    tl_id=tl_id_crossing,
+            for side in (PedestrianSide.EAST_SIDE, PedestrianSide.WEST_SIDE):
+                cid = minor_endpoint_id(pos, ns, side)
+                pedestrian_endpoints.append(
+                    PedestrianEndpoint(
+                        id=cid,
+                        pos=pos,
+                        movement=f"ped_minor_{branch_name}",
+                        node_id=node,
+                        edges=(
+                            f"{minor_edge_id(pos, 'to', ns)}",
+                            f"{minor_edge_id(pos, 'from', ns)}",
+                        ),
+                        width=defaults.ped_crossing_width_m,
+                        tl_id=tl_id_crossing,
+                    )
                 )
-            )
 
         if place_west:
             eb_edge, wb_edge = _get_main_edges_upstream_side(breakpoints, pos)

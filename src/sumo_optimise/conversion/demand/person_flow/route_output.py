@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from ...builder.ids import main_edge_id, minor_edge_id
 from ...domain.models import DemandOptions, EndpointDemandRow, PersonFlowPattern, Defaults
 from ...utils.errors import DemandValidationError
+from .identifier import parse_minor_endpoint_id
 
 
 @dataclass(frozen=True)
@@ -106,27 +107,27 @@ class EndpointPlacementResolver:
         return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
 
     def resolve_depart(self, endpoint_id: str) -> EndpointPlacement:
+        parsed_minor = parse_minor_endpoint_id(endpoint_id)
+        if parsed_minor:
+            pos, orientation, _ = parsed_minor
+            return self._minor_depart(pos, orientation)
         pos, suffix = self._parse_endpoint(endpoint_id)
         if suffix == "MainN":
             return self._main_north_depart(pos)
         if suffix == "MainS":
             return self._main_south_depart(pos)
-        if suffix == "MinorNEdge":
-            return self._minor_depart(pos, "N")
-        if suffix == "MinorSEdge":
-            return self._minor_depart(pos, "S")
         raise DemandValidationError(f"unsupported endpoint for depart placement: {endpoint_id}")
 
     def resolve_arrival(self, endpoint_id: str) -> EndpointPlacement:
+        parsed_minor = parse_minor_endpoint_id(endpoint_id)
+        if parsed_minor:
+            pos, orientation, _ = parsed_minor
+            return self._minor_arrival(pos, orientation)
         pos, suffix = self._parse_endpoint(endpoint_id)
         if suffix == "MainN":
             return self._main_north_arrival(pos)
         if suffix == "MainS":
             return self._main_south_arrival(pos)
-        if suffix == "MinorNEdge":
-            return self._minor_arrival(pos, "N")
-        if suffix == "MinorSEdge":
-            return self._minor_arrival(pos, "S")
         raise DemandValidationError(f"unsupported endpoint for arrival placement: {endpoint_id}")
 
 

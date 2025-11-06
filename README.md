@@ -157,6 +157,10 @@ Key points:
 
 - `DemandPerEndpoint.csv` lists one endpoint per row with signed
   persons/hour volumes (positive = origin, negative = sink).
+- Minor approaches expose separate east/west sidewalk endpoints:
+  `Node.{pos}.MinorNEdge.{EastSide|WestSide}` and
+  `Node.{pos}.MinorSEdge.{EastSide|WestSide}`. Use these to balance
+  approach-specific demand.
 - `JunctionDirectionRatio.csv` provides raw weights for each direction/side
   combination; U-turn branches are suppressed automatically and the remainder
   re-normalised.

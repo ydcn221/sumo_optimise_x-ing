@@ -6,12 +6,11 @@ from sumo_optimise.conversion.builder.ids import (
     crossing_id_main_split,
     crossing_id_midblock,
     crossing_id_midblock_split,
-    crossing_id_minor,
     main_edge_id,
     minor_edge_id,
 )
 from sumo_optimise.conversion.demand.catalog import build_endpoint_catalog
-from sumo_optimise.conversion.domain.models import PedestrianEndpoint, VehicleEndpoint
+from sumo_optimise.conversion.domain.models import PedestrianEndpoint, VehicleEndpoint, PedestrianSide
 from sumo_optimise.conversion.parser.spec_loader import (
     build_clusters,
     load_json_file,
@@ -27,6 +26,7 @@ from sumo_optimise.conversion.planner.lanes import (
     collect_breakpoints_and_reasons,
     compute_lane_overrides,
 )
+from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoint_id
 
 
 def _prepare_inputs():
@@ -356,21 +356,27 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
     cluster_1050 = cluster_id(1050)
     mid_200_n = crossing_id_midblock_split(200, "north")
     mid_200_s = crossing_id_midblock_split(200, "south")
-    cross_350_n = crossing_id_minor(350, "N")
     cross_350_w = crossing_id_main(350, "West")
-    cross_650_n = crossing_id_minor(650, "N")
-    cross_650_s = crossing_id_minor(650, "S")
     cross_650_w_n = crossing_id_main_split(650, "West", "north")
     cross_650_w_s = crossing_id_main_split(650, "West", "south")
     cross_650_e_n = crossing_id_main_split(650, "East", "north")
     cross_650_e_s = crossing_id_main_split(650, "East", "south")
-    cross_900_s = crossing_id_minor(900, "S")
     cross_900_e_n = crossing_id_main_split(900, "East", "north")
     cross_900_e_s = crossing_id_main_split(900, "East", "south")
-    cross_1000_n = crossing_id_minor(1000, "N")
-    cross_1000_s = crossing_id_minor(1000, "S")
     cross_1000_e = crossing_id_main(1000, "East")
     mid_1050 = crossing_id_midblock(1050)
+    minor_350_n_e = minor_endpoint_id(350, "N", PedestrianSide.EAST_SIDE)
+    minor_350_n_w = minor_endpoint_id(350, "N", PedestrianSide.WEST_SIDE)
+    minor_650_n_e = minor_endpoint_id(650, "N", PedestrianSide.EAST_SIDE)
+    minor_650_n_w = minor_endpoint_id(650, "N", PedestrianSide.WEST_SIDE)
+    minor_650_s_e = minor_endpoint_id(650, "S", PedestrianSide.EAST_SIDE)
+    minor_650_s_w = minor_endpoint_id(650, "S", PedestrianSide.WEST_SIDE)
+    minor_900_s_e = minor_endpoint_id(900, "S", PedestrianSide.EAST_SIDE)
+    minor_900_s_w = minor_endpoint_id(900, "S", PedestrianSide.WEST_SIDE)
+    minor_1000_n_e = minor_endpoint_id(1000, "N", PedestrianSide.EAST_SIDE)
+    minor_1000_n_w = minor_endpoint_id(1000, "N", PedestrianSide.WEST_SIDE)
+    minor_1000_s_e = minor_endpoint_id(1000, "S", PedestrianSide.EAST_SIDE)
+    minor_1000_s_w = minor_endpoint_id(1000, "S", PedestrianSide.WEST_SIDE)
     expected_pedestrian_endpoints = [
         PedestrianEndpoint(
             id=mid_200_n,
@@ -391,7 +397,16 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=cluster_200,
         ),
         PedestrianEndpoint(
-            id=cross_350_n,
+            id=minor_350_n_e,
+            pos=350,
+            movement="ped_minor_north",
+            node_id=cluster_350,
+            edges=(minor_edge_id(350, "to", "N"), minor_edge_id(350, "from", "N")),
+            width=3.5,
+            tl_id=None,
+        ),
+        PedestrianEndpoint(
+            id=minor_350_n_w,
             pos=350,
             movement="ped_minor_north",
             node_id=cluster_350,
@@ -409,7 +424,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=None,
         ),
         PedestrianEndpoint(
-            id=cross_650_n,
+            id=minor_650_n_e,
             pos=650,
             movement="ped_minor_north",
             node_id=cluster_650,
@@ -418,7 +433,25 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=cluster_650,
         ),
         PedestrianEndpoint(
-            id=cross_650_s,
+            id=minor_650_n_w,
+            pos=650,
+            movement="ped_minor_north",
+            node_id=cluster_650,
+            edges=(minor_edge_id(650, "to", "N"), minor_edge_id(650, "from", "N")),
+            width=3.5,
+            tl_id=cluster_650,
+        ),
+        PedestrianEndpoint(
+            id=minor_650_s_e,
+            pos=650,
+            movement="ped_minor_south",
+            node_id=cluster_650,
+            edges=(minor_edge_id(650, "to", "S"), minor_edge_id(650, "from", "S")),
+            width=3.5,
+            tl_id=cluster_650,
+        ),
+        PedestrianEndpoint(
+            id=minor_650_s_w,
             pos=650,
             movement="ped_minor_south",
             node_id=cluster_650,
@@ -463,7 +496,16 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=cluster_650,
         ),
         PedestrianEndpoint(
-            id=cross_900_s,
+            id=minor_900_s_e,
+            pos=900,
+            movement="ped_minor_south",
+            node_id=cluster_900,
+            edges=(minor_edge_id(900, "to", "S"), minor_edge_id(900, "from", "S")),
+            width=3.5,
+            tl_id=cluster_900,
+        ),
+        PedestrianEndpoint(
+            id=minor_900_s_w,
             pos=900,
             movement="ped_minor_south",
             node_id=cluster_900,
@@ -490,7 +532,7 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=cluster_900,
         ),
         PedestrianEndpoint(
-            id=cross_1000_n,
+            id=minor_1000_n_e,
             pos=1000,
             movement="ped_minor_north",
             node_id=cluster_1000,
@@ -499,7 +541,25 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
             tl_id=cluster_1000,
         ),
         PedestrianEndpoint(
-            id=cross_1000_s,
+            id=minor_1000_n_w,
+            pos=1000,
+            movement="ped_minor_north",
+            node_id=cluster_1000,
+            edges=(minor_edge_id(1000, "to", "N"), minor_edge_id(1000, "from", "N")),
+            width=3.5,
+            tl_id=cluster_1000,
+        ),
+        PedestrianEndpoint(
+            id=minor_1000_s_e,
+            pos=1000,
+            movement="ped_minor_south",
+            node_id=cluster_1000,
+            edges=(minor_edge_id(1000, "to", "S"), minor_edge_id(1000, "from", "S")),
+            width=3.5,
+            tl_id=cluster_1000,
+        ),
+        PedestrianEndpoint(
+            id=minor_1000_s_w,
             pos=1000,
             movement="ped_minor_south",
             node_id=cluster_1000,

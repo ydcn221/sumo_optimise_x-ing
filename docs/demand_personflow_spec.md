@@ -52,6 +52,10 @@ and junction turning ratios into SUMO `personFlow` definitions.
 - `--demand-endpoint-offset` – spawn/arrival offset (metres)
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
   spreadsheet preparation
+- Endpoint IDs distinguish sidewalk sides on minor approaches:
+  `Node.{pos}.MinorNEdge.{EastSide|WestSide}` and
+  `Node.{pos}.MinorSEdge.{EastSide|WestSide}`. This allows demand to target
+  the specific entrance side used in the junction ratio CSV.
 
 Both CSV options are required to activate the demand pipeline.
 
