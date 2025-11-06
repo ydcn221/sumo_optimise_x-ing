@@ -9,7 +9,7 @@ from ...domain.models import PersonFlowPattern
 
 
 _ENDPOINT_TEMPLATE_NAME = "DemandPerEndpoint_template.csv"
-_JUNCTION_TEMPLATE_NAME = "JunctionDirectionRatio_template.csv"
+_JUNCTION_TEMPLATE_NAME = "JunctionTurnWeight_template.csv"
 
 _ENDPOINT_PATTERN_ROW = ["Pattern", PersonFlowPattern.PERSONS_PER_HOUR.value]
 _ENDPOINT_HEADER = ["EndpointID", "PedFlow", "Label"]
@@ -35,7 +35,7 @@ def _write_csv(path: Path, headers: Sequence[str], rows: Iterable[Sequence[str]]
 
 
 def write_demand_templates(outdir: Path, endpoint_ids: Sequence[str], junction_ids: Sequence[str]) -> None:
-    """Materialise empty CSV templates for endpoint demand and junction ratios."""
+    """Materialise empty CSV templates for endpoint demand and junction turn weights."""
 
     endpoint_rows = ((endpoint_id, "", "") for endpoint_id in endpoint_ids)
     junction_rows = ((junction_id, "", "", "", "", "", "", "", "") for junction_id in junction_ids)

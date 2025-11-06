@@ -16,7 +16,7 @@ def test_write_demand_templates(tmp_path: Path) -> None:
     write_demand_templates(tmp_path, endpoint_ids, junction_ids)
 
     endpoint_path = tmp_path / "DemandPerEndpoint_template.csv"
-    junction_path = tmp_path / "JunctionDirectionRatio_template.csv"
+    junction_path = tmp_path / "JunctionTurnWeight_template.csv"
 
     with endpoint_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))

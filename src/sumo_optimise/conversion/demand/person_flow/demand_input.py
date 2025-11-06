@@ -8,22 +8,22 @@ from typing import Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Unio
 from ...domain.models import (
     CardinalDirection,
     EndpointDemandRow,
-    JunctionDirectionRatios,
+    JunctionTurnWeights,
     PedestrianSide,
     PersonFlowPattern,
 )
 from ...utils.errors import DemandValidationError
 
 EndpointDemandSource = Union[Path, TextIO]
-JunctionRatioSource = Union[Path, TextIO]
+JunctionTurnWeightSource = Union[Path, TextIO]
 
 _ENDPOINT_ID_COLUMN = "EndpointID"
 _FLOW_COLUMN = "PedFlow"
 _LABEL_COLUMN = "Label"
 _PATTERN_KEY = "Pattern"
 
-_RATIO_ID_COLUMN = "JunctionID"
-_RATIO_COLUMNS: Dict[str, Tuple[CardinalDirection, PedestrianSide]] = {
+_TURN_WEIGHT_ID_COLUMN = "JunctionID"
+_TURN_WEIGHT_COLUMNS: Dict[str, Tuple[CardinalDirection, PedestrianSide]] = {
     "ToNorth_EastSide": (CardinalDirection.NORTH, PedestrianSide.EAST_SIDE),
     "ToNorth_WestSide": (CardinalDirection.NORTH, PedestrianSide.WEST_SIDE),
     "ToWest_NorthSide": (CardinalDirection.WEST, PedestrianSide.NORTH_SIDE),
@@ -148,33 +148,33 @@ def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPatte
     return pattern, rows
 
 
-def load_junction_ratios(source: JunctionRatioSource) -> Dict[str, JunctionDirectionRatios]:
-    """Parse junction direction ratios from CSV."""
+def load_junction_turn_weights(source: JunctionTurnWeightSource) -> Dict[str, JunctionTurnWeights]:
+    """Parse junction turn weights from CSV."""
 
-    stream, should_close = _open_source(source, context="Junction ratio CSV")
-    errors = _ErrorCollector("invalid junction ratio rows")
-    ratios: Dict[str, JunctionDirectionRatios] = {}
+    stream, should_close = _open_source(source, context="Junction turn-weight CSV")
+    errors = _ErrorCollector("invalid junction turn-weight rows")
+    turn_weights: Dict[str, JunctionTurnWeights] = {}
 
     try:
         reader = csv.DictReader(stream)
-        required = {_RATIO_ID_COLUMN, *_RATIO_COLUMNS.keys()}
+        required = {_TURN_WEIGHT_ID_COLUMN, *_TURN_WEIGHT_COLUMNS.keys()}
         missing = required - set(reader.fieldnames or [])
         if missing:
             errors.add(f"missing columns: {', '.join(sorted(missing))}")
             errors.raise_if_any()
 
         for index, raw_row in enumerate(reader, start=2):
-            junction_id = (raw_row.get(_RATIO_ID_COLUMN) or "").strip()
+            junction_id = (raw_row.get(_TURN_WEIGHT_ID_COLUMN) or "").strip()
             if not junction_id:
                 errors.add(f"row {index}: JunctionID is required")
                 continue
-            if junction_id in ratios:
+            if junction_id in turn_weights:
                 errors.add(f"row {index}: duplicate JunctionID {junction_id!r}")
                 continue
 
             weights: Dict[Tuple[CardinalDirection, PedestrianSide], float] = {}
             parse_errors: List[str] = []
-            for column, key in _RATIO_COLUMNS.items():
+            for column, key in _TURN_WEIGHT_COLUMNS.items():
                 token = (raw_row.get(column) or "").strip()
                 if not token:
                     parse_errors.append(f"{column} missing value")
@@ -190,13 +190,13 @@ def load_junction_ratios(source: JunctionRatioSource) -> Dict[str, JunctionDirec
                 errors.add(f"row {index} ({junction_id}): " + "; ".join(parse_errors))
                 continue
 
-            ratios[junction_id] = JunctionDirectionRatios(junction_id=junction_id, weights=weights)
+            turn_weights[junction_id] = JunctionTurnWeights(junction_id=junction_id, weights=weights)
     finally:
         if should_close:
             stream.close()
 
     errors.raise_if_any()
-    return ratios
+    return turn_weights
 
 
-__all__ = ["load_endpoint_demands", "load_junction_ratios"]
+__all__ = ["load_endpoint_demands", "load_junction_turn_weights"]

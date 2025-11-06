@@ -44,24 +44,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Number of digits for the zero-padded {seq} placeholder (default: 3)",
     )
     parser.add_argument(
-        "--ped-demand-endpoint",
+        "--ped-endpoint-demand",
         type=Path,
         help="Path to pedestrian endpoint demand CSV (utf-8-sig)",
     )
     parser.add_argument(
-        "--ped-direction-ratio",
+        "--ped-junction-turn-weight",
         type=Path,
-        help="Path to pedestrian direction ratio CSV (utf-8-sig)",
+        help="Path to pedestrian junction turn-weight CSV (utf-8-sig)",
     )
     parser.add_argument(
-        "--veh-demand-endpoint",
+        "--veh-endpoint-demand",
         type=Path,
         help="Path to vehicle endpoint demand CSV (utf-8-sig)",
     )
     parser.add_argument(
-        "--veh-turn-ratio",
+        "--veh-junction-turn-weight",
         type=Path,
-        help="Path to vehicle turn ratio CSV (utf-8-sig)",
+        help="Path to vehicle junction turn-weight CSV (utf-8-sig)",
     )
     parser.add_argument(
         "--demand-sim-end",
@@ -100,10 +100,10 @@ def _build_options(args: argparse.Namespace, output_template: OutputDirectoryTem
 
 
 def _resolve_demand_options(args: argparse.Namespace) -> DemandOptions | None:
-    ped_endpoint_csv = args.ped_demand_endpoint
-    ped_ratio_csv = args.ped_direction_ratio
-    veh_endpoint_csv = getattr(args, "veh_demand_endpoint", None)
-    veh_ratio_csv = getattr(args, "veh_turn_ratio", None)
+    ped_endpoint_csv = args.ped_endpoint_demand
+    ped_ratio_csv = args.ped_junction_turn_weight
+    veh_endpoint_csv = args.veh_endpoint_demand
+    veh_ratio_csv = args.veh_junction_turn_weight
 
     if (
         ped_endpoint_csv is None
@@ -114,15 +114,15 @@ def _resolve_demand_options(args: argparse.Namespace) -> DemandOptions | None:
         return None
 
     if (ped_endpoint_csv is None) != (ped_ratio_csv is None):
-        raise SystemExit("Both --ped-demand-endpoint and --ped-direction-ratio must be provided together")
+        raise SystemExit("Both --ped-endpoint-demand and --ped-junction-turn-weight must be provided together")
     if (veh_endpoint_csv is None) != (veh_ratio_csv is None):
-        raise SystemExit("Both --veh-demand-endpoint and --veh-turn-ratio must be provided together")
+        raise SystemExit("Both --veh-endpoint-demand and --veh-junction-turn-weight must be provided together")
 
     return DemandOptions(
         ped_endpoint_csv=ped_endpoint_csv,
-        ped_direction_ratio_csv=ped_ratio_csv,
+        ped_junction_turn_weight_csv=ped_ratio_csv,
         veh_endpoint_csv=veh_endpoint_csv,
-        veh_direction_ratio_csv=veh_ratio_csv,
+        veh_junction_turn_weight_csv=veh_ratio_csv,
         simulation_end_time=args.demand_sim_end,
     )
 

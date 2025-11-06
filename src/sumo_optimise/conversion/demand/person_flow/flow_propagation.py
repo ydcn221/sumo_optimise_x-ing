@@ -7,7 +7,7 @@ from typing import Deque, Dict, Iterable, List, Mapping, MutableMapping, Optiona
 from ...domain.models import (
     CardinalDirection,
     EndpointDemandRow,
-    JunctionDirectionRatios,
+    JunctionTurnWeights,
     PedestrianSide,
 )
 from ...utils.errors import DemandValidationError
@@ -20,7 +20,7 @@ EdgeRef = Tuple[str, str, int]
 Directive = Tuple[CardinalDirection, PedestrianSide]
 StateKey = Tuple[str, Optional[EdgeRef], Optional[Directive]]
 
-RatioMap = Mapping[str, JunctionDirectionRatios]
+TurnWeightMap = Mapping[str, JunctionTurnWeights]
 
 
 def _main_endpoint_signature(node_id: str) -> Optional[Tuple[str, str]]:
@@ -108,7 +108,7 @@ def _is_main_crosswalk_edge(node: str, neighbor: str) -> bool:
     return node_pos == neighbor_pos and node_half != neighbor_half
 
 
-def _candidate_edges_for_ratio(
+def _candidate_edges_for_turn_weight(
     graph: GraphType,
     *,
     node: str,
@@ -159,23 +159,23 @@ def _candidate_edges_for_ratio(
     return []
 
 
-def _distribute_with_ratios(
+def _distribute_with_turn_weights(
     graph: GraphType,
     *,
     node: str,
     neighbors: List[Tuple[str, int, Mapping[str, object]]],
     incoming_direction: Optional[CardinalDirection],
-    ratios: JunctionDirectionRatios,
+    turn_weights: JunctionTurnWeights,
 ) -> List[Tuple[str, int, float, Optional[Directive]]]:
     weighted: List[Tuple[str, int, float, Optional[Directive]]] = []
     total_weight = 0.0
 
-    for (direction, side), weight in ratios.weights.items():
+    for (direction, side), weight in turn_weights.weights.items():
         if weight <= 0.0:
             continue
         if incoming_direction is not None and direction == incoming_direction:
             continue
-        candidates = _candidate_edges_for_ratio(
+        candidates = _candidate_edges_for_turn_weight(
             graph,
             node=node,
             neighbors=neighbors,
@@ -252,7 +252,7 @@ def _collect_neighbors(graph: GraphType, node: str) -> List[Tuple[str, int, Mapp
 
 def _propagate_single(
     graph: GraphType,
-    ratios: RatioMap,
+    turn_weight_map: TurnWeightMap,
     *,
     source: str,
     amount: float,
@@ -279,7 +279,7 @@ def _propagate_single(
         if directive is not None:
             direction, side = directive
             neighbors = _collect_neighbors(graph, node)
-            directed_edges = _candidate_edges_for_ratio(
+            directed_edges = _candidate_edges_for_turn_weight(
                 graph,
                 node=node,
                 neighbors=neighbors,
@@ -318,14 +318,14 @@ def _propagate_single(
 
         incoming_direction = _incoming_entry_direction(graph, incoming)
 
-        if cluster_id and cluster_id in ratios and not is_endpoint:
-            ratio = ratios[cluster_id]
-            distributions = _distribute_with_ratios(
+        if cluster_id and cluster_id in turn_weight_map and not is_endpoint:
+            junction_turn_weights = turn_weight_map[cluster_id]
+            distributions = _distribute_with_turn_weights(
                 graph,
                 node=node,
                 neighbors=neighbors,
                 incoming_direction=incoming_direction,
-                ratios=ratio,
+                turn_weights=junction_turn_weights,
             )
             if not distributions:
                 distributions = _default_distributions(
@@ -362,7 +362,7 @@ def _propagate_single(
 
 def compute_od_flows(
     graph: GraphType,
-    ratios: RatioMap,
+    turn_weight_map: TurnWeightMap,
     demands: Iterable[EndpointDemandRow],
 ) -> List[Tuple[str, str, float, EndpointDemandRow]]:
     """Compute OD flows for each demand row.
@@ -379,7 +379,7 @@ def compute_od_flows(
         flow_mag = abs(row.flow_per_hour)
         if flow_mag <= EPS:
             continue
-        raw_map = _propagate_single(graph, ratios, source=endpoint_id, amount=flow_mag)
+        raw_map = _propagate_single(graph, turn_weight_map, source=endpoint_id, amount=flow_mag)
         if row.flow_per_hour >= 0:
             origin = endpoint_id
             for destination, value in raw_map.items():

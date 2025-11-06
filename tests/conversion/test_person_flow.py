@@ -11,12 +11,15 @@ from sumo_optimise.conversion.domain.models import (
     CardinalDirection,
     Defaults,
     EndpointDemandRow,
-    JunctionDirectionRatios,
+    JunctionTurnWeights,
     OutputDirectoryTemplate,
     PedestrianSide,
     PersonFlowPattern,
 )
-from sumo_optimise.conversion.demand.person_flow.demand_input import load_endpoint_demands, load_junction_ratios
+from sumo_optimise.conversion.demand.person_flow.demand_input import (
+    load_endpoint_demands,
+    load_junction_turn_weights,
+)
 from sumo_optimise.conversion.demand.person_flow.flow_propagation import compute_od_flows
 from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoint_id
 from sumo_optimise.conversion.demand.person_flow.route_output import render_person_flows
@@ -86,7 +89,7 @@ def _simple_graph() -> nx.MultiGraph:
     return graph
 
 
-def _junction_ratio() -> JunctionDirectionRatios:
+def _junction_weights() -> JunctionTurnWeights:
     weights = {}
     for direction in CardinalDirection:
         for side in PedestrianSide:
@@ -94,15 +97,15 @@ def _junction_ratio() -> JunctionDirectionRatios:
     weights[(CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE)] = 1.0
     weights[(CardinalDirection.NORTH, PedestrianSide.WEST_SIDE)] = 1.0
     weights[(CardinalDirection.WEST, PedestrianSide.NORTH_SIDE)] = 1.0
-    return JunctionDirectionRatios(junction_id="Cluster.100.Main", weights=weights)
+    return JunctionTurnWeights(junction_id="Cluster.100.Main", weights=weights)
 
 
 def test_compute_od_flows_positive_and_negative() -> None:
     graph = _simple_graph()
-    ratios = {"Cluster.100.Main": _junction_ratio()}
+    turn_weights = {"Cluster.100.Main": _junction_weights()}
 
     positive_row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=1200.0, row_index=2)
-    flows = compute_od_flows(graph, ratios, [positive_row])
+    flows = compute_od_flows(graph, turn_weights, [positive_row])
 
     assert len(flows) == 1
     origin, destination, value, row_ref = flows[0]
@@ -112,7 +115,7 @@ def test_compute_od_flows_positive_and_negative() -> None:
     assert row_ref is positive_row
 
     negative_row = EndpointDemandRow(endpoint_id="Node.100.MainS", flow_per_hour=-600.0, row_index=3)
-    flows_negative = compute_od_flows(graph, ratios, [negative_row])
+    flows_negative = compute_od_flows(graph, turn_weights, [negative_row])
 
     assert len(flows_negative) == 1
     origin, destination, value, row_ref = flows_negative[0]
@@ -254,7 +257,7 @@ def test_render_person_flows_minor_endpoint_offsets() -> None:
     assert '<personTrip from="Edge.Main.EB.0-500" to="Edge.MinorN.SB.350" arrivalPos="0.10"/>' in xml
 
 
-def test_load_endpoint_demands_and_ratios() -> None:
+def test_load_endpoint_demands_and_weights() -> None:
     endpoint_csv = StringIO(
         "Pattern,persons_per_hour\n"
         "EndpointID,PedFlow,Label\n"
@@ -267,7 +270,7 @@ def test_load_endpoint_demands_and_ratios() -> None:
     assert rows[0].flow_per_hour == 100
     assert rows[1].flow_per_hour == -50
 
-    ratio_csv = StringIO(
+    turn_weight_csv = StringIO(
         ",".join(
             [
                 "JunctionID",
@@ -284,23 +287,23 @@ def test_load_endpoint_demands_and_ratios() -> None:
         + "\n"
         + "Cluster.100.Main,0,0,0,0,1,0,0,0\n"
     )
-    ratio_map = load_junction_ratios(ratio_csv)
-    assert set(ratio_map) == {"Cluster.100.Main"}
-    ratio = ratio_map["Cluster.100.Main"]
-    assert ratio.weight(CardinalDirection.SOUTH, PedestrianSide.WEST_SIDE) == 1.0
+    turn_weight_map = load_junction_turn_weights(turn_weight_csv)
+    assert set(turn_weight_map) == {"Cluster.100.Main"}
+    weights = turn_weight_map["Cluster.100.Main"]
+    assert weights.weight(CardinalDirection.SOUTH, PedestrianSide.WEST_SIDE) == 1.0
 
 
 def test_cli_accepts_demand_options() -> None:
     args = parse_args(
         [
             "spec.json",
-            "--ped-demand-endpoint",
+            "--ped-endpoint-demand",
             "PedDemand.csv",
-            "--ped-direction-ratio",
+            "--ped-junction-turn-weight",
             "PedRatio.csv",
-            "--veh-demand-endpoint",
+            "--veh-endpoint-demand",
             "VehDemand.csv",
-            "--veh-turn-ratio",
+            "--veh-junction-turn-weight",
             "VehRatio.csv",
             "--demand-sim-end",
             "5400",
@@ -310,9 +313,9 @@ def test_cli_accepts_demand_options() -> None:
     options = _build_options(args, template)
     assert options.demand is not None
     assert options.demand.ped_endpoint_csv == Path("PedDemand.csv")
-    assert options.demand.ped_direction_ratio_csv == Path("PedRatio.csv")
+    assert options.demand.ped_junction_turn_weight_csv == Path("PedRatio.csv")
     assert options.demand.veh_endpoint_csv == Path("VehDemand.csv")
-    assert options.demand.veh_direction_ratio_csv == Path("VehRatio.csv")
+    assert options.demand.veh_junction_turn_weight_csv == Path("VehRatio.csv")
     assert options.demand.simulation_end_time == 5400
 
 
@@ -322,16 +325,16 @@ def test_cli_requires_both_demand_csvs() -> None:
     options = _build_options(args, template)
     assert options.demand is None
 
-    partial_args = parse_args(["spec.json", "--ped-demand-endpoint", "Demand.csv"])
+    partial_args = parse_args(["spec.json", "--ped-endpoint-demand", "Demand.csv"])
     with pytest.raises(SystemExit):
         _build_options(partial_args, OutputDirectoryTemplate())
 
-    vehicle_partial = parse_args(["spec.json", "--veh-demand-endpoint", "Veh.csv"])
+    vehicle_partial = parse_args(["spec.json", "--veh-endpoint-demand", "Veh.csv"])
     with pytest.raises(SystemExit):
         _build_options(vehicle_partial, OutputDirectoryTemplate())
 
 
-def test_ratio_zeroing_keeps_forward_direction() -> None:
+def test_turn_weight_zeroing_keeps_forward_direction() -> None:
     graph = nx.MultiGraph()
     graph.add_node(
         "Node.0.MainN",
@@ -371,20 +374,20 @@ def test_ratio_zeroing_keeps_forward_direction() -> None:
         for side in PedestrianSide:
             weights[(direction, side)] = 0.0
     weights[(CardinalDirection.EAST, PedestrianSide.NORTH_SIDE)] = 1.0
-    ratios = {"Cluster.100.Main": JunctionDirectionRatios("Cluster.100.Main", weights)}
+    turn_weights = {"Cluster.100.Main": JunctionTurnWeights("Cluster.100.Main", weights)}
 
     row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=500.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
 
     assert flows == [("Node.0.MainN", "Node.200.MainN", 500.0, row)]
 
 
-def _make_ratio(overrides: dict[tuple[CardinalDirection, PedestrianSide], float], junction: str) -> JunctionDirectionRatios:
+def _make_weights(overrides: dict[tuple[CardinalDirection, PedestrianSide], float], junction: str) -> JunctionTurnWeights:
     weights = {}
     for direction in CardinalDirection:
         for side in PedestrianSide:
             weights[(direction, side)] = overrides.get((direction, side), 0.0)
-    return JunctionDirectionRatios(junction_id=junction, weights=weights)
+    return JunctionTurnWeights(junction_id=junction, weights=weights)
 
 
 def test_mainline_flow_directed_to_east_end() -> None:
@@ -408,8 +411,8 @@ def test_mainline_flow_directed_to_east_end() -> None:
         length=100.0,
     )
 
-    ratios = {
-        "Cluster.100.Main": _make_ratio(
+    turn_weights = {
+        "Cluster.100.Main": _make_weights(
             {
                 (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
             },
@@ -418,7 +421,7 @@ def test_mainline_flow_directed_to_east_end() -> None:
     }
 
     row = EndpointDemandRow(endpoint_id="Node.0.MainN", flow_per_hour=300.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
 
     assert flows == [("Node.0.MainN", "Node.200.MainN", 300.0, row)]
 
@@ -447,8 +450,8 @@ def test_minor_side_flow_directed_to_east_main_endpoint() -> None:
         length=100.0,
     )
 
-    ratios = {
-        junction: _make_ratio(
+    turn_weights = {
+        junction: _make_weights(
             {
                 (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 2.0,
             },
@@ -457,12 +460,12 @@ def test_minor_side_flow_directed_to_east_main_endpoint() -> None:
     }
 
     row = EndpointDemandRow(endpoint_id=origin, flow_per_hour=180.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
 
     assert flows == [(origin, "Node.200.MainN", 180.0, row)]
 
 
-def test_crosswalk_follows_east_side_ratios() -> None:
+def test_crosswalk_follows_east_side_turn_weights() -> None:
     graph = nx.MultiGraph()
     junction = "Cluster.150.Main"
 
@@ -500,8 +503,8 @@ def test_crosswalk_follows_east_side_ratios() -> None:
         length=4.0,
     )
 
-    ratios = {
-        junction: _make_ratio(
+    turn_weights = {
+        junction: _make_weights(
             {
                 (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
                 (CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE): 2.0,
@@ -511,7 +514,7 @@ def test_crosswalk_follows_east_side_ratios() -> None:
     }
 
     row = EndpointDemandRow(endpoint_id="Node.150.MainN", flow_per_hour=300.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
 
     assert sorted((origin, dest, round(value, 6)) for origin, dest, value, _ in flows) == [
         ("Node.150.MainN", "Node.200.MainN", 100.0),
@@ -557,8 +560,8 @@ def test_crosswalk_follows_west_side_for_north_half() -> None:
         length=4.0,
     )
 
-    ratios = {
-        junction: _make_ratio(
+    turn_weights = {
+        junction: _make_weights(
             {
                 (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE): 1.0,
             },
@@ -567,7 +570,7 @@ def test_crosswalk_follows_west_side_for_north_half() -> None:
     }
 
     row = EndpointDemandRow(endpoint_id="Node.150.MainS", flow_per_hour=180.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
 
     assert flows == [("Node.150.MainS", "Node.200.MainN", 180.0, row)]
 
@@ -603,8 +606,8 @@ def test_crosswalk_handles_multiple_directions_without_conflict() -> None:
         length=100.0,
     )
 
-    ratios = {
-        junction: _make_ratio(
+    turn_weights = {
+        junction: _make_weights(
             {
                 (CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE): 1.0,
                 (CardinalDirection.WEST, PedestrianSide.SOUTH_SIDE): 1.0,
@@ -614,7 +617,7 @@ def test_crosswalk_handles_multiple_directions_without_conflict() -> None:
     }
 
     row = EndpointDemandRow(endpoint_id="Node.200.MainN", flow_per_hour=300.0)
-    flows = compute_od_flows(graph, ratios, [row])
+    flows = compute_od_flows(graph, turn_weights, [row])
     summary = {(origin, dest): value for origin, dest, value, _ in flows}
 
     assert summary[("Node.200.MainN", "Node.300.MainS")] == pytest.approx(150.0)

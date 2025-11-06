@@ -146,8 +146,8 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 ```bash
 $ python -m sumo_optimise.conversion.cli.main \
     path/to/spec.json \
-    --ped-demand-endpoint data/reference/DemandPerEndpoint.csv \
-    --ped-direction-ratio data/reference/JunctionDirectionRatio.csv \
+    --ped-endpoint-demand data/reference/DemandPerEndpoint_SampleUpdated.csv \
+    --ped-junction-turn-weight data/reference/JunctionTurnWeight_SampleUpdated.csv \
     --demand-sim-end 3600
 ```
 
@@ -164,7 +164,7 @@ Key points:
 - West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
   while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
   keeping the demand export aligned with the physical sidewalk placement.
-- `JunctionDirectionRatio.csv` provides raw weights for each direction/side
+- `JunctionTurnWeight_SampleUpdated.csv` provides raw weights for each direction/side
   combination; U-turn branches are suppressed automatically and the remainder
   re-normalised.
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
@@ -174,11 +174,11 @@ Key points:
   minor north east-side endpoints, and minor south west-side endpoints, and at
   `length - offset` for their opposite halves so that flows spawn and terminate
   at the physically correct sidewalk ends.
-- Vehicle demand (endpoint demand + turn ratios) will share the same command-line
-  structure via `--veh-demand-endpoint` / `--veh-turn-ratio`; the loaders are prepared
+- Vehicle demand (endpoint demand + turn weights) will share the same command-line
+  structure via `--veh-endpoint-demand` / `--veh-junction-turn-weight`; the loaders are prepared
   but emission will ship in a future release.
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
-  `DemandPerEndpoint_template.csv` / `JunctionDirectionRatio_template.csv` with
+  `DemandPerEndpoint_template.csv` / `JunctionTurnWeight_template.csv` with
   prefilled IDs in the run directory.
 
 See the spec for data schemas, propagation rules, and output semantics.

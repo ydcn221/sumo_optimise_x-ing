@@ -309,8 +309,8 @@ class EndpointDemandRow:
 
 
 @dataclass(frozen=True)
-class JunctionDirectionRatios:
-    """Ratio weights for distributing pedestrian flows at a junction."""
+class JunctionTurnWeights:
+    """Turn weights for distributing pedestrian flows at a junction."""
 
     junction_id: str
     weights: Dict[Tuple[CardinalDirection, PedestrianSide], float]
@@ -324,9 +324,9 @@ class DemandOptions:
     """CLI-level options controlling demand ingestion and emission."""
 
     ped_endpoint_csv: Optional[Path] = None
-    ped_direction_ratio_csv: Optional[Path] = None
+    ped_junction_turn_weight_csv: Optional[Path] = None
     veh_endpoint_csv: Optional[Path] = None
-    veh_direction_ratio_csv: Optional[Path] = None
+    veh_junction_turn_weight_csv: Optional[Path] = None
     simulation_end_time: float = 3600.0
 
 

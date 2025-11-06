@@ -1,7 +1,7 @@
 # Person Flow Demand Generation
 
 This document summarises the design implemented for converting endpoint demand
-and junction turning ratios into SUMO `personFlow` definitions.
+and junction turn weights into SUMO `personFlow` definitions.
 
 ## Inputs
 
@@ -12,12 +12,12 @@ and junction turning ratios into SUMO `personFlow` definitions.
   - `PedFlow` is signed (`+` origin, `-` sink) in persons/hour
   - Rows are processed independently and never aggregated
 
-- **Junction ratio CSV (`JunctionDirectionRatio.csv`)**
+- **Junction turn-weight CSV (`JunctionTurnWeight.csv`)**
   - Encoding: `utf-8-sig`
   - Columns: `JunctionID`, `ToNorth_EastSide`, `ToNorth_WestSide`,
     `ToWest_NorthSide`, `ToWest_SouthSide`, `ToSouth_WestSide`,
     `ToSouth_EastSide`, `ToEast_SouthSide`, `ToEast_NorthSide`
-  - Ratios are raw weights (not automatically normalised)
+  - Weights are raw values (not automatically normalised)
   - U-turn branches (`To{Same}`) are zeroed at runtime and the remaining
     weights are re-normalised per visit
 
@@ -29,7 +29,7 @@ and junction turning ratios into SUMO `personFlow` definitions.
    representing main-road sidewalks, crosswalks, and minor approaches. Nodes
    carry coordinates, breakpoint metadata, and endpoint flags.
 3. **Flow propagation** – each demand row is expanded independently using a
-   breadth-first walk over the graph. At junction nodes the provided ratio is
+   breadth-first walk over the graph. At junction nodes the provided turn weights are
    applied with U-turn suppression; at simple nodes flux continues straight.
    Negative (sink) rows are propagated as positive sources and flipped at the
    end.
@@ -52,16 +52,16 @@ and junction turning ratios into SUMO `personFlow` definitions.
 
 ## CLI options
 
-- `--ped-demand-endpoint` – path to the pedestrian endpoint demand CSV
-- `--ped-direction-ratio` – path to the pedestrian direction-ratio CSV
-- `--veh-demand-endpoint` / `--veh-turn-ratio` – reserved for the upcoming vehicle flow inputs
+- `--ped-endpoint-demand` – path to the pedestrian endpoint demand CSV
+- `--ped-junction-turn-weight` – path to the pedestrian turn-weight CSV
+- `--veh-endpoint-demand` / `--veh-junction-turn-weight` – reserved for the upcoming vehicle flow inputs
 - `--demand-sim-end` – simulation end time (seconds) shared by pedestrian and future vehicle flows
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
-  spreadsheet preparation
+  spreadsheet preparation (`DemandPerEndpoint_template.csv` and `JunctionTurnWeight_template.csv`)
 - Endpoint IDs distinguish sidewalk sides on minor approaches:
   `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
   `Node.{pos}.MinorSEndpoint.{EastSide|WestSide}`. This allows demand to target
-  the specific entrance side used in the junction ratio CSV. West-side endpoints
+  the specific entrance side used in the junction turn-weight CSV. West-side endpoints
   resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`) and
   east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
   so exported routes stay consistent with the physical sidewalk layout.
