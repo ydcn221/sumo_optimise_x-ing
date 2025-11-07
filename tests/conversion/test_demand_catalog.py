@@ -30,7 +30,7 @@ from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoin
 
 
 def _prepare_inputs():
-    spec_path = Path("data/reference/SUMO_OPTX_v1.3_sample.json")
+    spec_path = Path("data/reference/SUMO_OPTX_demo(connection_build)") / "SUMO_OPTX_v1.3_sample.json"
     schema_path = Path("src/sumo_optimise/conversion/data/schema.json")
 
     spec_json = load_json_file(spec_path)
