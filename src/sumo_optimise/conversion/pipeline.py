@@ -8,6 +8,7 @@ from .domain.models import BuildOptions, BuildResult
 from .demand.catalog import build_endpoint_catalog
 from .demand.person_flow import prepare_person_flow_routes
 from .demand.person_flow.graph_builder import build_pedestrian_graph
+from .demand.visualization import render_pedestrian_network_image
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
 from .emitters.tll import render_tll_xml
@@ -79,8 +80,9 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
     )
 
     endpoint_ids: list[str] | None = None
+    ped_graph = None
     if options.generate_demand_templates:
-        graph = build_pedestrian_graph(
+        ped_graph = build_pedestrian_graph(
             main_road=main_road,
             defaults=defaults,
             clusters=clusters,
@@ -88,7 +90,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
             catalog=endpoint_catalog,
         )
         endpoint_ids = sorted(
-            node_id for node_id, data in graph.nodes(data=True) if data.get("is_endpoint")
+            node_id for node_id, data in ped_graph.nodes(data=True) if data.get("is_endpoint")
         )
 
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
@@ -135,6 +137,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         demand_xml=demand_xml,
         endpoint_ids=endpoint_ids,
         junction_ids=junction_ids,
+        pedestrian_graph=ped_graph,
     )
 
 
@@ -159,6 +162,16 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
             result.endpoint_ids or [],
             result.junction_ids or [],
         )
+
+        image_path = artifacts.outdir / "pedestrian_network.svg"
+        visualization = render_pedestrian_network_image(
+            result.pedestrian_graph,
+            result.endpoint_ids or [],
+            result.junction_ids or [],
+            image_path,
+        )
+        if visualization is not None:
+            result.network_image_path = visualization.image_path
 
     manifest = {
         "source": str(spec_path.resolve()),

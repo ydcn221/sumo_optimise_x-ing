@@ -1,0 +1,5 @@
+﻿JunctionID,ToNorth_EastSide,ToNorth_WestSide,ToWest_NorthSide,ToWest_SouthSide,ToSouth_WestSide,ToSouth_EastSide,ToEast_SouthSide,ToEast_NorthSide
+Cluster.1000.Main,1,1,1,1,1,1,1,1
+Cluster.350.Main,1,1,1,1,1,1,1,1
+Cluster.650.Main,1,1,1,1,1,1,1,1
+Cluster.900.Main,1,1,1,1,1,1,1,1

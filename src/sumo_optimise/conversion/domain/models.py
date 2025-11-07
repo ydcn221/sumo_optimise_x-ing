@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..utils.constants import OUTPUT_DIR_PREFIX
 
@@ -363,6 +363,8 @@ class BuildResult:
     manifest_path: Optional[Path] = None
     endpoint_ids: Optional[List[str]] = None
     junction_ids: Optional[List[str]] = None
+    pedestrian_graph: Optional[Any] = None
+    network_image_path: Optional[Path] = None
 
 
 @dataclass

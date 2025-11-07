@@ -40,5 +40,6 @@ def test_build_corridor_artifacts_collects_template_ids(tmp_path: Path) -> None:
 
     assert result.endpoint_ids
     assert result.junction_ids
+    assert result.pedestrian_graph is not None
     assert minor_endpoint_id(350, "N", PedestrianSide.EAST_SIDE) in result.endpoint_ids
     assert minor_endpoint_id(350, "N", PedestrianSide.WEST_SIDE) in result.endpoint_ids
