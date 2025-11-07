@@ -33,50 +33,68 @@ def _build_options() -> BuildOptions:
     return BuildOptions(schema_path=Path('src/sumo_optimise/conversion/data/schema.json'))
 
 
-_SMALL_DEMO_CASES: Iterable[Tuple[str, str]] = [
+_DEMO_REFERENCE_ROOT = Path('data/reference/SUMO_OPTX_demo(connection_build)')
+
+_SMALL_DEMO_CASES: Iterable[Tuple[str, Path]] = [
     (
-        'small_demo_1.json',
-        'data/reference/ideal_XML_demo_1/demo_1_noconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_1.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_1'
+        / 'demo_1_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_1_conflict.json',
-        'data/reference/ideal_XML_demo_1_conflict/demo_1_allowconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_1_conflict.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_1_conflict'
+        / 'demo_1_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_2.json',
-        'data/reference/ideal_XML_demo_2/demo_2_noconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_2.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_2'
+        / 'demo_2_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_2_conflict.json',
-        'data/reference/ideal_XML_demo_2_conflict/demo_2_allowconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_2_conflict.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_2_conflict'
+        / 'demo_2_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_3.json',
-        'data/reference/ideal_XML_demo_3/demo_3_noconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_3.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_3'
+        / 'demo_3_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_3_conflict.json',
-        'data/reference/ideal_XML_demo_3_conflict/demo_3_allowconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_3_conflict.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_3_conflict'
+        / 'demo_3_allowconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_4.json',
-        'data/reference/ideal_XML_demo_4/demo_4_noconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_4.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_4'
+        / 'demo_4_noconflict_ideal.tll.xml',
     ),
     (
-        'small_demo_4_conflict.json',
-        'data/reference/ideal_XML_demo_4_conflict/demo_4_allowconflict_ideal.tll.xml',
+        'SUMO_OPTX_demo_4_conflict.json',
+        _DEMO_REFERENCE_ROOT
+        / 'ideal_XML_demo_4_conflict'
+        / 'demo_4_allowconflict_ideal.tll.xml',
     ),
 ]
 
 
 @pytest.mark.parametrize(('spec_name', 'reference_path'), _SMALL_DEMO_CASES)
-def test_small_demo_connection_indices_match_reference(spec_name: str, reference_path: str) -> None:
-    spec_path = Path('data/reference') / spec_name
+def test_small_demo_connection_indices_match_reference(spec_name: str, reference_path: Path) -> None:
+    spec_path = _DEMO_REFERENCE_ROOT / spec_name
     options = _build_options()
     result = build_corridor_artifacts(spec_path, options)
 
     our_connections = _parse_connection_links(result.tll_xml)
-    reference_text = Path(reference_path).read_text(encoding='utf-8')
+    reference_text = reference_path.read_text(encoding='utf-8')
     reference_connections = _parse_connection_links(reference_text)
 
     assert our_connections == reference_connections

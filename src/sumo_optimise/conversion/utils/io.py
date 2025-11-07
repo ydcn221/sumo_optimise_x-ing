@@ -6,9 +6,14 @@ import json
 import time
 from itertools import count
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
-from sqids import Sqids
+try:  # pragma: no cover - exercised indirectly
+    from sqids import Sqids
+except ModuleNotFoundError:  # pragma: no cover - fallback for environments without sqids
+    class Sqids:  # type: ignore[override]
+        def encode(self, values: Sequence[int]) -> str:
+            return "_".join(f"{value:x}" for value in values)
 
 from ..domain.models import OutputDirectoryTemplate
 from .constants import (
@@ -16,6 +21,7 @@ from .constants import (
     EDGES_FILE_NAME,
     MANIFEST_NAME,
     NODES_FILE_NAME,
+    ROUTES_FILE_NAME,
     TLL_FILE_NAME,
 )
 
@@ -100,6 +106,7 @@ class BuildArtifacts:
         self.edges_path = outdir / EDGES_FILE_NAME
         self.connections_path = outdir / CONNECTIONS_FILE_NAME
         self.tll_path = outdir / TLL_FILE_NAME
+        self.routes_path = outdir / ROUTES_FILE_NAME
 
 
 def ensure_output_directory(
@@ -123,7 +130,8 @@ def ensure_output_directory(
 
         if run_name:
             run_path = Path(run_name)
-            if run_path.is_absolute():
+            anchor = getattr(run_path, "anchor", "")
+            if run_path.is_absolute() or anchor not in {"", None}:
                 raise ValueError("run directory template must be relative")
             outdir = root_path / run_path
         else:
@@ -152,11 +160,14 @@ def persist_xml(
     edges: str,
     connections: str,
     tll: str,
+    demand: str | None = None,
 ) -> None:
     artifacts.nodes_path.write_text(nodes, encoding="utf-8")
     artifacts.edges_path.write_text(edges, encoding="utf-8")
     artifacts.connections_path.write_text(connections, encoding="utf-8")
     artifacts.tll_path.write_text(tll, encoding="utf-8")
+    if demand is not None:
+        artifacts.routes_path.write_text(demand, encoding="utf-8")
 
 
 __all__ = [

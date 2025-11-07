@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Set
 
+from ..builder.ids import cluster_id
 from ..domain.models import (
     Cluster,
     Defaults,
@@ -57,7 +58,7 @@ def _collect_programs(
 ) -> Dict[str, _TlProgram]:
     programs: Dict[str, _TlProgram] = {}
     for cluster in clusters:
-        tl_id = f"Cluster.Main.{cluster.pos_m}"
+        tl_id = cluster_id(cluster.pos_m)
         for event in cluster.events:
             if not bool(event.signalized):
                 continue
@@ -125,20 +126,21 @@ def _ped_matches(pattern: str, ped_name: str) -> bool:
 
 
 def _ped_base(name: str) -> str:
-    if name.endswith("_EB") or name.endswith("_WB"):
-        return name.rsplit("_", 1)[0]
+    for suffix in ("_EB", "_WB", "_north", "_south"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
     return name
 
 
 _SEGMENT_TO_PEDS: Mapping[str, Set[str]] = {
     "S-W": {"ped_minor_south"},
     "S-E": {"ped_minor_south"},
-    "E-S": {"ped_main_east_WB"},
-    "E-N": {"ped_main_east_EB"},
+    "E-S": {"ped_main_east_south"},
+    "E-N": {"ped_main_east_north"},
     "N-E": {"ped_minor_north"},
     "N-W": {"ped_minor_north"},
-    "W-N": {"ped_main_west_EB"},
-    "W-S": {"ped_main_west_WB"},
+    "W-N": {"ped_main_west_north"},
+    "W-S": {"ped_main_west_south"},
 }
 
 
@@ -183,11 +185,11 @@ def _vehicle_conflicts() -> Dict[str, Dict[str, Set[str]]]:
 
     for movement in ("main_EB_T", "main_WB_T"):
         info = conflicts.setdefault(movement, {"mandatory": set(), "left": set(), "right": set()})
-        info["mandatory"].update({"ped_mid", "ped_mid_EB", "ped_mid_WB"})
+        info["mandatory"].update({"ped_mid", "ped_mid_north", "ped_mid_south"})
 
     coupled_segments = {
-        "ped_main_west": ("ped_main_west_EB", "ped_main_west_WB"),
-        "ped_main_east": ("ped_main_east_EB", "ped_main_east_WB"),
+        "ped_main_west": ("ped_main_west_north", "ped_main_west_south"),
+        "ped_main_east": ("ped_main_east_north", "ped_main_east_south"),
     }
     for info in conflicts.values():
         for merged, components in coupled_segments.items():

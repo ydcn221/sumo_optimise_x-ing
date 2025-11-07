@@ -247,17 +247,89 @@ class LinkEmissionCollector:
         return lines, metadata, controlled_connections
 
 
+def _cardinal_to_orientation(cardinal: str) -> Optional[int]:
+    mapping = {"S": 0, "W": 1, "N": 2, "E": 3}
+    return mapping.get(cardinal)
+
+
+def _direction_token_to_cardinal(token: str) -> Optional[str]:
+    normalized = token.strip().upper()
+    if not normalized:
+        return None
+
+    direct = {
+        "N": "N",
+        "NORTH": "N",
+        "NB": "N",
+        "NORTHBOUND": "N",
+        "S": "S",
+        "SOUTH": "S",
+        "SB": "S",
+        "SOUTHBOUND": "S",
+        "E": "E",
+        "EAST": "E",
+        "EB": "E",
+        "EASTBOUND": "E",
+        "W": "W",
+        "WEST": "W",
+        "WB": "W",
+        "WESTBOUND": "W",
+    }
+    if normalized in direct:
+        return direct[normalized]
+
+    for separator in ("_", "-", "/"):
+        if separator in normalized:
+            for segment in normalized.split(separator):
+                cardinal = _direction_token_to_cardinal(segment)
+                if cardinal:
+                    return cardinal
+            return None
+
+    prefixes = ("MAIN", "MINOR", "EDGE", "NODE", "CROSS")
+    for prefix in prefixes:
+        if normalized.startswith(prefix) and len(normalized) > len(prefix):
+            remainder = normalized[len(prefix) :]
+            cardinal = _direction_token_to_cardinal(remainder)
+            if cardinal:
+                return cardinal
+
+    suffixes = ("BOUND", "SIDE", "HALF", "APPROACH")
+    for suffix in suffixes:
+        if normalized.endswith(suffix) and len(normalized) > len(suffix):
+            remainder = normalized[: -len(suffix)]
+            cardinal = _direction_token_to_cardinal(remainder)
+            if cardinal:
+                return cardinal
+
+    return None
+
+
 def _edge_orientation(edge_id: str) -> Optional[int]:
     if not edge_id:
         return None
-    if ".to.S" in edge_id or ".from.S" in edge_id:
-        return 0
-    if ".WB." in edge_id:
-        return 1
-    if ".to.N" in edge_id or ".from.N" in edge_id:
-        return 2
-    if ".EB." in edge_id:
-        return 3
+
+    parts = edge_id.split(".")
+    if len(parts) < 3 or parts[0] != "Edge":
+        return None
+
+    category = parts[1]
+    if category.startswith("Minor"):
+        cardinal = _direction_token_to_cardinal(category)
+        if cardinal in {"N", "S"}:
+            return _cardinal_to_orientation(cardinal)
+
+    if category == "Main":
+        direction_token = parts[2] if len(parts) > 2 else ""
+        cardinal = _direction_token_to_cardinal(direction_token)
+        if cardinal in {"E", "W"}:
+            return _cardinal_to_orientation(cardinal)
+
+    for token in parts[2:]:
+        cardinal = _direction_token_to_cardinal(token)
+        if cardinal in {"N", "S", "E", "W"}:
+            return _cardinal_to_orientation(cardinal)
+
     return None
 
 
@@ -276,16 +348,14 @@ def _movement_priority(movement: str) -> int:
 
 
 def _crossing_orientation(crossing_id: str, edges: str) -> int:
-    if crossing_id.startswith("Cross.Minor."):
-        if crossing_id.endswith(".S"):
-            return 0
-        if crossing_id.endswith(".N"):
-            return 2
-    if crossing_id.startswith("Cross.Main."):
-        if ".East" in crossing_id:
-            return 1
-        if ".West" in crossing_id:
-            return 3
+    parts = crossing_id.split(".")
+    if parts and parts[0] == "Xwalk" and len(parts) >= 3:
+        for token in parts[2:]:
+            cardinal = _direction_token_to_cardinal(token)
+            if cardinal:
+                orientation = _cardinal_to_orientation(cardinal)
+                if orientation is not None:
+                    return orientation
 
     for edge in edges.split():
         orientation = _edge_orientation(edge)
@@ -296,9 +366,14 @@ def _crossing_orientation(crossing_id: str, edges: str) -> int:
 
 
 def _crossing_movement_priority(movement: str) -> int:
-    if movement.endswith("_EB"):
+    if not movement:
         return 0
-    if movement.endswith("_WB"):
+
+    suffix = movement.rsplit("_", 1)[-1]
+    cardinal = _direction_token_to_cardinal(suffix)
+    if cardinal in {"N", "E"}:
+        return 0
+    if cardinal in {"S", "W"}:
         return 1
     return 0
 
@@ -645,14 +720,14 @@ def get_main_edges_west_side(breakpoints: List[int], pos: int) -> Tuple[Optional
     west, _ = find_neighbor_segments(breakpoints, pos)
     if west is None:
         return None, None
-    return (main_edge_id("EB", west, pos), main_edge_id("WB", west, pos))
+    return (main_edge_id("EB", west, pos), main_edge_id("WB", pos, west))
 
 
 def get_main_edges_east_side(breakpoints: List[int], pos: int) -> Tuple[Optional[str], Optional[str]]:
     _, east = find_neighbor_segments(breakpoints, pos)
     if east is None:
         return None, None
-    return (main_edge_id("EB", pos, east), main_edge_id("WB", pos, east))
+    return (main_edge_id("EB", pos, east), main_edge_id("WB", east, pos))
 
 
 def render_connections_xml(
@@ -707,8 +782,8 @@ def render_connections_xml(
             branches = [branch] if branch in ("north", "south") else []
         for b in branches:
             ns = "N" if b == "north" else "S"
-            e_to = f"Edge.Minor.{pos}.to.{ns}"
-            e_from = f"Edge.Minor.{pos}.from.{ns}"
+            e_to = minor_edge_id(pos, "to", ns)
+            e_from = minor_edge_id(pos, "from", ns)
             cid = crossing_id_minor(pos, ns)
             collector.add_crossing(
                 crossing_id=cid,
@@ -724,19 +799,19 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if split_main:
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "West", "EB"),
+                        crossing_id=crossing_id_main_split(pos, "West", "north"),
                         node_id=node,
                         edges=eb_edge,
                         width=width,
-                        movement="ped_main_west_EB",
+                        movement="ped_main_west_north",
                         tl_id=tl_id,
                     )
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "West", "WB"),
+                        crossing_id=crossing_id_main_split(pos, "West", "south"),
                         node_id=node,
                         edges=wb_edge,
                         width=width,
-                        movement="ped_main_west_WB",
+                        movement="ped_main_west_south",
                         tl_id=tl_id,
                     )
                 else:
@@ -754,19 +829,19 @@ def render_connections_xml(
             if eb_edge and wb_edge:
                 if split_main:
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "East", "EB"),
+                        crossing_id=crossing_id_main_split(pos, "East", "north"),
                         node_id=node,
                         edges=eb_edge,
                         width=width,
-                        movement="ped_main_east_EB",
+                        movement="ped_main_east_north",
                         tl_id=tl_id,
                     )
                     collector.add_crossing(
-                        crossing_id=crossing_id_main_split(pos, "East", "WB"),
+                        crossing_id=crossing_id_main_split(pos, "East", "south"),
                         node_id=node,
                         edges=wb_edge,
                         width=width,
-                        movement="ped_main_east_WB",
+                        movement="ped_main_east_south",
                         tl_id=tl_id,
                     )
                 else:
@@ -796,8 +871,8 @@ def render_connections_xml(
 
         eb_in_edge = main_edge_id("EB", west, pos)
         eb_out_edge = main_edge_id("EB", pos, east)
-        wb_in_edge = main_edge_id("WB", pos, east)
-        wb_out_edge = main_edge_id("WB", west, pos)
+        wb_in_edge = main_edge_id("WB", east, pos)
+        wb_out_edge = main_edge_id("WB", pos, west)
 
         eb_in_lanes = pick_lanes_for_segment("EB", west, pos, main_road.lanes, lane_overrides)
         eb_out_lanes = pick_lanes_for_segment("EB", pos, east, main_road.lanes, lane_overrides)
@@ -843,19 +918,19 @@ def render_connections_xml(
         split_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
         if split_midblock:
             collector.add_crossing(
-                crossing_id=crossing_id_midblock_split(pos, "EB"),
+                crossing_id=crossing_id_midblock_split(pos, "north"),
                 node_id=node,
                 edges=eb_edge,
                 width=width,
-                movement="ped_mid_EB",
+                movement="ped_mid_north",
                 tl_id=tl_id,
             )
             collector.add_crossing(
-                crossing_id=crossing_id_midblock_split(pos, "WB"),
+                crossing_id=crossing_id_midblock_split(pos, "south"),
                 node_id=node,
                 edges=wb_edge,
                 width=width,
-                movement="ped_mid_WB",
+                movement="ped_mid_south",
                 tl_id=tl_id,
             )
         else:
@@ -917,7 +992,7 @@ def render_connections_xml(
             if not allow_main_uturn:
                 u_lanes = 0
             U_target = (
-                main_edge_id("WB", west, pos), u_lanes
+                main_edge_id("WB", pos, west), u_lanes
             ) if u_lanes > 0 else None
             if tpl.median_continuous:
                 R_target = None
@@ -936,13 +1011,13 @@ def render_connections_xml(
             )
 
         if east is not None:
-            in_edge = main_edge_id("WB", pos, east)
+            in_edge = main_edge_id("WB", east, pos)
             s_count = pick_main("WB", pos, east)
             L_target = (
                 minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
             ) if exist_south else None
             T_target = (
-                main_edge_id("WB", west, pos), pick_main("WB", west, pos)
+                main_edge_id("WB", pos, west), pick_main("WB", west, pos)
             ) if west is not None else None
             R_target = (
                 minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
@@ -981,7 +1056,7 @@ def render_connections_xml(
                 minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
             ) if exist_south and tpl.minor_lanes_from_main > 0 else None
             R_target = (
-                main_edge_id("WB", west, pos), west_lanes
+                main_edge_id("WB", pos, west), west_lanes
             ) if west is not None and west_lanes > 0 else None
             U_target = None
             if tpl.median_continuous:
@@ -1017,7 +1092,7 @@ def render_connections_xml(
             west_lanes = pick_main("WB", west, pos) if west is not None else 0
             east_lanes = pick_main("EB", pos, east) if east is not None else 0
             L_target = (
-                main_edge_id("WB", west, pos), west_lanes
+                main_edge_id("WB", pos, west), west_lanes
             ) if west is not None and west_lanes > 0 else None
             T_target = (
                 minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main

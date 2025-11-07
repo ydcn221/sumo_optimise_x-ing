@@ -43,3 +43,11 @@ def test_cli_accepts_output_template_overrides() -> None:
     assert template.root == "runs/{year}{month}"
     assert template.run == "{hour}{minute}-{seq:04}"
     assert template.seq_digits == 4
+
+
+def test_cli_generate_demand_templates_flag() -> None:
+    args = parse_args(["spec.json", "--generate-demand-templates"])
+    template = _resolve_output_template(args)
+    options = _build_options(args, template)
+
+    assert options.generate_demand_templates is True

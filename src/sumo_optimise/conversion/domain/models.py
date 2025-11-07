@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..utils.constants import OUTPUT_DIR_PREFIX
 
@@ -35,6 +35,20 @@ class Movement(str, Enum):
     PEDESTRIAN = "PED"
 
 
+class CardinalDirection(str, Enum):
+    NORTH = "North"
+    SOUTH = "South"
+    EAST = "East"
+    WEST = "West"
+
+
+class PedestrianSide(str, Enum):
+    NORTH_SIDE = "NorthSide"
+    SOUTH_SIDE = "SouthSide"
+    EAST_SIDE = "EastSide"
+    WEST_SIDE = "WestSide"
+
+
 class EventKind(str, Enum):
     TEE = "tee"
     CROSS = "cross"
@@ -62,6 +76,7 @@ class Defaults:
     minor_road_length_m: int
     ped_crossing_width_m: float
     speed_kmh: int
+    ped_endpoint_offset_m: float = 0.10
     sidewalk_width_m: Optional[float] = None
 
 
@@ -180,6 +195,142 @@ class ConnectionsRenderResult:
 
 
 @dataclass(frozen=True)
+class VehicleEndpoint:
+    """Descriptor for a vehicle endpoint used when building demand flows."""
+
+    id: str
+    pos: int
+    category: str
+    edge_id: str
+    lane_count: int
+    is_inbound: bool
+    tl_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PedestrianEndpoint:
+    """Descriptor for a pedestrian crossing endpoint in the demand model."""
+
+    id: str
+    pos: int
+    movement: str
+    node_id: str
+    edges: Tuple[str, ...]
+    width: float
+    tl_id: Optional[str] = None
+
+
+class PedestrianSegmentKind(str, Enum):
+    ENDPOINT = "endpoint"
+    POSITION = "position"
+    RANGE = "range"
+
+
+class PedestrianRateKind(str, Enum):
+    ABSOLUTE = "per_hour"
+    PER_METER = "per_hour_per_m"
+
+
+@dataclass(frozen=True)
+class VehicleDemandSegment:
+    """Demand magnitude tied to a vehicle endpoint."""
+
+    endpoint_id: str
+    departures_per_hour: float
+    arrivals_per_hour: float
+
+
+@dataclass(frozen=True)
+class PedestrianDemandSegment:
+    """Demand magnitude for pedestrians, covering point or ranged scopes."""
+
+    kind: PedestrianSegmentKind
+    rate_kind: PedestrianRateKind
+    departures: float
+    arrivals: float
+    side: Optional[DirectionMain] = None
+    start_m: Optional[int] = None
+    end_m: Optional[int] = None
+    endpoint_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DemandInput:
+    """Aggregate view of vehicle and pedestrian demand parsed from CSV inputs."""
+
+    vehicles: List[VehicleDemandSegment]
+    pedestrians: List[PedestrianDemandSegment]
+
+
+@dataclass(frozen=True)
+class VehicleFlow:
+    """Placeholder descriptor for future vehicle demand flows."""
+
+    id: str
+    origin: str
+    destination: str
+    description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PedestrianFlow:
+    """Placeholder descriptor for future pedestrian demand flows."""
+
+    id: str
+    origin: str
+    destination: str
+    description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EndpointCatalog:
+    """Collection of vehicle and pedestrian endpoints/flows for demand planning."""
+
+    vehicle_endpoints: List[VehicleEndpoint]
+    pedestrian_endpoints: List[PedestrianEndpoint]
+    vehicle_flows: List[VehicleFlow] = field(default_factory=list)
+    pedestrian_flows: List[PedestrianFlow] = field(default_factory=list)
+
+
+class PersonFlowPattern(str, Enum):
+    PERSONS_PER_HOUR = "persons_per_hour"
+    PERIOD = "period"
+    POISSON = "poisson"
+
+
+@dataclass(frozen=True)
+class EndpointDemandRow:
+    """Parsed demand row for a specific endpoint."""
+
+    endpoint_id: str
+    flow_per_hour: float
+    label: Optional[str] = None
+    row_index: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class JunctionTurnWeights:
+    """Turn weights for distributing pedestrian flows at a junction."""
+
+    junction_id: str
+    weights: Dict[Tuple[CardinalDirection, PedestrianSide], float]
+
+    def weight(self, direction: CardinalDirection, side: PedestrianSide) -> float:
+        return self.weights.get((direction, side), 0.0)
+
+
+@dataclass(frozen=True)
+class DemandOptions:
+    """CLI-level options controlling demand ingestion and emission."""
+
+    ped_endpoint_csv: Optional[Path] = None
+    ped_junction_turn_weight_csv: Optional[Path] = None
+    veh_endpoint_csv: Optional[Path] = None
+    veh_junction_turn_weight_csv: Optional[Path] = None
+    simulation_end_time: float = 3600.0
+
+
+@dataclass(frozen=True)
 class CorridorSpec:
     version: str
     snap: SnapRule
@@ -197,6 +348,8 @@ class BuildOptions:
     run_netedit: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
+    demand: Optional[DemandOptions] = None
+    generate_demand_templates: bool = False
 
 
 @dataclass
@@ -206,7 +359,12 @@ class BuildResult:
     connections_xml: str
     connection_links: List[SignalLink]
     tll_xml: str
+    demand_xml: Optional[str] = None
     manifest_path: Optional[Path] = None
+    endpoint_ids: Optional[List[str]] = None
+    junction_ids: Optional[List[str]] = None
+    pedestrian_graph: Optional[Any] = None
+    network_image_path: Optional[Path] = None
 
 
 @dataclass
@@ -215,4 +373,3 @@ class CorridorArtifacts:
     edges_path: Path
     connections_path: Path
     tll_path: Path
-

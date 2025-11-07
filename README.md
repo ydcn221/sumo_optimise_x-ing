@@ -83,10 +83,10 @@ $ python -m pip install -e .
 
 ```bash
 # POSIX
-$ python -m sumo_optimise.conversion.cli --input path/to/spec.json
+$ python -m sumo_optimise.conversion.cli.main --input path/to/spec.json
 
 # PowerShell
-PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
+PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 ```
 
 **Default behavior**
@@ -100,6 +100,17 @@ PS> python -m sumo_optimise.conversion.cli --input path\to\spec.json
   * `1-generated.con.xml` — vehicle connections and pedestrian crossings
   * `1-generated.tll.xml` — traffic-light logic programmes
   * `build.log` — structured log
+
+  **Identifier schema (excerpt)**
+
+  * Main nodes: `Node.Main.{pos}.{N|S}` for the north/south halves. Helpers accept legacy EB/WB tokens but always emit the cardinal suffix.
+  * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}`. `begin` / `end` must follow the travel direction (`begin < end` for EB, `begin > end` for WB) and the helper raises when callers pass mismatched order.
+  * Minor approach nodes: `Node.Minor.{pos}.{N|S}_end` from `minor_end_node_id`.
+  * Sidewalk endpoints (pedestrian demand only): `PedEnd.Main.{E|W}_end.{N|S}_sidewalk` and `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. No other `PedEnd.*` forms are valid.
+  * Minor edges: `Edge.Minor.{N_arm|S_arm}.{NB|SB}.{pos}` generated from `minor_edge_id(pos, flow, orientation)`; pass `flow="to"` / `"from"` and let the helper normalise to `NB` / `SB`.
+  * Cluster joins / TLS IDs: `Cluster.{pos}`.
+  * Junction crossings: `Xwalk.{pos}.{cardinal}`, with optional split halves yielding `Xwalk.{pos}.{cardinal}.{N|S|E|W}_half` via `crossing_id_main_split`.
+  * Mid-block crossings: `Xwalk.{pos}` or `Xwalk.{pos}.{N|S}_half` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
 
 ### Build + netconvert (if `netconvert` is on PATH)
 
@@ -124,6 +135,53 @@ $ netconvert --lefthand \
 ```
 
 Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
+
+---
+
+## Demand-driven pedestrian flows
+
+`v0.3.0` ships a first-class `personFlow` generator driven by signed endpoint
+ demand and junction turning ratios. The feature is documented in
+ **`docs/demand_personflow_spec.md`** and activated via the CLI:
+
+```bash
+$ python -m sumo_optimise.conversion.cli.main \
+    path/to/spec.json \
+    --ped-endpoint-demand data/reference/DemandPerEndpoint_SampleUpdated.csv \
+    --ped-junction-turn-weight data/reference/JunctionTurnWeight_SampleUpdated.csv \
+    --demand-sim-end 3600
+```
+
+Key points:
+
+- `DemandPerEndpoint.csv` declares the flow pattern on the first row
+  (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
+  row (`SidewalkEndID,PedFlow,Label`) and one endpoint per subsequent row with signed
+  persons/hour volumes (positive = origin, negative = sink).
+- Minor approaches expose separate east/west sidewalk endpoints:
+  `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. Use these to balance
+  approach-specific demand.
+- West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
+  while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
+  keeping the demand export aligned with the physical sidewalk placement.
+- `JunctionTurnWeight_SampleUpdated.csv` provides raw weights for each direction/side
+  combination; U-turn branches are suppressed automatically and the remainder
+  re-normalised.
+- A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
+  approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
+  `plainXML_out/.../1-generated.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
+  (corridor JSON) is applied at the lane start for west-end north halves, east-end south halves,
+  minor north east-side endpoints, and minor south west-side endpoints, and at
+  `length - offset` for their opposite halves so that flows spawn and terminate
+  at the physically correct sidewalk ends.
+- Vehicle demand (endpoint demand + turn weights) will share the same command-line
+  structure via `--veh-endpoint-demand` / `--veh-junction-turn-weight`; the loaders are prepared
+  but emission will ship in a future release.
+- Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
+  `DemandPerEndpoint_template.csv` / `JunctionTurnWeight_template.csv` with
+  prefilled IDs in the run directory.
+
+See the spec for data schemas, propagation rules, and output semantics.
 
 ---
 
@@ -162,12 +220,64 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
+## Demand CSV specification
+
+Demand files supplement the JSON specification when generating SUMO flows. Two
+UTF-8 CSVs are expected (headers required):
+
+### Vehicles
+
+Columns: `endpoint_id`, any column containing `generated`, and any column
+containing `attracted`. Additional tokens may be present (e.g.
+`generated_veh_per_h`) as long as the keywords remain intact.
+
+* `endpoint_id` — identifier returned by the endpoint catalogue
+  (:class:`sumo_optimise.conversion.domain.models.VehicleEndpoint`).
+* `generated*` — vehicles leaving the corridor via the endpoint (veh/h).
+* `attracted*` — vehicles entering the corridor via the endpoint (veh/h).
+
+### Pedestrians
+
+The pedestrian CSV serves two distinct scopes: **catalogued endpoints** and
+**main-road frontage segments**. Column names must contain `generated`/
+`attracted`; per-metre rates additionally require the suffix `per_m`.
+
+* `endpoint_id` — direct reference to a pedestrian endpoint (side inferred from
+  the catalogue metadata; both EB/WB main-road endpoints are listed separately).
+* `location_id` — reference to a main-road frontage. Two schemas are allowed and
+  strictly validated:
+  * Point frontage: `Walk.Main.<side>.P<pos>` (e.g. `Walk.Main.EB.P050`).
+  * Range frontage: `Walk.Main.<side>.R<start>-<end>` (e.g.
+    `Walk.Main.WB.R000-200`).
+* `generated*` / `attracted*` — absolute pedestrian volumes per hour.
+* `generated*_per_m` / `attracted*_per_m` — distributed rates per metre.
+
+Each row must match **exactly one** of the supported layouts:
+
+1. `endpoint_id`, `generated*`, `attracted*`
+   *Demand tied directly to a pedestrian endpoint.*
+2. `location_id` (point), `generated*`, `attracted*`
+   *Point frontage along the main road. The `location_id` encodes both the side
+   (`EB` = north, `WB` = south) and the snapped position. If `position_m` is
+   provided it must match the ID.*
+3. `location_id` (range), `generated*_per_m`, `attracted*_per_m`
+   *Distributed frontage demand. The `location_id` encodes the side and
+   inclusive range. Optional `start_m`/`end_m` columns must match the ID.*
+
+Side matching relies on the endpoint catalogue produced by
+``sumo_optimise.conversion.demand.catalog``. Structural mistakes (missing
+columns, ambiguous positions, unknown IDs, range mismatches) are collected and
+raised as a single ``DemandValidationError`` per CSV after the entire file has
+been inspected.
+
+---
+
 ## CLI usage
 
 Get the full set of options:
 
 ```bash
-$ python -m sumo_optimise.conversion.cli --help
+$ python -m sumo_optimise.conversion.cli.main --help
 ```
 
 Typical flags (names may vary by release):

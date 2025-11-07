@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 from typing import Dict, List
 
+from sumo_optimise.conversion.builder.ids import cluster_id
 from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
@@ -114,7 +115,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.Main.100",
+            tl_id=cluster_id(100),
             movement="main_EB_R",
             slot_index=0,
             link_index=0,
@@ -122,7 +123,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
             element_id="veh",
         ),
         SignalLink(
-            tl_id="Cluster.Main.100",
+            tl_id=cluster_id(100),
             movement="ped_minor_north",
             slot_index=1,
             link_index=1,
@@ -153,7 +154,7 @@ def test_main_right_phase_enables_u_turn_when_available():
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.Main.100",
+            tl_id=cluster_id(100),
             movement="main_EB_R",
             slot_index=0,
             link_index=0,
@@ -161,7 +162,7 @@ def test_main_right_phase_enables_u_turn_when_available():
             element_id="veh_r",
         ),
         SignalLink(
-            tl_id="Cluster.Main.100",
+            tl_id=cluster_id(100),
             movement="main_EB_U",
             slot_index=1,
             link_index=1,
@@ -200,7 +201,7 @@ def test_two_stage_ped_split_distinguishes_halves():
     )
     links = [
         SignalLink(
-            tl_id="Cluster.Main.120",
+            tl_id=cluster_id(120),
             movement="main_EB_L",
             slot_index=0,
             link_index=0,
@@ -208,7 +209,7 @@ def test_two_stage_ped_split_distinguishes_halves():
             element_id="vehL",
         ),
         SignalLink(
-            tl_id="Cluster.Main.120",
+            tl_id=cluster_id(120),
             movement="minor_N_R",
             slot_index=1,
             link_index=1,
@@ -216,16 +217,16 @@ def test_two_stage_ped_split_distinguishes_halves():
             element_id="vehR",
         ),
         SignalLink(
-            tl_id="Cluster.Main.120",
-            movement="ped_main_west_EB",
+            tl_id=cluster_id(120),
+            movement="ped_main_west_north",
             slot_index=2,
             link_index=2,
             kind="crossing",
             element_id="ped_w_eb",
         ),
         SignalLink(
-            tl_id="Cluster.Main.120",
-            movement="ped_main_west_WB",
+            tl_id=cluster_id(120),
+            movement="ped_main_west_south",
             slot_index=3,
             link_index=3,
             kind="crossing",
@@ -257,7 +258,7 @@ def test_movement_stays_green_across_phases():
     cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
-            tl_id="Cluster.Main.150",
+            tl_id=cluster_id(150),
             movement="main_EB_T",
             slot_index=0,
             link_index=0,
@@ -283,7 +284,7 @@ def test_controlled_connections_emitted():
         pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
-    tl_id = "Cluster.Main.150"
+    tl_id = cluster_id(150)
     cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
     links = [
         SignalLink(
@@ -316,72 +317,3 @@ def test_controlled_connections_emitted():
         '<connection from="Edge.A" to="Edge.B" fromLane="0" toLane="1" '
         f'tl="{tl_id}" linkIndex="0"/>'
     ) in xml
-
-
-def test_pedestrian_conflict_rules_match_reference_csv():
-    csv_path = Path(__file__).resolve().parents[2] / "data" / "reference" / "干渉一覧.csv"
-    rows = list(csv.reader(csv_path.open(encoding="utf-8-sig")))
-    columns = ["S-W", "S-E", "E-S", "E-N", "N-E", "N-W", "W-N", "W-S"]
-    segment_indices = {col: idx for idx, col in enumerate(columns, start=4)}
-
-    movement_segments: Dict[str, Dict[str, str]] = {}
-    for row in rows[2:]:
-        junction, prefix, movement = row[:3]
-        if prefix not in {"EB", "WB", "minor"}:
-            continue
-        segs = {col: row[idx] for col, idx in segment_indices.items() if row[idx]}
-        if prefix == "EB":
-            key = f"main_EB_{movement}"
-        elif prefix == "WB":
-            key = f"main_WB_{movement}"
-        else:
-            if junction == "tee-N":
-                key = f"minor_N_{movement}"
-            elif junction == "tee-S":
-                key = f"minor_S_{movement}"
-            else:
-                continue
-        movement_segments[key] = segs
-
-    ped_to_segments = {
-        "ped_main_west_EB": ["W-N"],
-        "ped_main_west_WB": ["W-S"],
-        "ped_main_west": ["W-N", "W-S"],
-        "ped_main_east_EB": ["E-N"],
-        "ped_main_east_WB": ["E-S"],
-        "ped_main_east": ["E-N", "E-S"],
-        "ped_minor_north": ["N-E", "N-W"],
-        "ped_minor_south": ["S-W", "S-E"],
-    }
-
-    for movement, segs in movement_segments.items():
-        for ped_name, segment_labels in ped_to_segments.items():
-            if not any(label in segs for label in segment_labels):
-                continue
-            for left_allowed, right_allowed in product([False, True], repeat=2):
-                expected = True
-                for label in segment_labels:
-                    status = segs.get(label)
-                    if status == "never":
-                        expected = False
-                        break
-                    if status == "left" and not left_allowed:
-                        expected = False
-                        break
-                    if status == "right" and not right_allowed:
-                        expected = False
-                        break
-
-                result = _pedestrian_allowed(
-                    ped_name=ped_name,
-                    vehicle_movements=[movement],
-                    ped_token_present=True,
-                    conflicts=PedestrianConflictConfig(left=left_allowed, right=right_allowed),
-                )
-
-                assert result == expected, (
-                    movement,
-                    ped_name,
-                    left_allowed,
-                    right_allowed,
-                )

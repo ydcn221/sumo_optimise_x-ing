@@ -15,9 +15,9 @@ LOG = get_logger()
 
 def attach_main_node_for_minor(ns: str, pos: int) -> str:
     if ns == "N":
-        return main_node_id("EB", pos)
+        return main_node_id(pos, "north")
     if ns == "S":
-        return main_node_id("WB", pos)
+        return main_node_id(pos, "south")
     raise InvalidConfigurationError(f"unknown ns={ns}")
 
 
@@ -38,13 +38,13 @@ def render_edges_xml(
         lanes_eb = pick_lanes_for_segment("EB", west, east, main_road.lanes, lane_overrides)
         lines.append(
             f'  <edge id="{main_edge_id("EB", west, east)}" '
-            f'from="{main_node_id("EB", west)}" to="{main_node_id("EB", east)}" '
+            f'from="{main_node_id(west, "north")}" to="{main_node_id(east, "north")}" '
             f'numLanes="{lanes_eb}" speed="{speed_mps:.3f}"/>'
         )
         lanes_wb = pick_lanes_for_segment("WB", west, east, main_road.lanes, lane_overrides)
         lines.append(
-            f'  <edge id="{main_edge_id("WB", west, east)}" '
-            f'from="{main_node_id("WB", east)}" to="{main_node_id("WB", west)}" '
+            f'  <edge id="{main_edge_id("WB", east, west)}" '
+            f'from="{main_node_id(east, "south")}" to="{main_node_id(west, "south")}" '
             f'numLanes="{lanes_wb}" speed="{speed_mps:.3f}"/>'
         )
 

@@ -1,0 +1,3 @@
+- Minor sidewalk endpoints now resolve by side: `WestSide` uses the northbound minor edge (`Edge.Minor{N|S}.NB.{pos}`) and `EastSide` uses the southbound edge (`Edge.Minor{N|S}.SB.{pos}`).
+- `EndpointPlacementResolver` derives the correct edge/offset via `_minor_edge_for_side`, so downstream route emission honours the sidewalk side when building personFlow XML.
+- Docs (README and demand_personflow_spec.md) reflect the mapping to keep future work aligned.

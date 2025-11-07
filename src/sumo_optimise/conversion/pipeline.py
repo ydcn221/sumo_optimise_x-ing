@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
+from .demand.catalog import build_endpoint_catalog
+from .demand.person_flow import prepare_person_flow_routes
+from .demand.person_flow.graph_builder import build_pedestrian_graph
+from .demand.visualization import render_pedestrian_network_image
 from .emitters.connections import render_connections_xml
 from .emitters.edges import render_edges_xml
 from .emitters.tll import render_tll_xml
 from .emitters.nodes import render_nodes_xml
+from .demand.person_flow.templates import write_demand_templates
+from .builder.ids import cluster_id
 from .parser.spec_loader import (
     build_clusters,
     load_json_file,
@@ -55,6 +62,42 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
     lane_overrides = compute_lane_overrides(main_road, clusters, junction_template_by_id, snap_rule)
     breakpoints, reason_by_pos = collect_breakpoints_and_reasons(main_road, clusters, lane_overrides, snap_rule)
 
+    endpoint_catalog = build_endpoint_catalog(
+        defaults=defaults,
+        main_road=main_road,
+        clusters=clusters,
+        breakpoints=breakpoints,
+        junction_template_by_id=junction_template_by_id,
+        lane_overrides=lane_overrides,
+        snap_rule=snap_rule,
+    )
+
+    junction_ids = sorted(
+        {
+            cluster_id(cluster.pos_m)
+            for cluster in clusters
+            if any(event.type.value in ("tee", "cross") for event in cluster.events)
+        }
+    )
+
+    endpoint_ids: list[str] | None = None
+    ped_graph = None
+    if options.generate_demand_templates:
+        ped_graph = build_pedestrian_graph(
+            main_road=main_road,
+            defaults=defaults,
+            clusters=clusters,
+            breakpoints=breakpoints,
+            catalog=endpoint_catalog,
+        )
+        endpoint_ids = sorted(
+            {
+                _canonical_endpoint_id(node_id, breakpoints)
+            for node_id, data in ped_graph.nodes(data=True)
+            if data.get("is_endpoint")
+            }
+        )
+
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
     edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
     connections_result = render_connections_xml(
@@ -79,13 +122,51 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         controlled_connections=connections_result.controlled_connections,
     )
 
+    demand_xml = None
+    if options.demand:
+        demand_xml = prepare_person_flow_routes(
+            options=options.demand,
+            main_road=main_road,
+            defaults=defaults,
+            clusters=clusters,
+            breakpoints=breakpoints,
+            catalog=endpoint_catalog,
+        )
+
     return BuildResult(
         nodes_xml=nodes_xml,
         edges_xml=edges_xml,
         connections_xml=connections_result.xml,
         connection_links=connections_result.links,
         tll_xml=tll_xml,
+        demand_xml=demand_xml,
+        endpoint_ids=endpoint_ids,
+        junction_ids=junction_ids,
+        pedestrian_graph=ped_graph,
     )
+
+
+def _canonical_endpoint_id(node_id: str, breakpoints: Sequence[int]) -> str:
+    tokens = node_id.split(".")
+    if len(tokens) == 4 and tokens[0] == "Node" and tokens[1] == "Main":
+        try:
+            pos = int(tokens[2])
+        except ValueError:
+            return node_id
+        if not breakpoints:
+            return node_id
+        if pos == breakpoints[0]:
+            anchor = "W_end"
+        elif pos == breakpoints[-1]:
+            anchor = "E_end"
+        else:
+            return node_id
+        half = tokens[3]
+        if half not in {"N", "S"}:
+            return node_id
+        sidewalk = "N_sidewalk" if half == "N" else "S_sidewalk"
+        return f"PedEnd.Main.{anchor}.{sidewalk}"
+    return node_id
 
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
@@ -100,7 +181,25 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         edges=result.edges_xml,
         connections=result.connections_xml,
         tll=result.tll_xml,
+        demand=result.demand_xml,
     )
+
+    if options.generate_demand_templates:
+        write_demand_templates(
+            artifacts.outdir,
+            result.endpoint_ids or [],
+            result.junction_ids or [],
+        )
+
+        image_path = artifacts.outdir / "pedestrian_network.svg"
+        visualization = render_pedestrian_network_image(
+            result.pedestrian_graph,
+            result.endpoint_ids or [],
+            result.junction_ids or [],
+            image_path,
+        )
+        if visualization is not None:
+            result.network_image_path = visualization.image_path
 
     manifest = {
         "source": str(spec_path.resolve()),
