@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
@@ -90,7 +91,11 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
             catalog=endpoint_catalog,
         )
         endpoint_ids = sorted(
-            node_id for node_id, data in ped_graph.nodes(data=True) if data.get("is_endpoint")
+            {
+                _canonical_endpoint_id(node_id, breakpoints)
+            for node_id, data in ped_graph.nodes(data=True)
+            if data.get("is_endpoint")
+            }
         )
 
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
@@ -139,6 +144,29 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         junction_ids=junction_ids,
         pedestrian_graph=ped_graph,
     )
+
+
+def _canonical_endpoint_id(node_id: str, breakpoints: Sequence[int]) -> str:
+    tokens = node_id.split(".")
+    if len(tokens) == 4 and tokens[0] == "Node" and tokens[1] == "Main":
+        try:
+            pos = int(tokens[2])
+        except ValueError:
+            return node_id
+        if not breakpoints:
+            return node_id
+        if pos == breakpoints[0]:
+            anchor = "W_end"
+        elif pos == breakpoints[-1]:
+            anchor = "E_end"
+        else:
+            return node_id
+        half = tokens[3]
+        if half not in {"N", "S"}:
+            return node_id
+        sidewalk = "N_sidewalk" if half == "N" else "S_sidewalk"
+        return f"PedEnd.Main.{anchor}.{sidewalk}"
+    return node_id
 
 
 def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:

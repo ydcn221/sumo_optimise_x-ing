@@ -12,7 +12,7 @@ _ENDPOINT_TEMPLATE_NAME = "DemandPerEndpoint_template.csv"
 _JUNCTION_TEMPLATE_NAME = "JunctionTurnWeight_template.csv"
 
 _ENDPOINT_PATTERN_ROW = ["Pattern", PersonFlowPattern.PERSONS_PER_HOUR.value]
-_ENDPOINT_HEADER = ["EndpointID", "PedFlow", "Label"]
+_ENDPOINT_HEADER = ["SidewalkEndID", "PedFlow", "Label"]
 _JUNCTION_HEADER = [
     "JunctionID",
     "ToNorth_EastSide",

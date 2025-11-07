@@ -258,7 +258,7 @@ def test_pedestrian_row_must_choose_single_layout() -> None:
 
     pedestrian_csv = StringIO(
         """endpoint_id,location_id,generated_peds_per_h,attracted_peds_per_h\n"
-        "Cross.50.W.N,Walk.Main.EB.P050,10,10\n"
+        "Xwalk.50.W.N_half,Walk.Main.EB.P050,10,10\n"
         """
     )
 

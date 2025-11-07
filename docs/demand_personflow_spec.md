@@ -8,7 +8,7 @@ and junction turn weights into SUMO `personFlow` definitions.
 - **Endpoint demand CSV (`DemandPerEndpoint.csv`)**
   - Encoding: `utf-8-sig`
   - Row 1 declares the flow pattern: `Pattern,persons_per_hour` (or `period`, `poisson`)
-  - Row 2 is the header: `EndpointID`, `PedFlow`, optional `Label`
+  - Row 2 is the header: `SidewalkEndID`, `PedFlow`, optional `Label`
   - `PedFlow` is signed (`+` origin, `-` sink) in persons/hour
   - Rows are processed independently and never aggregated
 
@@ -58,13 +58,16 @@ and junction turn weights into SUMO `personFlow` definitions.
 - `--demand-sim-end` – simulation end time (seconds) shared by pedestrian and future vehicle flows
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
   spreadsheet preparation (`DemandPerEndpoint_template.csv` and `JunctionTurnWeight_template.csv`)
-- Endpoint IDs distinguish sidewalk sides on minor approaches:
-  `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
-  `Node.{pos}.MinorSEndpoint.{EastSide|WestSide}`. This allows demand to target
-  the specific entrance side used in the junction turn-weight CSV. West-side endpoints
-  resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`) and
-  east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
-  so exported routes stay consistent with the physical sidewalk layout.
+- Endpoint IDs distinguish sidewalk sides along both mainline and minor approaches:
+  - Mainline endpoints follow `PedEnd.Main.{E|W}_end.{N|S}_sidewalk`. The `E_end` / `W_end`
+    tokens map to the extreme main breakpoints, allowing CSV authors to speak in cardinal halves
+    instead of raw positions. No other `PedEnd.Main` spellings are considered valid.
+  - Minor approaches use `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. This keeps the demand rows
+    aligned with the side-specific junction turn-weight entries. West-side endpoints resolve to the
+    northbound minor sidewalk (`Edge.Minor.{N|S}.NB.{pos}`) and east-side endpoints resolve to the
+    southbound sidewalk (`Edge.Minor.{N|S}.SB.{pos}`), so exported routes stay consistent with the
+    physical sidewalk layout. Likewise, the `.N_end` / `.S_end` and `.E_sidewalk` / `.W_sidewalk`
+    tokens are the only supported combinations.
 
 Both CSV options are required to activate the demand pipeline.
 

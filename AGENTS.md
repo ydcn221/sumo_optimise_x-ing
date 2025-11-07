@@ -52,20 +52,21 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 ## 3) Identifier & Helper Conventions
 
 ### Node identifiers
-- Main carriageway breakpoints resolve via `builder.ids.main_node_id(pos, half)` and emit `Node.{pos}.{MainN|MainS}`. The suffixes `MainN` and `MainS` replace the old `MainEB` / `MainWB` tokens—always prefer the cardinal halves, even if the caller still speaks in east/west.
-- Minor stubs terminate at `Node.{pos}.MinorNEndpoint` / `Node.{pos}.MinorSEndpoint` from `minor_end_node_id`. These are the only dead-end node identifiers emitted for approaches.
+- Main carriageway breakpoints resolve via `builder.ids.main_node_id(pos, half)` and emit `Node.Main.{pos}.{N|S}`. The helper still accepts EB/WB tokens but normalises to the cardinal halves.
+- Minor stubs terminate at `Node.Minor.{pos}.{N|S}_end` from `minor_end_node_id`. These remain the only dead-end node identifiers emitted for approaches.
+- Pedestrian-only sidewalk endpoints live under `PedEnd.*`. Mainline endpoints follow `PedEnd.Main.{E|W}_end.{N|S}_sidewalk`; minor approaches follow `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. No other `PedEnd` spellings are valid.
 
 ### Edge identifiers
 - Mainline segments come from `main_edge_id(direction, begin_pos, end_pos)` and render `Edge.Main.{EB|WB}.{begin}-{end}`. `begin_pos` / `end_pos` were renamed from west/east specific names so that callers pass values in **travel order**: eastbound edges require `begin_pos < end_pos`, westbound requires `begin_pos > end_pos`.
-- Minor approaches use the bidirectional helper `minor_edge_id(pos, flow, orientation)` with canonical `flow` tokens `to` / `from`. The helper normalises them to `NB` / `SB`, so avoid the legacy `northbound` / `southbound` spellings in new code.
+- Minor approaches use the bidirectional helper `minor_edge_id(pos, flow, orientation)` with canonical `flow` tokens `to` / `from`. The helper normalises them to `NB` / `SB` and emits `Edge.Minor.{N_arm|S_arm}.{NB|SB}.{pos}`.
 
 ### Cluster identifiers
-- Junction joins remain `Cluster.{pos}.Main` via `cluster_id`. When attaching traffic signals, reuse the same ID as the TLS name.
+- Junction joins remain `Cluster.{pos}` via `cluster_id`. When attaching traffic signals, reuse the same ID as the TLS name.
 
 ### Crossing identifiers
-- Intersection crossings use `Cross.{pos}.{cardinal}` with the optional split half emitted as a third token: `Cross.{pos}.{cardinal}.{N|S|E|W}` via `crossing_id_main_split`. This supersedes the older `{pos}_{side}` hyphenation—do not reintroduce the dashed form.
-- Minor approaches rely on `crossing_id_minor`, emitting the same `Cross.{pos}.{cardinal}` pattern with `{cardinal}` constrained to `{N,S}`.
-- Mid-block helpers were renamed to `crossing_id_midblock` / `crossing_id_midblock_split` and generate the `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}` forms respectively. Use these instead of the retired `midblock_crossing_id*` utilities.
+- Intersection crossings use `Xwalk.{pos}.{cardinal}` with the optional split half emitted as a third token: `Xwalk.{pos}.{cardinal}.{N|S|E|W}_half` via `crossing_id_main_split`. This supersedes the older `{pos}_{side}` hyphenation—do not reintroduce the dashed form.
+- Minor approaches rely on `crossing_id_minor`, emitting the same `Xwalk.{pos}.{cardinal}` pattern with `{cardinal}` constrained to `{N,S}`.
+- Mid-block helpers (`crossing_id_midblock*`) now generate `Xwalk.{pos}` or `Xwalk.{pos}.{N|S}_half`. Use these instead of the retired `midblock_crossing_id*` utilities.
 
 ### Quick reference
 - Prefer orientation-neutral wording in new comments/docstrings (`north/south halves`, `begin/end positions`).

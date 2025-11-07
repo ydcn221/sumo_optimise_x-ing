@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from ...builder.ids import main_edge_id, minor_edge_id
 from ...domain.models import Defaults, EndpointDemandRow, PedestrianSide, PersonFlowPattern
 from ...utils.errors import DemandValidationError
-from .identifier import parse_minor_endpoint_id
+from .identifier import parse_main_ped_endpoint_id, parse_minor_endpoint_id
 
 
 @dataclass(frozen=True)
@@ -28,21 +28,51 @@ class EndpointPlacementResolver:
         self._defaults = defaults
         self._prev_by_pos: Dict[int, Optional[int]] = {}
         self._next_by_pos: Dict[int, Optional[int]] = {}
+        self._first_pos: Optional[int] = None
+        self._last_pos: Optional[int] = None
         ordered = list(breakpoints)
+        if ordered:
+            self._first_pos = ordered[0]
+            self._last_pos = ordered[-1]
         for idx, pos in enumerate(ordered):
             self._prev_by_pos[pos] = ordered[idx - 1] if idx > 0 else None
             self._next_by_pos[pos] = ordered[idx + 1] if idx < len(ordered) - 1 else None
 
+    def _resolve_position_label(self, token: str) -> int:
+        try:
+            return int(token)
+        except ValueError:
+            pass
+        label = token.strip().upper()
+        if label in {"W_END", "WEST_END"}:
+            if self._first_pos is None:
+                raise DemandValidationError("cannot resolve west-end pedestrian endpoint without breakpoints")
+            return self._first_pos
+        if label in {"E_END", "EAST_END"}:
+            if self._last_pos is None:
+                raise DemandValidationError("cannot resolve east-end pedestrian endpoint without breakpoints")
+            return self._last_pos
+        raise DemandValidationError(f"unsupported pedestrian endpoint position token: {token!r}")
+
     def _parse_endpoint(self, endpoint_id: str) -> Tuple[int, str]:
         tokens = endpoint_id.split(".")
-        if len(tokens) != 3 or tokens[0] != "Node":
-            raise DemandValidationError(f"unsupported endpoint identifier: {endpoint_id}")
-        try:
-            pos = int(tokens[1])
-        except ValueError as exc:
-            raise DemandValidationError(f"endpoint {endpoint_id!r} has non-integer position token") from exc
-        suffix = tokens[2]
-        return pos, suffix
+        if len(tokens) == 4 and tokens[0] == "Node" and tokens[1] == "Main":
+            try:
+                pos = int(tokens[2])
+            except ValueError as exc:
+                raise DemandValidationError(
+                    f"endpoint {endpoint_id!r} has non-integer position token"
+                ) from exc
+            suffix = tokens[3]
+            if suffix not in {"N", "S"}:
+                raise DemandValidationError(f"unsupported main endpoint half: {endpoint_id}")
+            return pos, suffix
+        parsed_alias = parse_main_ped_endpoint_id(endpoint_id)
+        if parsed_alias:
+            pos_token, half = parsed_alias
+            pos = self._resolve_position_label(pos_token)
+            return pos, half
+        raise DemandValidationError(f"unsupported endpoint identifier: {endpoint_id}")
 
     def _main_north_depart(self, pos: int) -> EndpointPlacement:
         next_pos = self._next_by_pos.get(pos)
@@ -52,7 +82,7 @@ class EndpointPlacementResolver:
             return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
         prev_pos = self._prev_by_pos.get(pos)
         if prev_pos is None:
-            raise DemandValidationError(f"cannot resolve depart edge for Node.{pos}.MainN")
+            raise DemandValidationError(f"cannot resolve depart edge for Node.Main.{pos}.N")
         edge_id = main_edge_id("EB", prev_pos, pos)
         length = float(pos - prev_pos)
         return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
@@ -65,7 +95,7 @@ class EndpointPlacementResolver:
             return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
         next_pos = self._next_by_pos.get(pos)
         if next_pos is None:
-            raise DemandValidationError(f"cannot resolve arrival edge for Node.{pos}.MainN")
+            raise DemandValidationError(f"cannot resolve arrival edge for Node.Main.{pos}.N")
         edge_id = main_edge_id("EB", pos, next_pos)
         length = float(next_pos - pos)
         return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
@@ -78,7 +108,7 @@ class EndpointPlacementResolver:
             return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
         next_pos = self._next_by_pos.get(pos)
         if next_pos is None:
-            raise DemandValidationError(f"cannot resolve depart edge for Node.{pos}.MainS")
+            raise DemandValidationError(f"cannot resolve depart edge for Node.Main.{pos}.S")
         edge_id = main_edge_id("WB", next_pos, pos)
         length = float(next_pos - pos)
         return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
@@ -91,7 +121,7 @@ class EndpointPlacementResolver:
             return EndpointPlacement(edge_id=edge_id, is_start=False, length=length)
         prev_pos = self._prev_by_pos.get(pos)
         if prev_pos is None:
-            raise DemandValidationError(f"cannot resolve arrival edge for Node.{pos}.MainS")
+            raise DemandValidationError(f"cannot resolve arrival edge for Node.Main.{pos}.S")
         edge_id = main_edge_id("WB", pos, prev_pos)
         length = float(pos - prev_pos)
         return EndpointPlacement(edge_id=edge_id, is_start=True, length=length)
@@ -151,9 +181,9 @@ class EndpointPlacementResolver:
             pos, orientation, side = parsed_minor
             return self._minor_depart(pos, orientation, side)
         pos, suffix = self._parse_endpoint(endpoint_id)
-        if suffix == "MainN":
+        if suffix == "N":
             return self._main_north_depart(pos)
-        if suffix == "MainS":
+        if suffix == "S":
             return self._main_south_depart(pos)
         raise DemandValidationError(f"unsupported endpoint for depart placement: {endpoint_id}")
 
@@ -163,9 +193,9 @@ class EndpointPlacementResolver:
             pos, orientation, side = parsed_minor
             return self._minor_arrival(pos, orientation, side)
         pos, suffix = self._parse_endpoint(endpoint_id)
-        if suffix == "MainN":
+        if suffix == "N":
             return self._main_north_arrival(pos)
-        if suffix == "MainS":
+        if suffix == "S":
             return self._main_south_arrival(pos)
         raise DemandValidationError(f"unsupported endpoint for arrival placement: {endpoint_id}")
 

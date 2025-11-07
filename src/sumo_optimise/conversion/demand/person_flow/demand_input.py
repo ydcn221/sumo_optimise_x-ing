@@ -17,7 +17,7 @@ from ...utils.errors import DemandValidationError
 EndpointDemandSource = Union[Path, TextIO]
 JunctionTurnWeightSource = Union[Path, TextIO]
 
-_ENDPOINT_ID_COLUMN = "EndpointID"
+_ENDPOINT_ID_COLUMN = "SidewalkEndID"
 _FLOW_COLUMN = "PedFlow"
 _LABEL_COLUMN = "Label"
 _PATTERN_KEY = "Pattern"
@@ -100,7 +100,7 @@ def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPatte
 
         header_row = next(csv_reader, None)
         if header_row is None:
-            errors.add("missing header row; expected EndpointID and PedFlow columns on row 2")
+            errors.add("missing header row; expected SidewalkEndID and PedFlow columns on row 2")
             errors.raise_if_any()
 
         expected = {_ENDPOINT_ID_COLUMN, _FLOW_COLUMN}
@@ -117,7 +117,7 @@ def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPatte
             label = (raw_row.get(_LABEL_COLUMN) or "").strip() or None
 
             if not endpoint_id:
-                errors.add(f"row {index}: EndpointID is required")
+                errors.add(f"row {index}: SidewalkEndID is required")
                 continue
             if not flow_token:
                 errors.add(f"row {index}: PedFlow is required")

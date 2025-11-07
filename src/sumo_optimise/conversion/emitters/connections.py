@@ -349,7 +349,7 @@ def _movement_priority(movement: str) -> int:
 
 def _crossing_orientation(crossing_id: str, edges: str) -> int:
     parts = crossing_id.split(".")
-    if parts and parts[0] in {"Cross", "CrossMid"} and len(parts) >= 3:
+    if parts and parts[0] == "Xwalk" and len(parts) >= 3:
         for token in parts[2:]:
             cardinal = _direction_token_to_cardinal(token)
             if cardinal:

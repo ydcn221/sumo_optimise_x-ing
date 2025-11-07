@@ -10,8 +10,8 @@ from sumo_optimise.conversion.pipeline import build_corridor_artifacts
 
 
 def test_write_demand_templates(tmp_path: Path) -> None:
-    endpoint_ids = ["Node.0.MainN", "Node.100.MainS"]
-    junction_ids = ["Cluster.100.Main"]
+    endpoint_ids = ["PedEnd.Main.W_end.N_sidewalk", "PedEnd.Minor.100.N_end.E_sidewalk"]
+    junction_ids = ["Cluster.100"]
 
     write_demand_templates(tmp_path, endpoint_ids, junction_ids)
 
@@ -21,13 +21,13 @@ def test_write_demand_templates(tmp_path: Path) -> None:
     with endpoint_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))
     assert reader[0] == ["Pattern", "persons_per_hour"]
-    assert reader[1] == ["EndpointID", "PedFlow", "Label"]
-    assert reader[2] == ["Node.0.MainN", "", ""]
+    assert reader[1] == ["SidewalkEndID", "PedFlow", "Label"]
+    assert reader[2] == ["PedEnd.Main.W_end.N_sidewalk", "", ""]
 
     with junction_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))
     assert reader[0][0] == "JunctionID"
-    assert reader[1][0] == "Cluster.100.Main"
+    assert reader[1][0] == "Cluster.100"
     assert all(value == "" for value in reader[1][1:])
 
 
@@ -41,5 +41,7 @@ def test_build_corridor_artifacts_collects_template_ids(tmp_path: Path) -> None:
     assert result.endpoint_ids
     assert result.junction_ids
     assert result.pedestrian_graph is not None
+    assert "PedEnd.Main.W_end.N_sidewalk" in result.endpoint_ids
+    assert "PedEnd.Main.E_end.S_sidewalk" in result.endpoint_ids
     assert minor_endpoint_id(350, "N", PedestrianSide.EAST_SIDE) in result.endpoint_ids
     assert minor_endpoint_id(350, "N", PedestrianSide.WEST_SIDE) in result.endpoint_ids

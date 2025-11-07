@@ -10,14 +10,14 @@ MinorFlow = Literal["NB", "SB"]
 MainSide = Literal["West", "East"]
 Cardinal = Literal["N", "S", "E", "W"]
 _MAIN_HALF_MAP = {
-    "N": "MainN",
-    "NORTH": "MainN",
-    "MAINN": "MainN",
-    "EB": "MainN",
-    "S": "MainS",
-    "SOUTH": "MainS",
-    "MAINS": "MainS",
-    "WB": "MainS",
+    "N": "N",
+    "NORTH": "N",
+    "MAINN": "N",
+    "EB": "N",
+    "S": "S",
+    "SOUTH": "S",
+    "MAINS": "S",
+    "WB": "S",
 }
 
 
@@ -38,7 +38,7 @@ def _cardinal(direction: str) -> Cardinal:
     raise ValueError(f"Unsupported cardinal token: {direction!r}")
 
 
-def _main_split_half(side: Cardinal, half: str) -> Cardinal:
+def _main_split_half(side: Cardinal, half: str) -> str:
     """Translate a split-half token for a main-road crossing."""
 
     token = half.strip().upper()
@@ -61,7 +61,8 @@ def _main_split_half(side: Cardinal, half: str) -> Cardinal:
             "WEST": "W",
         }
     try:
-        return mapping[token]  # type: ignore[return-value]
+        mapped = mapping[token]
+        return f"{mapped}_half"  # type: ignore[return-value]
     except KeyError as exc:
         raise ValueError(f"Unsupported split token {half!r} for side {side!r}") from exc
 
@@ -92,7 +93,7 @@ def main_node_id(pos: int, half: str) -> str:
     if token not in _MAIN_HALF_MAP:
         raise ValueError(f"Unsupported main-half token: {half!r}")
     suffix = _main_half_suffix(token)
-    return f"Node.{pos}.{suffix}"
+    return f"Node.Main.{pos}.{suffix}"
 
 
 def main_edge_id(direction: MainDirection, begin_pos: int, end_pos: int) -> str:
@@ -122,8 +123,8 @@ def minor_end_node_id(pos: int, orientation: MinorOrientation) -> str:
     """Return the endpoint node ID for a minor approach."""
 
     cardinal = _cardinal(orientation)
-    label = "MinorNEndpoint" if cardinal == "N" else "MinorSEndpoint"
-    return f"Node.{pos}.{label}"
+    label = "N_end" if cardinal == "N" else "S_end"
+    return f"Node.Minor.{pos}.{label}"
 
 
 def minor_edge_id(pos: int, flow: str, orientation: MinorOrientation) -> str:
@@ -133,28 +134,28 @@ def minor_edge_id(pos: int, flow: str, orientation: MinorOrientation) -> str:
     if cardinal not in {"N", "S"}:
         raise ValueError(f"Unsupported minor orientation: {orientation!r}")
     flow_token = _minor_flow_token(flow, cast(MinorOrientation, cardinal))
-    prefix = "MinorN" if cardinal == "N" else "MinorS"
-    return f"Edge.{prefix}.{flow_token}.{pos}"
+    prefix = "N_arm" if cardinal == "N" else "S_arm"
+    return f"Edge.Minor.{prefix}.{flow_token}.{pos}"
 
 
 def cluster_id(pos: int) -> str:
     """Return the ID for a cluster join node at position ``pos``."""
 
-    return f"Cluster.{pos}.Main"
+    return f"Cluster.{pos}"
 
 
 def crossing_id_minor(pos: int, orientation: MinorOrientation) -> str:
     """Return the crossing ID for a minor-road approach."""
 
     cardinal = _cardinal(orientation)
-    return f"Cross.{pos}.{cardinal}"
+    return f"Xwalk.{pos}.{cardinal}"
 
 
 def crossing_id_main(pos: int, side: MainSide) -> str:
     """Return the crossing ID for the main road on the given side."""
 
     cardinal = _cardinal(side)
-    return f"Cross.{pos}.{cardinal}"
+    return f"Xwalk.{pos}.{cardinal}"
 
 
 def crossing_id_main_split(pos: int, side: MainSide, half: str) -> str:
@@ -162,17 +163,17 @@ def crossing_id_main_split(pos: int, side: MainSide, half: str) -> str:
 
     cardinal = _cardinal(side)
     half_cardinal = _main_split_half(cardinal, half)
-    return f"Cross.{pos}.{cardinal}.{half_cardinal}"
+    return f"Xwalk.{pos}.{cardinal}.{half_cardinal}"
 
 
 def crossing_id_midblock(pos: int) -> str:
     """Return the crossing ID for an unsplit mid-block crossing."""
 
-    return f"CrossMid.{pos}"
+    return f"Xwalk.{pos}"
 
 
 def crossing_id_midblock_split(pos: int, half: str) -> str:
     """Return the split crossing ID for a mid-block crossing."""
 
     half_cardinal = _main_split_half("E", half)  # treat halves as north/south
-    return f"CrossMid.{pos}.{half_cardinal}"
+    return f"Xwalk.{pos}.{half_cardinal}"

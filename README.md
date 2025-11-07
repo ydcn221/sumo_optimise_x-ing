@@ -103,13 +103,14 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 
   **Identifier schema (excerpt)**
 
-  * Main nodes: `Node.{pos}.MainN` / `Node.{pos}.MainS` for the north/south carriageway halves (the EB/WB suffixes are retired in favour of the cardinal halves handled by `main_node_id`).
+  * Main nodes: `Node.Main.{pos}.{N|S}` for the north/south halves. Helpers accept legacy EB/WB tokens but always emit the cardinal suffix.
   * Main edges: `Edge.Main.{EB|WB}.{begin}-{end}`. `begin` / `end` must follow the travel direction (`begin < end` for EB, `begin > end` for WB) and the helper raises when callers pass mismatched order.
-  * Minor endpoints: `Node.{pos}.MinorNEndpoint` / `Node.{pos}.MinorSEndpoint`.
-  * Minor edges: `Edge.Minor{N|S}.{NB|SB}.{pos}` generated from `minor_edge_id(pos, flow, orientation)`; pass `flow="to"` / `"from"` and let the helper normalise to `NB` / `SB`.
-  * Cluster joins: `Cluster.{pos}.Main`—reused as the TLS identifier for signalised joins.
-  * Junction crossings: `Cross.{pos}.{cardinal}`, with optional split halves yielding `Cross.{pos}.{cardinal}.{N|S|E|W}` via `crossing_id_main_split`.
-  * Mid-block crossings: `CrossMid.{pos}` or `CrossMid.{pos}.{N|S}` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
+  * Minor approach nodes: `Node.Minor.{pos}.{N|S}_end` from `minor_end_node_id`.
+  * Sidewalk endpoints (pedestrian demand only): `PedEnd.Main.{E|W}_end.{N|S}_sidewalk` and `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. No other `PedEnd.*` forms are valid.
+  * Minor edges: `Edge.Minor.{N_arm|S_arm}.{NB|SB}.{pos}` generated from `minor_edge_id(pos, flow, orientation)`; pass `flow="to"` / `"from"` and let the helper normalise to `NB` / `SB`.
+  * Cluster joins / TLS IDs: `Cluster.{pos}`.
+  * Junction crossings: `Xwalk.{pos}.{cardinal}`, with optional split halves yielding `Xwalk.{pos}.{cardinal}.{N|S|E|W}_half` via `crossing_id_main_split`.
+  * Mid-block crossings: `Xwalk.{pos}` or `Xwalk.{pos}.{N|S}_half` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
 
 ### Build + netconvert (if `netconvert` is on PATH)
 
@@ -155,11 +156,10 @@ Key points:
 
 - `DemandPerEndpoint.csv` declares the flow pattern on the first row
   (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
-  row (`EndpointID,PedFlow,Label`) and one endpoint per subsequent row with signed
+  row (`SidewalkEndID,PedFlow,Label`) and one endpoint per subsequent row with signed
   persons/hour volumes (positive = origin, negative = sink).
 - Minor approaches expose separate east/west sidewalk endpoints:
-  `Node.{pos}.MinorNEndpoint.{EastSide|WestSide}` and
-  `Node.{pos}.MinorSEndpoint.{EastSide|WestSide}`. Use these to balance
+  `PedEnd.Minor.{pos}.{N|S}_end.{E|W}_sidewalk`. Use these to balance
   approach-specific demand.
 - West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
   while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),

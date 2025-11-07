@@ -4,14 +4,10 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Deque, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
-from ...domain.models import (
-    CardinalDirection,
-    EndpointDemandRow,
-    JunctionTurnWeights,
-    PedestrianSide,
-)
+from ...domain.models import CardinalDirection, EndpointDemandRow, JunctionTurnWeights, PedestrianSide
 from ...utils.errors import DemandValidationError
 from .graph_builder import GraphType
+from .identifier import parse_main_ped_endpoint_id
 
 EPS = 1e-6
 
@@ -25,11 +21,13 @@ TurnWeightMap = Mapping[str, JunctionTurnWeights]
 
 def _main_endpoint_signature(node_id: str) -> Optional[Tuple[str, str]]:
     parts = node_id.split(".")
-    if len(parts) < 3:
+    if len(parts) != 4:
         return None
-    pos_token = parts[1]
-    suffix = parts[2]
-    if suffix not in {"MainN", "MainS"}:
+    if parts[0] != "Node" or parts[1] != "Main":
+        return None
+    pos_token = parts[2]
+    suffix = parts[3]
+    if suffix not in {"N", "S"}:
         return None
     return pos_token, suffix
 
@@ -90,11 +88,60 @@ def _incoming_entry_direction(
     return _opposite_cardinal(travel_dir)
 
 
+def _main_position_bounds(graph: GraphType) -> Optional[Tuple[int, int]]:
+    positions: List[int] = []
+    for node in graph.nodes:
+        parts = node.split(".")
+        if len(parts) == 4 and parts[0] == "Node" and parts[1] == "Main":
+            try:
+                positions.append(int(parts[2]))
+            except ValueError:
+                continue
+    if not positions:
+        return None
+    positions.sort()
+    return positions[0], positions[-1]
+
+
+def _graph_node_for_endpoint(
+    graph: GraphType,
+    endpoint_id: str,
+    main_bounds: Optional[Tuple[int, int]],
+) -> str:
+    if endpoint_id in graph:
+        return endpoint_id
+    parsed = parse_main_ped_endpoint_id(endpoint_id)
+    if not parsed:
+        return endpoint_id
+    pos_token, half = parsed
+    try:
+        pos = int(pos_token)
+    except ValueError:
+        if not main_bounds:
+            raise DemandValidationError(
+                f"cannot resolve pedestrian endpoint {endpoint_id!r} without main breakpoints"
+            )
+        min_pos, max_pos = main_bounds
+        label = pos_token.strip().upper()
+        if label in {"W_END", "WEST_END"}:
+            pos = min_pos
+        elif label in {"E_END", "EAST_END"}:
+            pos = max_pos
+        else:
+            raise DemandValidationError(f"unsupported main pedestrian endpoint token {pos_token!r}")
+    candidate = f"Node.Main.{pos}.{half}"
+    if candidate not in graph:
+        raise DemandValidationError(
+            f"pedestrian endpoint {endpoint_id!r} resolves to missing graph node {candidate!r}"
+        )
+    return candidate
+
+
 def _half_for_side(side: PedestrianSide) -> Optional[str]:
     if side == PedestrianSide.NORTH_SIDE:
-        return "MainN"
+        return "N"
     if side == PedestrianSide.SOUTH_SIDE:
-        return "MainS"
+        return "S"
     return None
 
 
@@ -371,30 +418,32 @@ def compute_od_flows(
     """
 
     results: List[Tuple[str, str, float, EndpointDemandRow]] = []
+    main_bounds = _main_position_bounds(graph)
 
     for row in demands:
         endpoint_id = row.endpoint_id
-        if endpoint_id not in graph:
+        graph_node = _graph_node_for_endpoint(graph, endpoint_id, main_bounds)
+        if graph_node not in graph:
             raise DemandValidationError(f"endpoint {endpoint_id!r} not present in pedestrian graph")
         flow_mag = abs(row.flow_per_hour)
         if flow_mag <= EPS:
             continue
-        raw_map = _propagate_single(graph, turn_weight_map, source=endpoint_id, amount=flow_mag)
+        raw_map = _propagate_single(graph, turn_weight_map, source=graph_node, amount=flow_mag)
         if row.flow_per_hour >= 0:
             origin = endpoint_id
             for destination, value in raw_map.items():
-                if destination == origin or value <= EPS:
+                if destination == graph_node or value <= EPS:
                     continue
-                if _is_main_u_turn(origin, destination):
+                if _is_main_u_turn(graph_node, destination):
                     continue
                 results.append((origin, destination, value, row))
         else:
             sink = endpoint_id
             for intermediate, value in raw_map.items():
-                if intermediate == sink or value <= EPS:
+                if intermediate == graph_node or value <= EPS:
                     continue
                 # Reverse for sinks: actual origin is intermediate.
-                if _is_main_u_turn(intermediate, sink):
+                if _is_main_u_turn(intermediate, graph_node):
                     continue
                 results.append((intermediate, sink, value, row))
 

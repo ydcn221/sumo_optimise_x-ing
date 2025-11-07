@@ -8,6 +8,8 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 import networkx as nx
 
+from .person_flow.identifier import parse_main_ped_endpoint_id
+
 LABEL_ROTATION_DEG = -45.0
 LABEL_DELTA = 10.0
 LABEL_MARGIN = 6.0
@@ -56,9 +58,14 @@ def render_pedestrian_network_image(
 
     endpoint_ids = list(endpoint_ids)
     junction_ids = list(junction_ids)
-    endpoint_set = set(endpoint_ids)
+    alias_map = _map_endpoint_aliases(positions, endpoint_ids)
+    endpoint_nodes = {
+        alias_map.get(endpoint_id, endpoint_id)
+        for endpoint_id in endpoint_ids
+        if alias_map.get(endpoint_id, endpoint_id) in positions
+    }
 
-    endpoint_label_positions = _compute_endpoint_labels(endpoint_ids, positions)
+    endpoint_label_positions = _compute_endpoint_labels(endpoint_ids, positions, alias_map)
     junction_label_positions = _compute_junction_labels(graph, junction_ids, positions)
     bounds = _compute_bounds(
         list(positions.values())
@@ -70,7 +77,7 @@ def render_pedestrian_network_image(
         graph,
         positions,
         bounds,
-        endpoint_set,
+        endpoint_nodes,
         endpoint_label_positions,
         junction_label_positions,
     )
@@ -114,15 +121,54 @@ def _compute_bounds(coords: Iterable[Tuple[float, float]]) -> _Bounds:
 def _compute_endpoint_labels(
     endpoint_ids: Iterable[str],
     positions: Mapping[str, Tuple[float, float]],
+    alias_map: Mapping[str, str],
 ) -> Dict[str, Tuple[float, float]]:
     label_positions: Dict[str, Tuple[float, float]] = {}
     for endpoint_id in endpoint_ids:
-        coord = positions.get(endpoint_id)
+        node_id = alias_map.get(endpoint_id, endpoint_id)
+        coord = positions.get(node_id)
         if coord is None:
             continue
         dx, dy = _endpoint_label_offset(endpoint_id)
         label_positions[endpoint_id] = (coord[0] + dx, coord[1] + dy)
     return label_positions
+
+
+def _map_endpoint_aliases(
+    positions: Mapping[str, Tuple[float, float]],
+    endpoint_ids: Iterable[str],
+) -> Dict[str, str]:
+    alias_map: Dict[str, str] = {}
+    main_positions = [
+        int(parts[2])
+        for node in positions
+        if (parts := node.split("."))[:2] == ["Node", "Main"] and len(parts) == 4 and parts[2].isdigit()
+    ]
+    min_pos = min(main_positions) if main_positions else None
+    max_pos = max(main_positions) if main_positions else None
+    for endpoint_id in endpoint_ids:
+        if endpoint_id in positions or endpoint_id in alias_map:
+            continue
+        parsed = parse_main_ped_endpoint_id(endpoint_id)
+        if not parsed:
+            continue
+        pos_token, half = parsed
+        try:
+            pos = int(pos_token)
+        except ValueError:
+            if not main_positions:
+                continue
+            label = pos_token.strip().upper()
+            if label in {"W_END", "WEST_END"} and min_pos is not None:
+                pos = min_pos
+            elif label in {"E_END", "EAST_END"} and max_pos is not None:
+                pos = max_pos
+            else:
+                continue
+        candidate = f"Node.Main.{pos}.{half}"
+        if candidate in positions:
+            alias_map[endpoint_id] = candidate
+    return alias_map
 
 
 def _compute_junction_labels(
@@ -162,7 +208,7 @@ def _render_svg(
     graph: nx.MultiGraph,
     positions: Mapping[str, Tuple[float, float]],
     bounds: _Bounds,
-    endpoint_set: set[str],
+    endpoint_nodes: set[str],
     endpoint_label_positions: Mapping[str, Tuple[float, float]],
     junction_label_positions: Mapping[str, Tuple[float, float]],
 ) -> str:
@@ -195,7 +241,7 @@ def _render_svg(
         radius = 4.0
         fill = "#cbd5f5"
         stroke = "#1f2937"
-        if node in endpoint_set:
+        if node in endpoint_nodes:
             fill = "#fb923c"
             radius = 5.0
         else:
@@ -236,20 +282,28 @@ def _endpoint_label_offset(endpoint_id: str) -> Tuple[float, float]:
     dx = LABEL_DELTA
     dy = -LABEL_DELTA
 
-    if endpoint_id.endswith("WestSide"):
+    lower = endpoint_id.lower()
+
+    if lower.endswith("w_sidewalk"):
         dx = -LABEL_DELTA
-    elif endpoint_id.endswith("EastSide"):
+    elif lower.endswith("e_sidewalk"):
         dx = LABEL_DELTA
 
-    if "MinorSEndpoint" in endpoint_id:
-        dy = LABEL_DELTA
-    elif "MinorNEndpoint" in endpoint_id:
-        dy = -LABEL_DELTA
-
-    if endpoint_id.endswith(".MainN"):
-        dy = -LABEL_DELTA - MAJOR_VERTICAL_BIAS
-    elif endpoint_id.endswith(".MainS"):
-        dy = LABEL_DELTA + MAJOR_VERTICAL_BIAS
+    if lower.startswith("pedend.minor."):
+        if ".s_end." in lower:
+            dy = LABEL_DELTA
+        elif ".n_end." in lower:
+            dy = -LABEL_DELTA
+    elif lower.startswith("pedend.main."):
+        if lower.endswith(".n_sidewalk"):
+            dy = -LABEL_DELTA - MAJOR_VERTICAL_BIAS
+        elif lower.endswith(".s_sidewalk"):
+            dy = LABEL_DELTA + MAJOR_VERTICAL_BIAS
+    elif lower.startswith("node.main."):
+        if lower.endswith(".n"):
+            dy = -LABEL_DELTA - MAJOR_VERTICAL_BIAS
+        elif lower.endswith(".s"):
+            dy = LABEL_DELTA + MAJOR_VERTICAL_BIAS
 
     return dx, dy
 
