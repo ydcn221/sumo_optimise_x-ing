@@ -99,6 +99,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
   * `1-generated.edg.xml` — edges
   * `1-generated.con.xml` — vehicle connections and pedestrian crossings
   * `1-generated.tll.xml` — traffic-light logic programmes
+  * `1-generated.sumocfg` — minimal SUMO config referencing the final net/routes (written when demand is emitted)
   * `build.log` — structured log
 
   **Identifier schema (excerpt)**
@@ -140,21 +141,24 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ## Demand-driven pedestrian flows
 
-`v0.3.0` ships a first-class `personFlow` generator driven by signed endpoint
- demand and junction turning ratios. The feature is documented in
+`v0.3.0` ships a first-class routed demand generator for both pedestrians
+ (`personFlow`) and vehicles (`flow`). Supply signed endpoint demand and junction
+ turning ratios for whichever modes you need; the converter merges the results
+ into a single `1-generated.rou.xml`. The feature is documented in
  **`docs/demand_personflow_spec.md`** and activated via the CLI:
 
 ```bash
-$ python -m sumo_optimise.conversion.cli.main \
-    path/to/spec.json \
-    --ped-endpoint-demand data/reference/DemandPerEndpoint_SampleUpdated.csv \
-    --ped-junction-turn-weight data/reference/JunctionTurnWeight_SampleUpdated.csv \
+$ python -m sumo_optimise.conversion.cli.main path/to/spec.json \
+    --ped-endpoint-demand data/reference/ped_EP_demand_sampleUpd.csv \
+    --ped-junction-turn-weight data/reference/ped_jct_turn_weight_sampleUpd.csv \
+    --veh-endpoint-demand data/reference/veh_EP_demand_sampleUpd.csv \
+    --veh-junction-turn-weight data/reference/veh_jct_turn_weight_sampleUpd.csv \
     --demand-sim-end 3600
 ```
 
 Key points:
 
-- `DemandPerEndpoint.csv` declares the flow pattern on the first row
+- `ped_EP_demand_sampleUpd.csv` declares the flow pattern on the first row
   (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
   row (`SidewalkEndID,PedFlow,Label`) and one endpoint per subsequent row with signed
   persons/hour volumes (positive = origin, negative = sink).
@@ -164,9 +168,15 @@ Key points:
 - West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
   while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
   keeping the demand export aligned with the physical sidewalk placement.
-- `JunctionTurnWeight_SampleUpdated.csv` provides raw weights for each direction/side
+- `ped_jct_turn_weight_sampleUpd.csv` provides raw weights for each direction/side
   combination; U-turn branches are suppressed automatically and the remainder
   re-normalised.
+- Vehicle demand mirrors the pedestrian interface: `veh_EP_demand_sampleUpd.csv`
+  lists signed endpoint flows (aliasing `Node.Main.E_end`/`W_end` is supported).
+  `veh_jct_turn_weight_sampleUpd.csv` carries the 4-way turn ratios
+  (`ToNorth|ToWest|ToSouth|ToEast`). When both pedestrian and vehicle data are
+  provided the converter emits a single `routes` document containing `<personFlow>`
+  and `<flow>` entries side by side.
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
   approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
   `plainXML_out/.../1-generated.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
@@ -174,9 +184,9 @@ Key points:
   minor north east-side endpoints, and minor south west-side endpoints, and at
   `length - offset` for their opposite halves so that flows spawn and terminate
   at the physically correct sidewalk ends.
-- Vehicle demand (endpoint demand + turn weights) will share the same command-line
-  structure via `--veh-endpoint-demand` / `--veh-junction-turn-weight`; the loaders are prepared
-  but emission will ship in a future release.
+- The emitted `1-generated.sumocfg` references the cooked net (`3-n+e+c+t.net.xml`) and
+  the merged routes file so you can immediately launch simulations once the net
+  exists (via the two-step `netconvert` or any other pipeline).
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
   `DemandPerEndpoint_template.csv` / `JunctionTurnWeight_template.csv` with
   prefilled IDs in the run directory.

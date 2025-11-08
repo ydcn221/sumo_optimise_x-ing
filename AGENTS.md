@@ -71,3 +71,14 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 ### Quick reference
 - Prefer orientation-neutral wording in new comments/docstrings (`north/south halves`, `begin/end positions`).
 - When documenting a new helper, include the literal identifier pattern and the validation rule (e.g., `main_edge_id` raising when direction/order clash) so downstream CLI and docs stay in sync.
+
+## 4) Demand & Config Outputs
+
+- The converter now emits a merged `1-generated.rou.xml` containing `<personFlow>` and `<flow>`
+  elements whenever pedestrian and/or vehicle demand CSVs are supplied.
+- Vehicle demand files mirror the pedestrian ones:
+  `veh_EP_demand_sampleUpd.csv` (signed `EndID` + `vehFlow`) and
+  `veh_jct_turn_weight_sampleUpd.csv` (`ToNorth|ToWest|ToSouth|ToEast` weights).
+  Main endpoints accept the `Node.Main.{E|W}_end` aliases; canonical IDs are resolved to the boundary nodes.
+- A minimal `1-generated.sumocfg` is written alongside the PlainXML artefacts whenever a routes file exists.
+  It references `3-n+e+c+t.net.xml` (produced by the optional two-step `netconvert`) and `1-generated.rou.xml`.

@@ -223,7 +223,7 @@ def _clamp_position(length: float, offset: float, *, at_start: bool) -> float:
     return max(length - offset, 0.0)
 
 
-def render_person_flows(
+def build_person_flow_entries(
     flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
     *,
     ped_pattern: PersonFlowPattern,
@@ -231,18 +231,16 @@ def render_person_flows(
     endpoint_offset_m: float,
     breakpoints: Sequence[int],
     defaults: Defaults,
-) -> str:
+) -> List[str]:
+    """Return the list of <personFlow> XML fragments for the supplied OD flows."""
+
     resolver = EndpointPlacementResolver(
         breakpoints=breakpoints,
         defaults=defaults,
     )
     counter_by_row: Dict[int, int] = defaultdict(int)
 
-    lines: List[str] = [
-        '<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-        '        xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">',
-    ]
-
+    entries: List[str] = []
     for origin, destination, value, row in flows:
         row_key = row.row_index if row.row_index is not None else id(row)
         seq = counter_by_row[row_key]
@@ -256,17 +254,41 @@ def render_person_flows(
         arrival_pos = _clamp_position(arrive.length, endpoint_offset_m, at_start=arrive.is_start)
         pattern_attr = _format_pattern_attribute(ped_pattern, value)
 
-        lines.append(
+        entry_lines = [
             f'  <personFlow id="{pf_id}" begin="0.00" end="{simulation_end_time:.2f}" '
-            f'departPos="{depart_pos:.2f}" {pattern_attr}>'
-        )
-        lines.append(
-            f'    <personTrip from="{depart.edge_id}" to="{arrive.edge_id}" arrivalPos="{arrival_pos:.2f}"/>'
-        )
-        lines.append("  </personFlow>")
+            f'departPos="{depart_pos:.2f}" {pattern_attr}>',
+            f'    <personTrip from="{depart.edge_id}" to="{arrive.edge_id}" arrivalPos="{arrival_pos:.2f}"/>',
+            "  </personFlow>",
+        ]
+        entries.append("\n".join(entry_lines))
 
-    lines.append("</routes>")
+    return entries
+
+
+def render_person_flows(
+    flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
+    *,
+    ped_pattern: PersonFlowPattern,
+    simulation_end_time: float,
+    endpoint_offset_m: float,
+    breakpoints: Sequence[int],
+    defaults: Defaults,
+) -> str:
+    entries = build_person_flow_entries(
+        flows,
+        ped_pattern=ped_pattern,
+        simulation_end_time=simulation_end_time,
+        endpoint_offset_m=endpoint_offset_m,
+        breakpoints=breakpoints,
+        defaults=defaults,
+    )
+    lines: List[str] = [
+        '<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+        '        xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">',
+        *entries,
+        "</routes>",
+    ]
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["render_person_flows"]
+__all__ = ["build_person_flow_entries", "render_person_flows"]

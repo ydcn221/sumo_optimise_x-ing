@@ -7,7 +7,9 @@ from typing import Sequence
 from .checks.semantics import validate_semantics
 from .domain.models import BuildOptions, BuildResult
 from .demand.catalog import build_endpoint_catalog
-from .demand.person_flow import prepare_person_flow_routes
+from .demand.person_flow import PersonRouteResult, prepare_person_flow_routes
+from .demand.routes import render_routes_document
+from .demand.vehicle_flow import VehicleRouteResult, prepare_vehicle_routes
 from .demand.person_flow.graph_builder import build_pedestrian_graph
 from .demand.visualization import render_pedestrian_network_image
 from .emitters.connections import render_connections_xml
@@ -32,7 +34,7 @@ from .planner.lanes import collect_breakpoints_and_reasons, compute_lane_overrid
 from .sumo_integration.netconvert import run_two_step_netconvert
 from .sumo_integration.netedit import launch_netedit
 from .utils.constants import NETWORK_FILE_NAME
-from .utils.io import ensure_output_directory, persist_xml, write_manifest
+from .utils.io import ensure_output_directory, persist_xml, write_manifest, write_sumocfg
 from .utils.logging import configure_logger, get_logger
 
 LOG = get_logger()
@@ -123,14 +125,30 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
     )
 
     demand_xml = None
+    person_routes: PersonRouteResult | None = None
+    vehicle_routes: VehicleRouteResult | None = None
     if options.demand:
-        demand_xml = prepare_person_flow_routes(
+        person_routes = prepare_person_flow_routes(
             options=options.demand,
             main_road=main_road,
             defaults=defaults,
             clusters=clusters,
             breakpoints=breakpoints,
             catalog=endpoint_catalog,
+        )
+        vehicle_routes = prepare_vehicle_routes(
+            options=options.demand,
+            main_road=main_road,
+            defaults=defaults,
+            clusters=clusters,
+            breakpoints=breakpoints,
+            catalog=endpoint_catalog,
+            edges_xml=edges_xml,
+            connections_xml=connections_result.xml,
+        )
+        demand_xml = render_routes_document(
+            person_entries=person_routes.entries if person_routes else None,
+            vehicle_entries=vehicle_routes.entries if vehicle_routes else None,
         )
 
     return BuildResult(
@@ -183,6 +201,9 @@ def build_and_persist(spec_path: Path, options: BuildOptions) -> BuildResult:
         tll=result.tll_xml,
         demand=result.demand_xml,
     )
+    write_sumocfg(artifacts, has_routes=result.demand_xml is not None)
+    if result.demand_xml is not None:
+        result.sumocfg_path = artifacts.sumocfg_path
 
     if options.generate_demand_templates:
         write_demand_templates(

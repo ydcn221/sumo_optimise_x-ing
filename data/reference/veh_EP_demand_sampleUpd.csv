@@ -1,6 +1,5 @@
-﻿Pattern,poisson,
+﻿Pattern,poisson
 EndID,vehFlow,Label
 Node.Minor.350.N_end,500,
-Node.Main.1500.S/*もしくは Node.Main.E_end*/,500,
-Node.Main.0.N/*もしくは Node.Main.W_end*/,500,
-
+Node.Main.1500.S,500,
+Node.Main.0.N,500,

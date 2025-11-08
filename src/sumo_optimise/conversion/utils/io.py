@@ -20,8 +20,10 @@ from .constants import (
     CONNECTIONS_FILE_NAME,
     EDGES_FILE_NAME,
     MANIFEST_NAME,
+    NETWORK_FILE_NAME,
     NODES_FILE_NAME,
     ROUTES_FILE_NAME,
+    SUMO_CONFIG_FILE_NAME,
     TLL_FILE_NAME,
 )
 
@@ -107,6 +109,7 @@ class BuildArtifacts:
         self.connections_path = outdir / CONNECTIONS_FILE_NAME
         self.tll_path = outdir / TLL_FILE_NAME
         self.routes_path = outdir / ROUTES_FILE_NAME
+        self.sumocfg_path = outdir / SUMO_CONFIG_FILE_NAME
 
 
 def ensure_output_directory(
@@ -170,9 +173,29 @@ def persist_xml(
         artifacts.routes_path.write_text(demand, encoding="utf-8")
 
 
+def write_sumocfg(artifacts: BuildArtifacts, *, has_routes: bool) -> None:
+    """Emit a minimal SUMO configuration referencing the generated net and routes."""
+
+    if not has_routes:
+        return
+
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<configuration>\n"
+        "    <input>\n"
+        f'        <net-file value="{NETWORK_FILE_NAME}"/>\n'
+        f'        <route-files value="{ROUTES_FILE_NAME}"/>\n'
+        '        <junction-taz value="true"/>\n'
+        "    </input>\n"
+        "</configuration>\n"
+    )
+    artifacts.sumocfg_path.write_text(content, encoding="utf-8")
+
+
 __all__ = [
     "BuildArtifacts",
     "ensure_output_directory",
     "persist_xml",
+    "write_sumocfg",
     "write_manifest",
 ]

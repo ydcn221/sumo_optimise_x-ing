@@ -365,6 +365,7 @@ class BuildResult:
     junction_ids: Optional[List[str]] = None
     pedestrian_graph: Optional[Any] = None
     network_image_path: Optional[Path] = None
+    sumocfg_path: Optional[Path] = None
 
 
 @dataclass

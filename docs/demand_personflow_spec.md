@@ -75,6 +75,16 @@ Both CSV options are required to activate the demand pipeline.
 - The flow pattern must be declared in the first row of the endpoint CSV; the CLI no longer accepts
   `--demand-pattern`.
 
+## Vehicle demand overview
+
+- `veh_EP_demand_sampleUpd.csv` follows the same two-row preamble as the pedestrian
+  dataset (`Pattern,<value>` then `EndID,vehFlow,Label`). Signed values are supported and the same
+  aliasing rules apply (`Node.Main.E_end` / `Node.Main.W_end` resolve to the proper corridor nodes).
+- `veh_jct_turn_weight_sampleUpd.csv` lists four columns per junction: `ToNorth`, `ToWest`, `ToSouth`,
+  `ToEast`. U-turn shares are automatically zeroed during propagation.
+- When vehicle inputs are supplied alongside pedestrian CSVs the converter merges both modalities into
+  a single routes document (and writes `1-generated.sumocfg` referencing the standard net + routes files).
+
 ## File naming
 
 - The generated routes file follows the same numbering convention as the other
