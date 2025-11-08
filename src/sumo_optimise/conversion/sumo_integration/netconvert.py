@@ -1,16 +1,33 @@
 """Integration with SUMO's netconvert utility."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..utils.constants import PLAIN_NETCONVERT_PREFIX, NETWORK_FILE_NAME
 from ..utils.errors import NetconvertExecutionError
 from ..utils.logging import get_logger
 
 LOG = get_logger()
+
+
+def _cli_path(path: Path, base: Path) -> str:
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        try:
+            return Path(os.path.relpath(path, base)).as_posix()
+        except ValueError:
+            return path.resolve().as_posix()
+
+
+def _resolve_under_base(token: str, base: Path) -> Path:
+    candidate = Path(token)
+    if candidate.is_absolute():
+        return candidate
+    return base / candidate
 
 
 def run_two_step_netconvert(
@@ -19,6 +36,9 @@ def run_two_step_netconvert(
     edges_file: Path,
     connections_file: Path,
     tll_file: Optional[Path],
+    *,
+    plain_prefix: str,
+    network_output: Path,
 ) -> None:
     """Execute the two-stage netconvert workflow required by SUMO."""
 
@@ -27,7 +47,8 @@ def run_two_step_netconvert(
         LOG.warning("netconvert not found in PATH. Skip multi-step conversion.")
         return
 
-    plain_prefix = PLAIN_NETCONVERT_PREFIX
+    plain_node = _resolve_under_base(f"{plain_prefix}.nod.xml", outdir)
+    plain_edge = _resolve_under_base(f"{plain_prefix}.edg.xml", outdir)
 
     step1 = [
         exe,
@@ -35,9 +56,9 @@ def run_two_step_netconvert(
         "--sidewalks.guess",
         "--no-internal-links",
         "--node-files",
-        nodes_file.name,
+        _cli_path(nodes_file, outdir),
         "--edge-files",
-        edges_file.name,
+        _cli_path(edges_file, outdir),
         "--plain-output-prefix",
         plain_prefix,
     ]
@@ -45,20 +66,20 @@ def run_two_step_netconvert(
         exe,
         "--lefthand",
         "--node-files",
-        f"{plain_prefix}.nod.xml",
+        _cli_path(plain_node, outdir),
         "--edge-files",
-        f"{plain_prefix}.edg.xml",
+        _cli_path(plain_edge, outdir),
         "--connection-files",
-        connections_file.name,
+        _cli_path(connections_file, outdir),
     ]
     if tll_file is not None:
         step2 += [
             "--tllogic-files",
-            tll_file.name,
+            _cli_path(tll_file, outdir),
         ]
     step2 += [
         "--output-file",
-        NETWORK_FILE_NAME,
+        _cli_path(network_output, outdir),
     ]
 
     for idx, cmd in enumerate((step1, step2), start=1):

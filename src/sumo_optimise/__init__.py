@@ -5,7 +5,9 @@ from . import conversion
 from .conversion import (
     BuildOptions,
     BuildResult,
+    BuildTask,
     OutputDirectoryTemplate,
+    OutputFileTemplates,
     build_and_persist,
     build_corridor_artifacts,
 )
@@ -15,6 +17,8 @@ __all__ = [
     "BuildOptions",
     "BuildResult",
     "OutputDirectoryTemplate",
+    "OutputFileTemplates",
+    "BuildTask",
     "build_and_persist",
     "build_corridor_artifacts",
 ]

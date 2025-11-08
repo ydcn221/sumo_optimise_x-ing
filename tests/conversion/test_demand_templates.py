@@ -13,10 +13,9 @@ def test_write_demand_templates(tmp_path: Path) -> None:
     endpoint_ids = ["PedEnd.Main.W_end.N_sidewalk", "PedEnd.Minor.100.N_end.E_sidewalk"]
     junction_ids = ["Cluster.100"]
 
-    write_demand_templates(tmp_path, endpoint_ids, junction_ids)
-
     endpoint_path = tmp_path / "DemandPerEndpoint_template.csv"
     junction_path = tmp_path / "JunctionTurnWeight_template.csv"
+    write_demand_templates(endpoint_path, junction_path, endpoint_ids, junction_ids)
 
     with endpoint_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))

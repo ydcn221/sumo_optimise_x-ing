@@ -99,7 +99,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
   * `1-generated.edg.xml` — edges
   * `1-generated.con.xml` — vehicle connections and pedestrian crossings
   * `1-generated.tll.xml` — traffic-light logic programmes
-  * `1-generated.sumocfg` — minimal SUMO config referencing the final net/routes (written when demand is emitted)
+  * `config.sumocfg` — minimal SUMO config referencing the final net/routes (written when demand is emitted)
   * `build.log` — structured log
 
   **Identifier schema (excerpt)**
@@ -144,7 +144,7 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 `v0.3.0` ships a first-class routed demand generator for both pedestrians
  (`personFlow`) and vehicles (`flow`). Supply signed endpoint demand and junction
  turning ratios for whichever modes you need; the converter merges the results
- into a single `1-generated.rou.xml`. The feature is documented in
+into a single `demandflow.rou.xml`. The feature is documented in
  **`docs/demand_personflow_spec.md`** and activated via the CLI:
 
 ```bash
@@ -179,12 +179,12 @@ Key points:
   and `<flow>` entries side by side.
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
   approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
-  `plainXML_out/.../1-generated.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
+  `plainXML_out/.../demandflow.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
   (corridor JSON) is applied at the lane start for west-end north halves, east-end south halves,
   minor north east-side endpoints, and minor south west-side endpoints, and at
   `length - offset` for their opposite halves so that flows spawn and terminate
   at the physically correct sidewalk ends.
-- The emitted `1-generated.sumocfg` references the cooked net (`3-n+e+c+t.net.xml`) and
+- The emitted `config.sumocfg` references the cooked net (`3-n+e+c+t.net.xml`) and
   the merged routes file so you can immediately launch simulations once the net
   exists (via the two-step `netconvert` or any other pipeline).
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit

@@ -6,7 +6,12 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
-from sumo_optimise.conversion.cli.main import _build_options, _resolve_output_template, parse_args
+from sumo_optimise.conversion.cli.main import (
+    _build_options,
+    _resolve_output_files,
+    _resolve_output_template,
+    parse_args,
+)
 from sumo_optimise.conversion.domain.models import (
     CardinalDirection,
     Defaults,
@@ -317,7 +322,8 @@ def test_cli_accepts_demand_options() -> None:
         ]
     )
     template = _resolve_output_template(args)
-    options = _build_options(args, template)
+    file_templates = _resolve_output_files(args)
+    options = _build_options(args, template, file_templates)
     assert options.demand is not None
     assert options.demand.ped_endpoint_csv == Path("PedDemand.csv")
     assert options.demand.ped_junction_turn_weight_csv == Path("PedRatio.csv")
@@ -329,16 +335,17 @@ def test_cli_accepts_demand_options() -> None:
 def test_cli_requires_both_demand_csvs() -> None:
     args = parse_args(["spec.json"])
     template = _resolve_output_template(args)
-    options = _build_options(args, template)
+    file_templates = _resolve_output_files(args)
+    options = _build_options(args, template, file_templates)
     assert options.demand is None
 
     partial_args = parse_args(["spec.json", "--ped-endpoint-demand", "Demand.csv"])
     with pytest.raises(SystemExit):
-        _build_options(partial_args, OutputDirectoryTemplate())
+        _build_options(partial_args, OutputDirectoryTemplate(), _resolve_output_files(partial_args))
 
     vehicle_partial = parse_args(["spec.json", "--veh-endpoint-demand", "Veh.csv"])
     with pytest.raises(SystemExit):
-        _build_options(vehicle_partial, OutputDirectoryTemplate())
+        _build_options(vehicle_partial, OutputDirectoryTemplate(), _resolve_output_files(vehicle_partial))
 
 
 def test_turn_weight_zeroing_keeps_forward_direction() -> None:

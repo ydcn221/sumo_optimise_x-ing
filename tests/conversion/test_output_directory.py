@@ -43,15 +43,15 @@ def test_custom_templates_support_placeholders(tmp_path: Path, monkeypatch: pyte
     )
 
     sqids = Sqids()
-    expected_uid_first = sqids.encode([ns_value, 1])
-    expected_uid_second = sqids.encode([ns_value, 2])
+    epoch_ms = ns_value // 1_000_000
+    expected_uid = sqids.encode([epoch_ms])
 
     first = io.ensure_output_directory(template)
     second = io.ensure_output_directory(template)
 
     expected_root = tmp_path / "runs" / "20231231"
-    assert first.outdir == expected_root / f"235958-{expected_uid_first}-0001"
-    assert second.outdir == expected_root / f"235958-{expected_uid_second}-0002"
+    assert first.outdir == expected_root / f"235958-{expected_uid}-0001"
+    assert second.outdir == expected_root / f"235958-{expected_uid}-0002"
 
 
 def test_run_template_must_be_relative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,8 +89,10 @@ def test_persist_xml_writes_all_outputs(tmp_path: Path, monkeypatch: pytest.Monk
         connections="<connections/>",
         tll="<tlLogics/>",
     )
+    io.persist_routes(artifacts, demand="<routes/>")
 
     assert artifacts.nodes_path.read_text(encoding="utf-8") == "<nodes/>"
     assert artifacts.edges_path.read_text(encoding="utf-8") == "<edges/>"
     assert artifacts.connections_path.read_text(encoding="utf-8") == "<connections/>"
     assert artifacts.tll_path.read_text(encoding="utf-8") == "<tlLogics/>"
+    assert artifacts.routes_path.read_text(encoding="utf-8") == "<routes/>"

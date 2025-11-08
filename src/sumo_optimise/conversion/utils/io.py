@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import time
 from itertools import count
 from pathlib import Path
@@ -15,17 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
         def encode(self, values: Sequence[int]) -> str:
             return "_".join(f"{value:x}" for value in values)
 
-from ..domain.models import OutputDirectoryTemplate
-from .constants import (
-    CONNECTIONS_FILE_NAME,
-    EDGES_FILE_NAME,
-    MANIFEST_NAME,
-    NETWORK_FILE_NAME,
-    NODES_FILE_NAME,
-    ROUTES_FILE_NAME,
-    SUMO_CONFIG_FILE_NAME,
-    TLL_FILE_NAME,
-)
+from ..domain.models import OutputDirectoryTemplate, OutputFileTemplates
 
 
 _SQIDS = Sqids()
@@ -75,6 +66,7 @@ def _build_context(
     seq: int,
     seq_digits: int,
     uid: str,
+    epoch_ms: int,
 ) -> dict[str, object]:
     return {
         "year": _DateComponent(now.year, 4),
@@ -83,9 +75,13 @@ def _build_context(
         "hour": _DateComponent(now.hour, 2),
         "minute": _DateComponent(now.minute, 2),
         "second": _DateComponent(now.second, 2),
+        "millisecond": _DateComponent(now.microsecond // 1000, 3),
         "microsecond": _DateComponent(now.microsecond, 6),
         "seq": _SequenceComponent(seq, seq_digits),
         "uid": _UidComponent(uid),
+        "sqid": _UidComponent(uid),
+        "squid": _UidComponent(uid),
+        "epoch_ms": epoch_ms,
     }
 
 
@@ -101,30 +97,109 @@ def _format_template(template: str | Path, context: Mapping[str, object]) -> str
 class BuildArtifacts:
     """Represents materialised file paths for a build run."""
 
-    def __init__(self, outdir: Path) -> None:
+    def __init__(
+        self,
+        outdir: Path,
+        *,
+        context: Mapping[str, object],
+        file_templates: OutputFileTemplates,
+    ) -> None:
         self.outdir = outdir
-        self.log_path = outdir / "build.log"
-        self.nodes_path = outdir / NODES_FILE_NAME
-        self.edges_path = outdir / EDGES_FILE_NAME
-        self.connections_path = outdir / CONNECTIONS_FILE_NAME
-        self.tll_path = outdir / TLL_FILE_NAME
-        self.routes_path = outdir / ROUTES_FILE_NAME
-        self.sumocfg_path = outdir / SUMO_CONFIG_FILE_NAME
+        self._context = context
+        self._file_templates = file_templates
+        self._path_cache: dict[str, Path] = {}
+        self._string_cache: dict[str, str] = {}
+
+    def _resolve_path(self, key: str) -> Path:
+        if key not in self._path_cache:
+            template = getattr(self._file_templates, key)
+            formatted = _format_template(template, self._context)
+            candidate = Path(formatted)
+            if not candidate.is_absolute():
+                candidate = self.outdir / candidate
+            self._path_cache[key] = candidate
+        return self._path_cache[key]
+
+    def _resolve_string(self, key: str) -> str:
+        if key not in self._string_cache:
+            template = getattr(self._file_templates, key)
+            self._string_cache[key] = _format_template(template, self._context)
+        return self._string_cache[key]
+
+    @property
+    def log_path(self) -> Path:
+        return self._resolve_path("log")
+
+    @property
+    def manifest_path(self) -> Path:
+        return self._resolve_path("manifest")
+
+    @property
+    def nodes_path(self) -> Path:
+        return self._resolve_path("nodes")
+
+    @property
+    def edges_path(self) -> Path:
+        return self._resolve_path("edges")
+
+    @property
+    def connections_path(self) -> Path:
+        return self._resolve_path("connections")
+
+    @property
+    def tll_path(self) -> Path:
+        return self._resolve_path("tll")
+
+    @property
+    def routes_path(self) -> Path:
+        return self._resolve_path("routes")
+
+    @property
+    def sumocfg_path(self) -> Path:
+        return self._resolve_path("sumocfg")
+
+    @property
+    def network_path(self) -> Path:
+        return self._resolve_path("network")
+
+    @property
+    def pedestrian_network_path(self) -> Path:
+        return self._resolve_path("pedestrian_network")
+
+    @property
+    def ped_endpoint_template_path(self) -> Path:
+        return self._resolve_path("demand_endpoint_template")
+
+    @property
+    def ped_junction_template_path(self) -> Path:
+        return self._resolve_path("demand_junction_template")
+
+    @property
+    def netconvert_prefix(self) -> str:
+        return self._resolve_string("netconvert_plain_prefix")
 
 
 def ensure_output_directory(
     template: OutputDirectoryTemplate | None = None,
+    file_templates: OutputFileTemplates | None = None,
 ) -> BuildArtifacts:
     config = template or OutputDirectoryTemplate()
     if config.seq_digits < 1:
         raise ValueError("seq_digits must be at least 1")
-
-    now = _current_time()
-    timestamp_ns = _time_ns()
+    file_config = file_templates or OutputFileTemplates()
 
     for seq in count(1):
-        uid = _SQIDS.encode([timestamp_ns, seq])
-        context = _build_context(now=now, seq=seq, seq_digits=config.seq_digits, uid=uid)
+        now = _current_time()
+        timestamp_ns = _time_ns()
+        epoch_ms = timestamp_ns // 1_000_000
+        uid = _SQIDS.encode([epoch_ms])
+        context = _build_context(
+            now=now,
+            seq=seq,
+            seq_digits=config.seq_digits,
+            uid=uid,
+            epoch_ms=epoch_ms,
+        )
         root_name = _format_template(config.root, context)
         run_name = _format_template(config.run, context) if config.run else ""
 
@@ -145,15 +220,19 @@ def ensure_output_directory(
         except FileExistsError:
             continue
 
-        return BuildArtifacts(outdir)
+        return BuildArtifacts(outdir, context=context, file_templates=file_config)
 
     raise RuntimeError("unable to create unique output directory")  # pragma: no cover - defensive
 
 
 def write_manifest(artifacts: BuildArtifacts, payload: dict) -> Path:
-    path = artifacts.outdir / MANIFEST_NAME
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return path
+    _write_text(artifacts.manifest_path, json.dumps(payload, indent=2, ensure_ascii=False))
+    return artifacts.manifest_path
+
+
+def _write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
 
 
 def persist_xml(
@@ -163,39 +242,52 @@ def persist_xml(
     edges: str,
     connections: str,
     tll: str,
-    demand: str | None = None,
 ) -> None:
-    artifacts.nodes_path.write_text(nodes, encoding="utf-8")
-    artifacts.edges_path.write_text(edges, encoding="utf-8")
-    artifacts.connections_path.write_text(connections, encoding="utf-8")
-    artifacts.tll_path.write_text(tll, encoding="utf-8")
-    if demand is not None:
-        artifacts.routes_path.write_text(demand, encoding="utf-8")
+    _write_text(artifacts.nodes_path, nodes)
+    _write_text(artifacts.edges_path, edges)
+    _write_text(artifacts.connections_path, connections)
+    _write_text(artifacts.tll_path, tll)
 
 
-def write_sumocfg(artifacts: BuildArtifacts, *, has_routes: bool) -> None:
+def persist_routes(artifacts: BuildArtifacts, *, demand: str) -> None:
+    _write_text(artifacts.routes_path, demand)
+
+
+def _config_value(path: Path, base: Path) -> str:
+    try:
+        relative = path.relative_to(base)
+        return relative.as_posix()
+    except ValueError:
+        try:
+            rel = Path(os.path.relpath(path, base))
+            return rel.as_posix()
+        except ValueError:
+            return path.resolve().as_posix()
+
+
+def write_sumocfg(artifacts: BuildArtifacts, *, net_path: Path, routes_path: Path) -> None:
     """Emit a minimal SUMO configuration referencing the generated net and routes."""
 
-    if not has_routes:
-        return
-
+    net_value = _config_value(net_path, artifacts.sumocfg_path.parent)
+    route_value = _config_value(routes_path, artifacts.sumocfg_path.parent)
     content = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         "<configuration>\n"
         "    <input>\n"
-        f'        <net-file value="{NETWORK_FILE_NAME}"/>\n'
-        f'        <route-files value="{ROUTES_FILE_NAME}"/>\n'
+        f'        <net-file value="{net_value}"/>\n'
+        f'        <route-files value="{route_value}"/>\n'
         '        <junction-taz value="true"/>\n'
         "    </input>\n"
         "</configuration>\n"
     )
-    artifacts.sumocfg_path.write_text(content, encoding="utf-8")
+    _write_text(artifacts.sumocfg_path, content)
 
 
 __all__ = [
     "BuildArtifacts",
     "ensure_output_directory",
     "persist_xml",
+    "persist_routes",
     "write_sumocfg",
     "write_manifest",
 ]

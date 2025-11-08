@@ -6,7 +6,22 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..utils.constants import OUTPUT_DIR_PREFIX
+from ..utils.constants import (
+    CONNECTIONS_FILE_NAME,
+    DEMAND_ENDPOINT_TEMPLATE_NAME,
+    DEMAND_JUNCTION_TEMPLATE_NAME,
+    EDGES_FILE_NAME,
+    LOG_FILE_NAME,
+    MANIFEST_NAME,
+    NETWORK_FILE_NAME,
+    NODES_FILE_NAME,
+    OUTPUT_DIR_PREFIX,
+    PED_NETWORK_IMAGE_NAME,
+    PLAIN_NETCONVERT_PREFIX,
+    ROUTES_FILE_NAME,
+    SUMO_CONFIG_FILE_NAME,
+    TLL_FILE_NAME,
+)
 
 
 @dataclass(frozen=True)
@@ -16,6 +31,31 @@ class OutputDirectoryTemplate:
     root: str = OUTPUT_DIR_PREFIX
     run: str = "{month}{day}_{seq:03}"
     seq_digits: int = 3
+
+
+@dataclass(frozen=True)
+class OutputFileTemplates:
+    """Templates controlling where each generated artefact is written."""
+
+    log: str = field(default=LOG_FILE_NAME, metadata={"path": True})
+    manifest: str = field(default=MANIFEST_NAME, metadata={"path": True})
+    nodes: str = field(default=NODES_FILE_NAME, metadata={"path": True})
+    edges: str = field(default=EDGES_FILE_NAME, metadata={"path": True})
+    connections: str = field(default=CONNECTIONS_FILE_NAME, metadata={"path": True})
+    tll: str = field(default=TLL_FILE_NAME, metadata={"path": True})
+    routes: str = field(default=ROUTES_FILE_NAME, metadata={"path": True})
+    sumocfg: str = field(default=SUMO_CONFIG_FILE_NAME, metadata={"path": True})
+    network: str = field(default=NETWORK_FILE_NAME, metadata={"path": True})
+    pedestrian_network: str = field(default=PED_NETWORK_IMAGE_NAME, metadata={"path": True})
+    demand_endpoint_template: str = field(
+        default=DEMAND_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
+    )
+    demand_junction_template: str = field(
+        default=DEMAND_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
+    )
+    netconvert_plain_prefix: str = field(
+        default=PLAIN_NETCONVERT_PREFIX, metadata={"path": False}
+    )
 
 
 class DirectionMain(str, Enum):
@@ -348,8 +388,21 @@ class BuildOptions:
     run_netedit: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
+    output_files: OutputFileTemplates = field(default_factory=OutputFileTemplates)
     demand: Optional[DemandOptions] = None
     generate_demand_templates: bool = False
+
+
+class BuildTask(str, Enum):
+    NETWORK = "network"
+    DEMAND = "demand"
+    ALL = "all"
+
+    def includes_network(self) -> bool:
+        return self in (BuildTask.NETWORK, BuildTask.ALL)
+
+    def includes_demand(self) -> bool:
+        return self in (BuildTask.DEMAND, BuildTask.ALL)
 
 
 @dataclass

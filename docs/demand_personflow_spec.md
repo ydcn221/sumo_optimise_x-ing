@@ -46,7 +46,7 @@ and junction turn weights into SUMO `personFlow` definitions.
 
 ## Output
 
-- Routes are written to `plainXML_out/.../1-generated.rou.xml`
+- Routes are written to `plainXML_out/.../demandflow.rou.xml`
 - The document is valid against `routes_file.xsd` and uses `begin="0"`
   / `end="T"` from the CLI options.
 
@@ -83,9 +83,9 @@ Both CSV options are required to activate the demand pipeline.
 - `veh_jct_turn_weight_sampleUpd.csv` lists four columns per junction: `ToNorth`, `ToWest`, `ToSouth`,
   `ToEast`. U-turn shares are automatically zeroed during propagation.
 - When vehicle inputs are supplied alongside pedestrian CSVs the converter merges both modalities into
-  a single routes document (and writes `1-generated.sumocfg` referencing the standard net + routes files).
+  a single routes document (and writes `config.sumocfg` referencing the standard net + routes files).
 
 ## File naming
 
-- The generated routes file follows the same numbering convention as the other
-  PlainXML artefacts and is referenced in manifests for downstream tooling.
+- The generated routes file is emitted as `demandflow.rou.xml` (mirroring the default manifest entry)
+  and is referenced in manifests for downstream tooling.
