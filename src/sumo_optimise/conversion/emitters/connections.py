@@ -433,6 +433,29 @@ def _count_effective(lanes: List[str], sym: str) -> int:
     return sum(1 for lane in lanes if lane.replace("U", "") == sym)
 
 
+def _fallback_shared_allocation(s: int, l: int, t: int, r: int, u: int) -> List[str]:
+    """Share side turns on the outermost lanes when the ideal layout is impossible."""
+
+    if s <= 0:
+        return []
+
+    lanes = ["" for _ in range(s)]
+    straight_lanes = min(s, t)
+    for idx in range(straight_lanes):
+        lanes[idx] = _add(lanes[idx], "T")
+
+    if straight_lanes == 0 and t > 0:
+        lanes[0] = _add(lanes[0], "T")
+
+    if l > 0:
+        lanes[0] = _add(lanes[0], "L")
+    if r > 0:
+        lanes[-1] = _add(lanes[-1], "R")
+
+    _ensure_u_on_rightmost(lanes, u)
+    return lanes
+
+
 def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
     """Allocate lane permissions according to the detailed specification."""
 
@@ -505,7 +528,7 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
                     e_turn = "R"
                     continue
 
-            raise ValueError("Cannot reach s by L/R drop-share at s in {t, t+1}.")
+            return _fallback_shared_allocation(s, l, t, r, u)
 
         _ensure_u_on_rightmost(lanes, u)
         return lanes
@@ -528,7 +551,7 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
         next_side = "L"
         while len(lanes) > s:
             if not _drop_exclusive(lanes, "T", from_left=True):
-                raise ValueError("No 'T' to drop while s < t requires removing T.")
+                return _fallback_shared_allocation(s, l, t, r, u)
             _share_to_side(lanes, "T", next_side)
             next_side = "R" if next_side == "L" else "L"
             _ensure_u_on_rightmost(lanes, u)
@@ -554,12 +577,12 @@ def allocate_lanes(s: int, l: int, t: int, r: int, u: int) -> List[str]:
             if not removed:
                 removed = _pop_r_only() if turn == "L" else _pop_l_only()
             if not removed:
-                raise ValueError("Cannot reduce lanes to s under D-case constraints.")
+                return _fallback_shared_allocation(s, l, t, r, u)
             _ensure_u_on_rightmost(lanes, u)
             turn = "R" if turn == "L" else "L"
         return lanes
 
-    raise ValueError("Configuration not supported by current specification.")
+    return _fallback_shared_allocation(s, l, t, r, u)
 
 
 def _emit_vehicle_connections_for_approach(

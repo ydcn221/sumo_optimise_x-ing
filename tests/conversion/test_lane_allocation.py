@@ -39,3 +39,7 @@ def test_allocate_lanes_drop_share_case_e():
 
 def test_allocate_lanes_drop_share_case_f():
     assert allocate_lanes(3, 1, 5, 1, 0) == ["LT", "T", "TR"]
+
+
+def test_allocate_lanes_compact_shares_when_starved():
+    assert allocate_lanes(3, 2, 3, 2, 3) == ["LT", "T", "TRU"]
