@@ -20,6 +20,7 @@ from ..domain.models import OutputDirectoryTemplate, OutputFileTemplates
 
 
 _SQIDS = Sqids()
+_DEFAULT_SEQ_WIDTH = 3
 
 
 def _current_time() -> datetime.datetime:
@@ -64,7 +65,6 @@ def _build_context(
     *,
     now: datetime.datetime,
     seq: int,
-    seq_digits: int,
     uid: str,
     epoch_ms: int,
 ) -> dict[str, object]:
@@ -77,7 +77,7 @@ def _build_context(
         "second": _DateComponent(now.second, 2),
         "millisecond": _DateComponent(now.microsecond // 1000, 3),
         "microsecond": _DateComponent(now.microsecond, 6),
-        "seq": _SequenceComponent(seq, seq_digits),
+        "seq": _SequenceComponent(seq, _DEFAULT_SEQ_WIDTH),
         "uid": _UidComponent(uid),
         "sqid": _UidComponent(uid),
         "squid": _UidComponent(uid),
@@ -175,6 +175,14 @@ class BuildArtifacts:
         return self._resolve_path("demand_junction_template")
 
     @property
+    def veh_endpoint_template_path(self) -> Path:
+        return self._resolve_path("vehicle_endpoint_template")
+
+    @property
+    def veh_junction_template_path(self) -> Path:
+        return self._resolve_path("vehicle_junction_template")
+
+    @property
     def netconvert_prefix(self) -> str:
         return self._resolve_string("netconvert_plain_prefix")
 
@@ -184,9 +192,9 @@ def ensure_output_directory(
     file_templates: OutputFileTemplates | None = None,
 ) -> BuildArtifacts:
     config = template or OutputDirectoryTemplate()
-    if config.seq_digits < 1:
-        raise ValueError("seq_digits must be at least 1")
     file_config = file_templates or OutputFileTemplates()
+
+    literal_run = bool(config.run) and "{" not in config.run
 
     for seq in count(1):
         now = _current_time()
@@ -196,7 +204,6 @@ def ensure_output_directory(
         context = _build_context(
             now=now,
             seq=seq,
-            seq_digits=config.seq_digits,
             uid=uid,
             epoch_ms=epoch_ms,
         )
@@ -215,10 +222,16 @@ def ensure_output_directory(
         else:
             outdir = root_path
 
-        try:
-            outdir.mkdir(parents=True, exist_ok=False)
-        except FileExistsError:
+        if outdir.exists():
+            if not outdir.is_dir():
+                raise ValueError(f"output path exists and is not a directory: {outdir}")
+            if literal_run:
+                if any(outdir.iterdir()):
+                    raise ValueError(f"output directory already exists and is not empty: {outdir}")
+                return BuildArtifacts(outdir, context=context, file_templates=file_config)
             continue
+        else:
+            outdir.mkdir(parents=True, exist_ok=False)
 
         return BuildArtifacts(outdir, context=context, file_templates=file_config)
 

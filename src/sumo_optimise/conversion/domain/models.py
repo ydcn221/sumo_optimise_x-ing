@@ -8,19 +8,21 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..utils.constants import (
     CONNECTIONS_FILE_NAME,
-    DEMAND_ENDPOINT_TEMPLATE_NAME,
-    DEMAND_JUNCTION_TEMPLATE_NAME,
     EDGES_FILE_NAME,
     LOG_FILE_NAME,
     MANIFEST_NAME,
     NETWORK_FILE_NAME,
     NODES_FILE_NAME,
     OUTPUT_DIR_PREFIX,
+    PED_ENDPOINT_TEMPLATE_NAME,
+    PED_JUNCTION_TEMPLATE_NAME,
     PED_NETWORK_IMAGE_NAME,
     PLAIN_NETCONVERT_PREFIX,
     ROUTES_FILE_NAME,
     SUMO_CONFIG_FILE_NAME,
     TLL_FILE_NAME,
+    VEH_ENDPOINT_TEMPLATE_NAME,
+    VEH_JUNCTION_TEMPLATE_NAME,
 )
 
 
@@ -30,7 +32,6 @@ class OutputDirectoryTemplate:
 
     root: str = OUTPUT_DIR_PREFIX
     run: str = "{month}{day}_{seq:03}"
-    seq_digits: int = 3
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,16 @@ class OutputFileTemplates:
     network: str = field(default=NETWORK_FILE_NAME, metadata={"path": True})
     pedestrian_network: str = field(default=PED_NETWORK_IMAGE_NAME, metadata={"path": True})
     demand_endpoint_template: str = field(
-        default=DEMAND_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
+        default=PED_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
     )
     demand_junction_template: str = field(
-        default=DEMAND_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
+        default=PED_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
+    )
+    vehicle_endpoint_template: str = field(
+        default=VEH_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
+    )
+    vehicle_junction_template: str = field(
+        default=VEH_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
     )
     netconvert_plain_prefix: str = field(
         default=PLAIN_NETCONVERT_PREFIX, metadata={"path": False}
@@ -331,8 +338,7 @@ class EndpointCatalog:
 
 
 class PersonFlowPattern(str, Enum):
-    PERSONS_PER_HOUR = "persons_per_hour"
-    PERIOD = "period"
+    STEADY = "steady"
     POISSON = "poisson"
 
 
@@ -383,11 +389,13 @@ class BuildOptions:
     schema_path: Path
     run_netconvert: bool = False
     run_netedit: bool = False
+    run_sumo_gui: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
     output_files: OutputFileTemplates = field(default_factory=OutputFileTemplates)
     demand: Optional[DemandOptions] = None
     generate_demand_templates: bool = False
+    network_input: Optional[Path] = None
 
 
 class BuildTask(str, Enum):
@@ -412,6 +420,7 @@ class BuildResult:
     demand_xml: Optional[str] = None
     manifest_path: Optional[Path] = None
     endpoint_ids: Optional[List[str]] = None
+    vehicle_endpoint_ids: Optional[List[str]] = None
     junction_ids: Optional[List[str]] = None
     pedestrian_graph: Optional[Any] = None
     network_image_path: Optional[Path] = None

@@ -32,11 +32,8 @@ def build_vehicle_flow_entries(
 
 
 def _format_pattern_attribute(pattern: PersonFlowPattern, value: float) -> str:
-    if pattern is PersonFlowPattern.PERSONS_PER_HOUR:
+    if pattern is PersonFlowPattern.STEADY:
         return f'vehsPerHour="{value:.6f}"'
-    if pattern is PersonFlowPattern.PERIOD:
-        period = 3600.0 / value if value > 0.0 else 0.0
-        return f'period="{period:.6f}"'
     if pattern is PersonFlowPattern.POISSON:
         lam = value / 3600.0
         return f'period="exp({lam:.6f})"'

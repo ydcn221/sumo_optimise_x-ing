@@ -203,11 +203,8 @@ class EndpointPlacementResolver:
 def _format_pattern_attribute(pattern: PersonFlowPattern, flow_per_hour: float) -> str:
     if flow_per_hour <= 0.0:
         raise DemandValidationError("cannot emit personFlow with non-positive demand")
-    if pattern is PersonFlowPattern.PERSONS_PER_HOUR:
+    if pattern is PersonFlowPattern.STEADY:
         return f'personsPerHour="{flow_per_hour:.6f}"'
-    if pattern is PersonFlowPattern.PERIOD:
-        period = 3600.0 / flow_per_hour
-        return f'period="{period:.6f}"'
     if pattern is PersonFlowPattern.POISSON:
         lam = flow_per_hour / 3600.0
         return f'period="exp({lam:.6f})"'

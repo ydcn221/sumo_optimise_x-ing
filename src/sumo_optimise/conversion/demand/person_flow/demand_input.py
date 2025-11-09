@@ -144,7 +144,7 @@ def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPatte
         errors.add("pattern declaration missing or invalid")
         errors.raise_if_any()
         # errors.raise_if_any() will raise; return fallback to satisfy type checker
-        pattern = PersonFlowPattern.PERSONS_PER_HOUR
+        pattern = PersonFlowPattern.STEADY
     return pattern, rows
 
 

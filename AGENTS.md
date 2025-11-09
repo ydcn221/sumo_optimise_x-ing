@@ -11,7 +11,9 @@ sumo_optimise/
   conversion/
     pipeline.py            # Orchestrates the build (entry from CLI)
     cli/
-      main.py              # CLI entrypoint: python -m sumo_optimise.conversion.cli.main
+      main.py              # Combined CLI entrypoint (network + demand)
+      network.py           # Network-only CLI: python -m sumo_optimise.conversion.cli.network
+      demand.py            # Demand-only CLI: python -m sumo_optimise.conversion.cli.demand
     parser/
       spec_loader.py       # Load JSON + schema, map to domain models
     checks/

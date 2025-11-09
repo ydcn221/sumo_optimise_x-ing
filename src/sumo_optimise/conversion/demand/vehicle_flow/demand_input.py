@@ -57,7 +57,7 @@ def _open_source(source: EndpointDemandSource | TurnWeightSource, *, context: st
 
 def _parse_pattern_row(row: Sequence[str], errors: _ErrorCollector) -> PersonFlowPattern | None:
     if len(row) < 2 or row[0].strip().lower() != "pattern":
-        errors.add("first row must declare the pattern, e.g., 'Pattern,persons_per_hour'")
+        errors.add("first row must declare the pattern, e.g., 'Pattern,steady'")
         return None
     token = row[1].strip().lower()
     for pattern in PersonFlowPattern:

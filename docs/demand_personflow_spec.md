@@ -5,9 +5,9 @@ and junction turn weights into SUMO `personFlow` definitions.
 
 ## Inputs
 
-- **Endpoint demand CSV (`DemandPerEndpoint.csv`)**
+- **Endpoint demand CSV (`template_ped_dem.csv` as a starting point)**
   - Encoding: `utf-8-sig`
-  - Row 1 declares the flow pattern: `Pattern,persons_per_hour` (or `period`, `poisson`)
+  - Row 1 declares the flow pattern: `Pattern,steady` (or `poisson`)
   - Row 2 is the header: `SidewalkEndID`, `PedFlow`, optional `Label`
   - `PedFlow` is signed (`+` origin, `-` sink) in persons/hour
   - Rows are processed independently and never aggregated
@@ -34,8 +34,8 @@ and junction turn weights into SUMO `personFlow` definitions.
    Negative (sink) rows are propagated as positive sources and flipped at the
    end.
 4. **Route emission** – each OD pair becomes a `<personFlow>` with a matching
-   `<personTrip>`. Supported patterns: `personsPerHour`, fixed `period`, or
-   Poisson arrival (`period="exp(λ)"`). The configured `defaults.ped_endpoint_offset_m`
+   `<personTrip>`. Supported patterns: `steady` (`personsPerHour=…`) or
+   Poisson arrivals (`period="exp(λ)"`). The configured `defaults.ped_endpoint_offset_m`
    applies relative to the correct end of the lane: start-side endpoints
    (main-road north halves at the west terminus, main-road south halves at the
    east terminus, minor north east-side endpoints, minor south west-side
@@ -57,7 +57,7 @@ and junction turn weights into SUMO `personFlow` definitions.
 - `--veh-endpoint-demand` / `--veh-junction-turn-weight` – reserved for the upcoming vehicle flow inputs
 - `--demand-sim-end` – simulation end time (seconds) shared by pedestrian and future vehicle flows
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
-  spreadsheet preparation (`DemandPerEndpoint_template.csv` and `JunctionTurnWeight_template.csv`)
+  spreadsheet preparation (`template_ped_dem.csv`, `template_ped_turn.csv`, `template_veh_dem.csv`, `template_veh_turn.csv`)
 - Endpoint IDs distinguish sidewalk sides along both mainline and minor approaches:
   - Mainline endpoints follow `PedEnd.Main.{E|W}_end.{N|S}_sidewalk`. The `E_end` / `W_end`
     tokens map to the extreme main breakpoints, allowing CSV authors to speak in cardinal halves

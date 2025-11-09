@@ -76,8 +76,8 @@ $ python -m pip install -e .
 ## Quick start
 
 1. **Prepare input JSON** (v1.4). Use your own file or adapt the provided sample under `data/reference/` (e.g., `SUMO_OPTX_v1.4_sample.json`).
-2. **Run the CLI** to build PlainXML (nodes/edges/connections).
-3. **Optionally run `netconvert`** to produce `3-n+e+c+t.net.xml`.
+2. **Run the CLI** best suited for your task (network, demand, or both).
+3. **Optionally run `netconvert`/`netedit`/`sumo-gui`** via the CLI flags.
 
 ### Minimal build
 
@@ -159,7 +159,7 @@ $ python -m sumo_optimise.conversion.cli.main path/to/spec.json \
 Key points:
 
 - `ped_EP_demand_sampleUpd.csv` declares the flow pattern on the first row
-  (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
+  (`Pattern,steady` / `poisson`), followed by the header
   row (`SidewalkEndID,PedFlow,Label`) and one endpoint per subsequent row with signed
   persons/hour volumes (positive = origin, negative = sink).
 - Minor approaches expose separate east/west sidewalk endpoints:
@@ -188,8 +188,22 @@ Key points:
   the merged routes file so you can immediately launch simulations once the net
   exists (via the two-step `netconvert` or any other pipeline).
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
-  `DemandPerEndpoint_template.csv` / `JunctionTurnWeight_template.csv` with
-  prefilled IDs in the run directory.
+  `template_ped_dem.csv`, `template_ped_turn.csv`, `template_veh_dem.csv`, and
+  `template_veh_turn.csv` prefilled with the discovered endpoints/junctions.
+
+### Choose the right CLI for your workflow
+
+| Task | Entry point | Example |
+| --- | --- | --- |
+| Network build only | `python -m sumo_optimise.conversion.cli.network SPEC.json [flags]` | `python -m sumo_optimise.conversion.cli.network data/.../SUMO_OPTX_v1.4_sample.json --run-netconvert --run-netedit` |
+| Demand build only (reusing an existing network) | `python -m sumo_optimise.conversion.cli.demand SPEC.json --ped-endpoint-demand ... --ped-junction-turn-weight ... --veh-endpoint-demand ... --veh-junction-turn-weight ... [--network-input path/to/3-n+e+c+t.net.xml] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.demand spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --network-input ./networks/base.net.xml --run-sumo-gui` |
+| Full pipeline (network + demand) | `python -m sumo_optimise.conversion.cli.main SPEC.json [demand flags] [--run-netconvert] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.main spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --run-netconvert --run-netedit --run-sumo-gui` |
+
+Newly added options:
+
+* `--network-input PATH` — reuse an existing `net.xml` during demand runs (the file is copied into the output directory so you can iterate on routes without rebuilding the network).
+* `--run-sumo-gui` — launch `sumo-gui -c config.sumocfg` once demand outputs are written (requires a network, either freshly built or provided via `--network-input`).
+* Every long-form CLI flag also has a short alias (e.g. `-s` for `--schema`, `-c` for `--run-netconvert`, `-P` for `--ped-endpoint-demand`, etc.) so you can keep command lines concise.
 
 See the spec for data schemas, propagation rules, and output semantics.
 

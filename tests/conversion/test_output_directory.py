@@ -39,7 +39,6 @@ def test_custom_templates_support_placeholders(tmp_path: Path, monkeypatch: pyte
     template = OutputDirectoryTemplate(
         root=str(tmp_path / "runs" / "{year}{month}{day}"),
         run="{hour}{minute}{second}-{uid}-{seq:04}",
-        seq_digits=4,
     )
 
     sqids = Sqids()
@@ -63,6 +62,35 @@ def test_run_template_must_be_relative(tmp_path: Path, monkeypatch: pytest.Monke
 
     with pytest.raises(ValueError):
         io.ensure_output_directory(template)
+
+
+def test_existing_run_directory_must_be_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 2, 2, 2, 2, 2)
+    _freeze_time(monkeypatch, now=frozen, ns=84)
+
+    template = OutputDirectoryTemplate(root=str(tmp_path / "runs"), run="custom")
+    target = tmp_path / "runs" / "custom"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.mkdir()
+    (target / "existing.txt").write_text("data", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not empty"):
+        io.ensure_output_directory(template)
+
+
+def test_existing_run_directory_reused_when_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 2, 2, 2, 2, 2)
+    _freeze_time(monkeypatch, now=frozen, ns=168)
+
+    template = OutputDirectoryTemplate(root=str(tmp_path / "runs"), run="custom")
+    target = tmp_path / "runs" / "custom"
+    target.mkdir(parents=True, exist_ok=True)
+
+    artifacts = io.ensure_output_directory(template)
+
+    assert artifacts.outdir == target
 
 
 def test_build_artifacts_exposes_tll_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

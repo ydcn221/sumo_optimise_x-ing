@@ -146,7 +146,7 @@ def test_render_person_flows_emits_expected_xml() -> None:
     )
     xml = render_person_flows(
         flows,
-        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        ped_pattern=PersonFlowPattern.STEADY,
         simulation_end_time=7200.0,
         endpoint_offset_m=defaults.ped_endpoint_offset_m,
         breakpoints=[0, 100],
@@ -188,7 +188,7 @@ def test_render_person_flows_maps_minor_side_edges() -> None:
 
     xml = render_person_flows(
         flows,
-        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        ped_pattern=PersonFlowPattern.STEADY,
         simulation_end_time=7200.0,
         endpoint_offset_m=defaults.ped_endpoint_offset_m,
         breakpoints=[0, 200],
@@ -245,7 +245,7 @@ def test_render_person_flows_minor_endpoint_offsets() -> None:
 
     xml = render_person_flows(
         flows,
-        ped_pattern=PersonFlowPattern.PERSONS_PER_HOUR,
+        ped_pattern=PersonFlowPattern.STEADY,
         simulation_end_time=7200.0,
         endpoint_offset_m=defaults.ped_endpoint_offset_m,
         breakpoints=[0, 500],
@@ -268,13 +268,13 @@ def test_render_person_flows_minor_endpoint_offsets() -> None:
 
 def test_load_endpoint_demands_and_weights() -> None:
     endpoint_csv = StringIO(
-        "Pattern,persons_per_hour\n"
+        "Pattern,steady\n"
         "SidewalkEndID,PedFlow,Label\n"
         "PedEnd.Main.W_end.N_sidewalk,100,Peak\n"
         "PedEnd.Main.E_end.S_sidewalk,-50,\n"
     )
     pattern, rows = load_endpoint_demands(endpoint_csv)
-    assert pattern is PersonFlowPattern.PERSONS_PER_HOUR
+    assert pattern is PersonFlowPattern.STEADY
     assert [row.endpoint_id for row in rows] == [
         "PedEnd.Main.W_end.N_sidewalk",
         "PedEnd.Main.E_end.S_sidewalk",

@@ -1,4 +1,4 @@
-﻿Pattern,persons_per_hour
+﻿Pattern,steady
 SidewalkEndID,PedFlow,Label
 PedEnd.Main.E_end.N_sidewalk,750,
 PedEnd.Main.E_end.S_sidewalk,750,

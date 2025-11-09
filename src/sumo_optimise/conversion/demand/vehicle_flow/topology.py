@@ -1,6 +1,7 @@
 """Topology helpers for vehicle demand propagation."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
@@ -76,6 +77,9 @@ def _branches_for_cluster(cluster: Cluster) -> tuple[bool, bool]:
     return False, False
 
 
+_MINOR_TEMPLATE_ALIAS = re.compile(r"^VEHEND_MINOR_(?P<pos>-?\d+)_(?P<branch>[NS])_END$")
+
+
 def canonicalize_vehicle_endpoint(
     endpoint_id: str,
     *,
@@ -83,6 +87,10 @@ def canonicalize_vehicle_endpoint(
     prefer_departing_half: bool,
 ) -> str:
     """Resolve aliases such as Node.Main.E_end to concrete node identifiers."""
+
+    template_alias = _canonicalize_vehicle_template_alias(endpoint_id, network, prefer_departing_half)
+    if template_alias:
+        return template_alias
 
     tokens = endpoint_id.split(".")
     if len(tokens) >= 3 and tokens[0] == "Node" and tokens[1] == "Main":
@@ -100,6 +108,31 @@ def canonicalize_vehicle_endpoint(
     if len(tokens) == 4 and tokens[0] == "Node" and tokens[1] == "Minor":
         return endpoint_id
     raise DemandValidationError(f"unsupported vehicle endpoint identifier: {endpoint_id}")
+
+
+def _canonicalize_vehicle_template_alias(
+    endpoint_id: str,
+    network: VehicleNetwork,
+    prefer_departing_half: bool,
+) -> str | None:
+    token = endpoint_id.strip()
+    if not token:
+        return None
+    normalized = token.upper()
+    if normalized == "VEHEND_MAIN_W_END":
+        half = _main_half_for_alias("W_END", prefer_departing_half)
+        return f"Node.Main.{network.min_pos}.{half}"
+    if normalized == "VEHEND_MAIN_E_END":
+        half = _main_half_for_alias("E_END", prefer_departing_half)
+        return f"Node.Main.{network.max_pos}.{half}"
+
+    match = _MINOR_TEMPLATE_ALIAS.match(normalized)
+    if match:
+        pos = int(match.group("pos"))
+        branch = match.group("branch")
+        suffix = "N_end" if branch == "N" else "S_end"
+        return f"Node.Minor.{pos}.{suffix}"
+    return None
 
 
 def _main_half_for_alias(alias: str, prefer_departing_half: bool) -> str:
