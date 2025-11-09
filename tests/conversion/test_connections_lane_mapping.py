@@ -194,7 +194,6 @@ def test_midblock_crossings_align_after_mainline_connections():
         defaults=defaults,
         clusters=[cluster],
         breakpoints=[0, 200, 400],
-        junction_template_by_id={},
         snap_rule=snap_rule,
         main_road=main_road,
         lane_overrides={"EB": [], "WB": []},
@@ -214,4 +213,3 @@ def test_midblock_crossings_align_after_mainline_connections():
     assert [link.link_index for link in tl_links] == list(range(8))
     controlled = [conn for conn in result.controlled_connections if conn.tl_id == tl_id]
     assert [conn.link_index for conn in controlled] == list(range(6))
-

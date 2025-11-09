@@ -9,7 +9,6 @@ from ..builder.ids import cluster_id
 from ..domain.models import (
     Cluster,
     Defaults,
-    JunctionTemplate,
     LaneOverride,
     MainRoadConfig,
     PedestrianConflictConfig,
@@ -407,7 +406,6 @@ def render_tll_xml(
     defaults: Defaults,
     clusters: Sequence[Cluster],
     breakpoints: Sequence[int],
-    junction_template_by_id: Dict[str, JunctionTemplate],
     snap_rule: SnapRule,
     main_road: MainRoadConfig,
     lane_overrides: Sequence[LaneOverride],
@@ -417,7 +415,7 @@ def render_tll_xml(
 ) -> str:
     """Render a ``1-generated.tll.xml`` document with deterministic ordering."""
 
-    _ = (defaults, breakpoints, junction_template_by_id, snap_rule, main_road, lane_overrides)
+    _ = (defaults, breakpoints, snap_rule, main_road, lane_overrides)
 
     programs = _collect_programs(clusters, signal_profiles_by_kind)
     links_by_tl = _group_links_by_tl(connection_links)

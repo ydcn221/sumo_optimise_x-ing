@@ -1,13 +1,19 @@
 {
-  "version": "1.3",
-  "snap": {"step_m": 5, "tie_break": "toward_west"},
-  "defaults": {"minor_road_length_m": 120, "ped_crossing_width_m": 4, "sidewalk_width_m": 5, "speed_kmh": 50},
-  "main_road": {"length_m": 1500, "center_gap_m": 6.0, "lanes": 3},
-  "junction_templates": {
-    "tee": [],
-    "cross": [
-      {"id": "CrossJct", "main_approach_begin_m": 0, "main_approach_lanes": 0, "minor_lanes_to_main": 3, "minor_lanes_from_main": 2, "median_continuous": false}
-    ]
+  "version": "1.4",
+  "snap": {
+    "step_m": 5,
+    "tie_break": "toward_west"
+  },
+  "defaults": {
+    "minor_road_length_m": 120,
+    "ped_crossing_width_m": 4,
+    "sidewalk_width_m": 5,
+    "speed_kmh": 50
+  },
+  "main_road": {
+    "length_m": 1500,
+    "center_gap_m": 6.0,
+    "lanes": 3
   },
   "signal_profiles": {
     "tee": [],
@@ -17,14 +23,51 @@
         "cycle_s": 90,
         "ped_early_cutoff_s": 6,
         "yellow_duration_s": 3,
-        "pedestrian_conflicts": {"left": true, "right": false},
+        "pedestrian_conflicts": {
+          "left": true,
+          "right": false
+        },
         "phases": [
-          { "duration_s": 24, "allow_movements": ["main_T",  "main_L",     "main_R",  "pedestrian"] },
-          { "duration_s": 19, "allow_movements": ["main_R",  "pedestrian"                         ] },
-          { "duration_s": 2,  "allow_movements": [                                                ] },
-          { "duration_s": 24, "allow_movements": ["minor_T", "minor_L",    "minor_R", "pedestrian"] },
-          { "duration_s": 19, "allow_movements": ["minor_L", "pedestrian"                         ] },
-          { "duration_s": 2,  "allow_movements": [                                                ] }
+          {
+            "duration_s": 24,
+            "allow_movements": [
+              "main_T",
+              "main_L",
+              "main_R",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 19,
+            "allow_movements": [
+              "main_R",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 2,
+            "allow_movements": []
+          },
+          {
+            "duration_s": 24,
+            "allow_movements": [
+              "minor_T",
+              "minor_L",
+              "minor_R",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 19,
+            "allow_movements": [
+              "minor_L",
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 2,
+            "allow_movements": []
+          }
         ]
       }
     ],
@@ -34,9 +77,22 @@
         "cycle_s": 45,
         "yellow_duration_s": 3,
         "phases": [
-          { "duration_s": 25, "allow_movements": ["main_T"    ] },
-          { "duration_s": 18, "allow_movements": ["pedestrian"] },
-          { "duration_s": 2,  "allow_movements": [            ] }
+          {
+            "duration_s": 25,
+            "allow_movements": [
+              "main_T"
+            ]
+          },
+          {
+            "duration_s": 18,
+            "allow_movements": [
+              "pedestrian"
+            ]
+          },
+          {
+            "duration_s": 2,
+            "allow_movements": []
+          }
         ]
       }
     ]
@@ -45,13 +101,23 @@
     {
       "type": "cross",
       "pos_m": 100,
-      "main_ped_crossing_placement": {"west": true, "east": true},
+      "main_approach_begin_m": 0,
+      "main_approach_lanes": 0,
+      "minor_lanes_approach": 3,
+      "minor_lanes_departure": 2,
+      "median_continuous": false,
       "main_u_turn_allowed": true,
       "signalized": true,
+      "main_ped_crossing_placement": {
+        "west": true,
+        "east": true
+      },
       "refuge_island_on_main": true,
       "two_stage_tll_control": true,
-      "template": "CrossJct",
-      "signal": {"profile_id": "CrossSig", "offset_s": 0}
+      "signal": {
+        "profile_id": "CrossSig",
+        "offset_s": 0
+      }
     }
   ]
 }

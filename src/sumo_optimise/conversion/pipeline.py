@@ -23,7 +23,6 @@ from .parser.spec_loader import (
     load_json_file,
     load_schema_file,
     parse_defaults,
-    parse_junction_templates,
     parse_layout_events,
     parse_main_road,
     parse_signal_profiles,
@@ -53,20 +52,18 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
     snap_rule = parse_snap_rule(spec_json)
     defaults = parse_defaults(spec_json)
     main_road = parse_main_road(spec_json)
-    junction_template_by_id = parse_junction_templates(spec_json)
     signal_profiles_by_kind = parse_signal_profiles(spec_json)
 
     validate_semantics(
         spec_json=spec_json,
         snap_rule=snap_rule,
         main_road=main_road,
-        junction_template_by_id=junction_template_by_id,
         signal_profiles_by_kind=signal_profiles_by_kind,
     )
 
     layout_events = parse_layout_events(spec_json, snap_rule, main_road)
     clusters = build_clusters(layout_events)
-    lane_overrides = compute_lane_overrides(main_road, clusters, junction_template_by_id, snap_rule)
+    lane_overrides = compute_lane_overrides(main_road, clusters, snap_rule)
     breakpoints, reason_by_pos = collect_breakpoints_and_reasons(main_road, clusters, lane_overrides, snap_rule)
 
     endpoint_catalog = build_endpoint_catalog(
@@ -74,7 +71,6 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         main_road=main_road,
         clusters=clusters,
         breakpoints=breakpoints,
-        junction_template_by_id=junction_template_by_id,
         lane_overrides=lane_overrides,
         snap_rule=snap_rule,
     )
@@ -106,12 +102,11 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         )
 
     nodes_xml = render_nodes_xml(main_road, defaults, clusters, breakpoints, reason_by_pos)
-    edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, junction_template_by_id, lane_overrides)
+    edges_xml = render_edges_xml(main_road, defaults, clusters, breakpoints, lane_overrides)
     connections_result = render_connections_xml(
         defaults,
         clusters,
         breakpoints,
-        junction_template_by_id,
         snap_rule,
         main_road,
         lane_overrides,
@@ -120,7 +115,6 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         defaults=defaults,
         clusters=clusters,
         breakpoints=breakpoints,
-        junction_template_by_id=junction_template_by_id,
         snap_rule=snap_rule,
         main_road=main_road,
         lane_overrides=lane_overrides,

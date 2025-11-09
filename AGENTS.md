@@ -31,7 +31,7 @@ sumo_optimise/
       netconvert.py        # Two-step netconvert wrapper (optional)
       netedit.py           # Helper for launching netedit (optional)
     domain/
-      models.py            # Dataclasses/Enums: Snap, Main, Templates, Signals, Events, IR
+      models.py            # Dataclasses/Enums: Snap, Main, Junction configs, Signals, Events, IR
     utils/
       constants.py         # Shared constants (e.g., movement tokens)
       errors.py            # Exception taxonomy (schema/semantic/build/netconvert)
@@ -40,10 +40,10 @@ sumo_optimise/
     config/
       __init__.py          # Defaults/paths/version guard (if any)
     data/
-      schema.json          # JSON Schema (v1.3)
+      schema.json          # JSON Schema (v1.4)
 data/
   reference/
-    schema_v1.3_sample.json# Sample specification for smoke tests
+    SUMO_OPTX_v1.4_sample.json# Sample specification for smoke tests
 jsonschema/
   __init__.py                      # (Namespace stub; do not confuse with PyPI jsonschema)
 sumo_optimise.egg-info/            # Package metadata (editable install)

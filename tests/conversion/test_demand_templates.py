@@ -30,8 +30,8 @@ def test_write_demand_templates(tmp_path: Path) -> None:
     assert all(value == "" for value in reader[1][1:])
 
 
-def test_build_corridor_artifacts_collects_template_ids(tmp_path: Path) -> None:
-    spec_path = Path("data/reference/SUMO_OPTX_demo(connection_build)") / "SUMO_OPTX_v1.3_sample.json"
+def test_build_corridor_artifacts_collects_endpoint_ids(tmp_path: Path) -> None:
+    spec_path = Path("data/reference/SUMO_OPTX_demo(connection_build)") / "SUMO_OPTX_v1.4_sample.json"
     schema_path = Path("src/sumo_optimise/conversion/data/schema.json")
 
     options = BuildOptions(schema_path=schema_path, generate_demand_templates=True)

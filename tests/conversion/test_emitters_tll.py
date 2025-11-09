@@ -11,7 +11,6 @@ from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
     EventKind,
-    JunctionTemplate,
     LaneOverride,
     LayoutEvent,
     MainRoadConfig,
@@ -32,10 +31,6 @@ def _make_defaults() -> Defaults:
 
 def _make_main_road() -> MainRoadConfig:
     return MainRoadConfig(length_m=300.0, center_gap_m=0.0, lanes=2)
-
-
-def _empty_templates() -> Dict[str, JunctionTemplate]:
-    return {}
 
 
 def _empty_lane_overrides() -> List[LaneOverride]:
@@ -80,7 +75,6 @@ def _render(
         defaults=_make_defaults(),
         clusters=clusters,
         breakpoints=[],
-        junction_template_by_id=_empty_templates(),
         snap_rule=_snap_rule(),
         main_road=_make_main_road(),
         lane_overrides=_empty_lane_overrides(),

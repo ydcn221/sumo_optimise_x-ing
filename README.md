@@ -1,17 +1,17 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.4)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
 
-> This repository hosts the modular corridor converter introduced for schema v1.3.
+> This repository hosts the modular corridor converter introduced for schema v1.4.
 
 ---
 
 ## Key capabilities
 
-* **Schema-driven input (v1.3)** with draft-07 JSON Schema.
+* **Schema-driven input (v1.4)** with draft-07 JSON Schema.
 * **Semantic validation** (range checks, duplicate/near-duplicate events, template/profile consistency).
 * **Grid snapping** with configurable step and tie-break.
-* **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
+* **Per-junction geometry controls** (tee/cross) embedded directly in layout events: approach-lane tapers, minor in/out lane counts, `median_continuous`, and `main_u_turn_allowed`.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
 * **Vehicle turn connections** (L/T/R) with deterministic lane mapping (left-to-left, straight fan-out, rightmost sharing).
 * **Two-step `netconvert` integration** (optional) and structured build logs.
@@ -31,9 +31,9 @@ sumo_optimise/
     sumo_integration/      # netconvert / netedit wrappers
     domain/                # Dataclasses & enums
     utils/                 # Logging, IO, constants, errors
-    data/schema.json       # Embedded JSON Schema (v1.3)
+    data/schema.json       # Embedded JSON Schema (v1.4)
     pipeline.py            # Orchestration
-data/reference/             # Sample specifications (e.g., schema_v1.3_sample.json)
+data/reference/             # Sample specifications (e.g., SUMO_OPTX_v1.4_sample.json)
 jsonschema/                # (Local namespace; *not* the PyPI package)
 ```
 
@@ -75,7 +75,7 @@ $ python -m pip install -e .
 
 ## Quick start
 
-1. **Prepare input JSON** (v1.3). Use your own file or adapt the provided sample under `data/reference/`.
+1. **Prepare input JSON** (v1.4). Use your own file or adapt the provided sample under `data/reference/` (e.g., `SUMO_OPTX_v1.4_sample.json`).
 2. **Run the CLI** to build PlainXML (nodes/edges/connections).
 3. **Optionally run `netconvert`** to produce `3-n+e+c+t.net.xml`.
 
@@ -91,7 +91,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 
 **Default behavior**
 
-* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.3).
+* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.4).
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
@@ -195,29 +195,30 @@ See the spec for data schemas, propagation rules, and output semantics.
 
 ---
 
-## Input specification (v1.3 overview)
+## Input specification (v1.4 overview)
 
-* `version`: `"1.3"`
+* `version`: `"1.4"`
 * `snap`: `{ "step_m": int>=1, "tie_break": "toward_west" | "toward_east" }`
-* `defaults`: e.g., minor road length, crossing width, speed_kmh
+* `defaults`: e.g., minor road length, crossing width, speed_kmh (with optional sidewalk width/endpoint offsets)
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "lanes": int }`
-* `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, etc.)
 * `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements).
-  * `cycle_s` must equal the sum of the listed phase durations.
-  * `yellow_duration_s` defines the yellow interval that **replaces** the tail of the last continuous green stretch for a vehicle
-    movement before it turns red. If the movement remains green across multiple successive phases, total their durations until
-    the phase that first turns the movement red, then treat the final `yellow_duration_s` seconds of that combined green time as
-    yellow before entering the red phase.
-  * `ped_early_cutoff_s` (intersections only) shortens the pedestrian clearance: pedestrians turn red `ped_early_cutoff_s` seconds
-    before the next phase begins.
-* `layout`: ordered events along the main road:
+  * `cycle_s` must equal the sum of listed phase durations.
+  * `yellow_duration_s` replaces the tail of the last continuous green stretch for a vehicle movement before it turns red. If the movement stays green across multiple phases, total their durations and treat the final `yellow_duration_s` seconds as yellow.
+  * `ped_early_cutoff_s` (intersections only) shortens pedestrian clearance so pedestrians turn red `ped_early_cutoff_s` seconds before the next phase.
+* `layout`: ordered events along the corridor. Intersections now carry their geometry inline—no more `junction_templates` section.
 
-  * `tee`: `{ pos_m, branch: "north"|"south", template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
-  * `cross`: `{ pos_m, template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * Shared geometry fields for `tee` and `cross`:
+    * `main_approach_begin_m`: snapped distance upstream to start the lane override.
+    * `main_approach_lanes`: lane count to apply within the override (0 keeps the corridor default).
+    * `minor_lanes_approach`: lanes for minor traffic travelling **toward** the main road.
+    * `minor_lanes_departure`: lanes for movements leaving the main road onto the minor leg.
+    * `median_continuous`: whether the median stays closed through the junction (blocks main right + U turns, minor straight-throughs, etc.).
+  * `tee`: `{ pos_m, branch: "north"|"south", <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `cross`: `{ pos_m, <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
 
-    * `two_stage_tll_control` — required boolean field that is present only when `signalized=true` and `refuge_island_on_main=true`.
-    * `main_u_turn_allowed` — required boolean for intersections. `false` prohibits main-road U-turns in both directions; `true` keeps them.
+    * `two_stage_tll_control` — required boolean present only when `signalized=true` **and** `refuge_island_on_main=true`.
+    * `main_u_turn_allowed` — required boolean for intersections. `false` removes main-road U-turns in both directions; `true` keeps them.
 
 **Rules (selected):**
 

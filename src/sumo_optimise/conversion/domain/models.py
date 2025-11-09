@@ -128,14 +128,12 @@ class MainRoadConfig:
 
 
 @dataclass(frozen=True)
-class JunctionTemplate:
-    id: str
+class JunctionConfig:
     main_approach_begin_m: int
     main_approach_lanes: int
-    minor_lanes_to_main: int
-    minor_lanes_from_main: int
+    minor_lanes_approach: int
+    minor_lanes_departure: int
     median_continuous: bool
-    kind: EventKind
 
 
 @dataclass(frozen=True)
@@ -172,7 +170,7 @@ class LayoutEvent:
     type: EventKind
     pos_m_raw: float
     pos_m: int
-    template_id: Optional[str] = None
+    junction: Optional[JunctionConfig] = None
     signalized: Optional[bool] = None
     signal: Optional[SignalRef] = None
     main_ped_crossing_placement: Optional[Dict[str, bool]] = None
@@ -376,7 +374,6 @@ class CorridorSpec:
     snap: SnapRule
     defaults: Defaults
     main_road: MainRoadConfig
-    junction_templates: Dict[str, JunctionTemplate]
     signal_profiles: Dict[str, Dict[str, SignalProfileDef]]
     layout: List[LayoutEvent]
 

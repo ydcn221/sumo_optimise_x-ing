@@ -1,22 +1,22 @@
 <tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
-    <tlLogic id="Cluster.150.Main" type="static" programID="0" offset="0">
+    <tlLogic id="Cluster.150" type="static" programID="0" offset="0">
         <phase duration="7" state="rrrrrGGrGGrG"/>
         <phase duration="3" state="rrrrryGrrGrr"/>
         <phase duration="7" state="rrGrrrGGrGGr"/>
         <phase duration="3" state="rrGrrrGrrGrr"/>
         <phase duration="7" state="rrGrrGGrrGrr"/>
         <phase duration="3" state="rryrryGrrGrr"/>
-        <phase duration="7" state="rGrrGrGGrGrG"/>
-        <phase duration="3" state="ryrryrrGrrrG"/>
+        <phase duration="7" state="rGrrGrGrGGGr"/>
+        <phase duration="3" state="ryrryrrrGrGr"/>
         <phase duration="7" state="GrrGrrrGGrGG"/>
         <phase duration="3" state="yrryrrrGGrGG"/>
         <phase duration="7" state="rrrrrrGGGGGG"/>
         <phase duration="3" state="rrrrrrGrGGrG"/>
     </tlLogic>
-    <connection from="Edge.MinorS.NB.150" to="Edge.Main.WB.150-100" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="0"/>
-    <connection from="Edge.Main.WB.200-150" to="Edge.MinorS.SB.150" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="1"/>
-    <connection from="Edge.Main.WB.200-150" to="Edge.Main.WB.150-100" fromLane="2" toLane="1" tl="Cluster.150.Main" linkIndex="2"/>
-    <connection from="Edge.MinorN.SB.150" to="Edge.Main.EB.150-200" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="3"/>
-    <connection from="Edge.Main.EB.100-150" to="Edge.MinorN.NB.150" fromLane="1" toLane="1" tl="Cluster.150.Main" linkIndex="4"/>
-    <connection from="Edge.Main.EB.100-150" to="Edge.Main.EB.150-200" fromLane="2" toLane="1" tl="Cluster.150.Main" linkIndex="5"/>
+    <connection from="Edge.Minor.S_arm.NB.150" to="Edge.Main.WB.150-100" fromLane="1" toLane="1" tl="Cluster.150" linkIndex="0"/>
+    <connection from="Edge.Main.WB.200-150" to="Edge.Minor.S_arm.SB.150" fromLane="1" toLane="1" tl="Cluster.150" linkIndex="1"/>
+    <connection from="Edge.Main.WB.200-150" to="Edge.Main.WB.150-100" fromLane="2" toLane="1" tl="Cluster.150" linkIndex="2"/>
+    <connection from="Edge.Minor.N_arm.SB.150" to="Edge.Main.EB.150-200" fromLane="1" toLane="1" tl="Cluster.150" linkIndex="3"/>
+    <connection from="Edge.Main.EB.100-150" to="Edge.Minor.N_arm.NB.150" fromLane="1" toLane="1" tl="Cluster.150" linkIndex="4"/>
+    <connection from="Edge.Main.EB.100-150" to="Edge.Main.EB.150-200" fromLane="2" toLane="1" tl="Cluster.150" linkIndex="5"/>
 </tlLogics>

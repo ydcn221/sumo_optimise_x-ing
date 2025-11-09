@@ -15,7 +15,7 @@ from ..domain.models import (
     CorridorSpec,
     Defaults,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LayoutEvent,
     MainRoadConfig,
     PedestrianConflictConfig,
@@ -90,8 +90,8 @@ def validate_json_schema(spec_json: Dict, schema_json: Dict) -> None:
 
 def ensure_supported_version(spec_json: Dict) -> None:
     version = str(spec_json.get("version", ""))
-    if not version.startswith("1.3"):
-        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.3.*)')
+    if not version.startswith("1.4"):
+        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.4.*)')
 
 
 def parse_snap_rule(spec_json: Dict) -> SnapRule:
@@ -130,37 +130,6 @@ def parse_main_road(spec_json: Dict) -> MainRoadConfig:
     LOG.info("main_road: L=%.2f gap=%.2f lanes=%d", main.length_m, main.center_gap_m, main.lanes)
     return main
 
-
-def parse_junction_templates(spec_json: Dict) -> Dict[str, JunctionTemplate]:
-    result: Dict[str, JunctionTemplate] = {}
-    dup_ids: Dict[str, List[str]] = {}
-    jt_root = spec_json.get("junction_templates", {})
-    for kind in (EventKind.TEE.value, EventKind.CROSS.value):
-        arr = jt_root.get(kind, [])
-        if not isinstance(arr, list):
-            continue
-        for t in arr:
-            tpl_id = str(t["id"])
-            tpl = JunctionTemplate(
-                id=tpl_id,
-                main_approach_begin_m=int(t["main_approach_begin_m"]),
-                main_approach_lanes=int(t["main_approach_lanes"]),
-                minor_lanes_to_main=int(t["minor_lanes_to_main"]),
-                minor_lanes_from_main=int(t["minor_lanes_from_main"]),
-                median_continuous=bool(t["median_continuous"]),
-                kind=EventKind(kind),
-            )
-            if tpl_id in result:
-                dup_ids.setdefault(tpl_id, [result[tpl_id].kind.value]).append(kind)
-            else:
-                result[tpl_id] = tpl
-    if dup_ids:
-        for dup_id, kinds in dup_ids.items():
-            kinds_str = ",".join(sorted(set(kinds)))
-            LOG.error("[VAL] E107 duplicate junction_template id: id=%s kinds=%s", dup_id, kinds_str)
-        raise SemanticValidationError(f"duplicate junction_template id(s): {', '.join(sorted(dup_ids.keys()))}")
-    LOG.info("junction_templates: %d", len(result))
-    return result
 
 
 def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
@@ -313,6 +282,19 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     return profiles_by_kind
 
 
+def _parse_junction_config(event: Dict) -> JunctionConfig:
+    try:
+        return JunctionConfig(
+            main_approach_begin_m=int(event["main_approach_begin_m"]),
+            main_approach_lanes=int(event["main_approach_lanes"]),
+            minor_lanes_approach=int(event["minor_lanes_approach"]),
+            minor_lanes_departure=int(event["minor_lanes_departure"]),
+            median_continuous=bool(event["median_continuous"]),
+        )
+    except KeyError as exc:  # pragma: no cover - enforced by schema
+        raise SemanticValidationError(f"missing junction geometry field: {exc}") from exc
+
+
 def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoadConfig) -> List[LayoutEvent]:
     events: List[LayoutEvent] = []
     length = float(main_road.length_m)
@@ -344,8 +326,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
             continue
 
         if event_type in (EventKind.TEE.value, EventKind.CROSS.value):
-            tpl_raw = e.get("template")
-            template_id = str(tpl_raw) if tpl_raw is not None else None
+            junction = _parse_junction_config(e)
             branch_raw = e.get("branch") if event_type == EventKind.TEE.value else None
             branch = None
             if isinstance(branch_raw, str):
@@ -357,7 +338,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 type=EventKind(event_type),
                 pos_m_raw=pos_raw,
                 pos_m=pos_snapped,
-                template_id=template_id,
+                junction=junction,
                 signalized=bool(e.get("signalized")),
                 signal=parse_signal_ref(e.get("signal")),
                 main_ped_crossing_placement=e.get("main_ped_crossing_placement"),
@@ -397,7 +378,6 @@ def load_specification(spec_path: Path, schema_path: Path) -> CorridorSpec:
     snap_rule = parse_snap_rule(spec_json)
     defaults = parse_defaults(spec_json)
     main_road = parse_main_road(spec_json)
-    junction_templates = parse_junction_templates(spec_json)
     signal_profiles = parse_signal_profiles(spec_json)
     layout_events = parse_layout_events(spec_json, snap_rule, main_road)
     return CorridorSpec(
@@ -405,7 +385,6 @@ def load_specification(spec_path: Path, schema_path: Path) -> CorridorSpec:
         snap=snap_rule,
         defaults=defaults,
         main_road=main_road,
-        junction_templates=junction_templates,
         signal_profiles=signal_profiles,
         layout=layout_events,
     )

@@ -45,7 +45,15 @@ def test_run_two_step_netconvert_includes_tll_file(tmp_path: Path, monkeypatch: 
     for path in (nodes, edges, connections, tll):
         path.write_text("<xml/>", encoding="utf-8")
 
-    netconvert.run_two_step_netconvert(outdir, nodes, edges, connections, tll)
+    netconvert.run_two_step_netconvert(
+        outdir,
+        nodes,
+        edges,
+        connections,
+        tll,
+        plain_prefix="plain",
+        network_output=outdir / "3-n+e+c+t.net.xml",
+    )
 
     assert len(commands) == 2
 

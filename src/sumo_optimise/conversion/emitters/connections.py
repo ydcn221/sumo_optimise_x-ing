@@ -21,7 +21,7 @@ from ..domain.models import (
     Cluster,
     Defaults,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LaneOverride,
     MainRoadConfig,
     SignalLink,
@@ -757,7 +757,6 @@ def render_connections_xml(
     defaults: Defaults,
     clusters: List[Cluster],
     breakpoints: List[int],
-    junction_template_by_id: Dict[str, JunctionTemplate],
     snap_rule: SnapRule,
     main_road: MainRoadConfig,
     lane_overrides: Dict[str, List[LaneOverride]],
@@ -972,9 +971,9 @@ def render_connections_xml(
         if not junction_events:
             continue
         ev = junction_events[0]
-        tpl = junction_template_by_id.get(ev.template_id) if ev.template_id else None
-        if not tpl:
-            LOG.warning("junction template not found: id=%s (pos=%s)", getattr(ev, "template_id", None), pos)
+        cfg = next((j_ev.junction for j_ev in junction_events if j_ev.junction), None)
+        if not cfg:
+            LOG.warning("junction geometry missing at pos=%s", pos)
             continue
 
         tl_id = cluster_tl_id(cluster)
@@ -1003,13 +1002,13 @@ def render_connections_xml(
             in_edge = main_edge_id("EB", west, pos)
             s_count = pick_main("EB", west, pos)
             L_target = (
-                minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
+                minor_edge_id(pos, "from", "N"), cfg.minor_lanes_departure
             ) if exist_north else None
             T_target = (
                 main_edge_id("EB", pos, east), pick_main("EB", pos, east)
             ) if east is not None else None
             R_target = (
-                minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
+                minor_edge_id(pos, "from", "S"), cfg.minor_lanes_departure
             ) if exist_south else None
             u_lanes = pick_main("WB", west, pos)
             if not allow_main_uturn:
@@ -1017,7 +1016,7 @@ def render_connections_xml(
             U_target = (
                 main_edge_id("WB", pos, west), u_lanes
             ) if u_lanes > 0 else None
-            if tpl.median_continuous:
+            if cfg.median_continuous:
                 R_target = None
                 U_target = None
             _emit_vehicle_connections_for_approach(
@@ -1037,13 +1036,13 @@ def render_connections_xml(
             in_edge = main_edge_id("WB", east, pos)
             s_count = pick_main("WB", pos, east)
             L_target = (
-                minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
+                minor_edge_id(pos, "from", "S"), cfg.minor_lanes_departure
             ) if exist_south else None
             T_target = (
                 main_edge_id("WB", pos, west), pick_main("WB", west, pos)
             ) if west is not None else None
             R_target = (
-                minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
+                minor_edge_id(pos, "from", "N"), cfg.minor_lanes_departure
             ) if exist_north else None
             u_lanes = pick_main("EB", pos, east)
             if not allow_main_uturn:
@@ -1051,7 +1050,7 @@ def render_connections_xml(
             U_target = (
                 main_edge_id("EB", pos, east), u_lanes
             ) if u_lanes > 0 else None
-            if tpl.median_continuous:
+            if cfg.median_continuous:
                 R_target = None
                 U_target = None
             _emit_vehicle_connections_for_approach(
@@ -1069,20 +1068,20 @@ def render_connections_xml(
 
         if exist_north:
             in_edge = minor_edge_id(pos, "to", "N")
-            s_count = tpl.minor_lanes_to_main
+            s_count = cfg.minor_lanes_approach
             east_lanes = pick_main("EB", pos, east) if east is not None else 0
             west_lanes = pick_main("WB", west, pos) if west is not None else 0
             L_target = (
                 main_edge_id("EB", pos, east), east_lanes
             ) if east is not None and east_lanes > 0 else None
             T_target = (
-                minor_edge_id(pos, "from", "S"), tpl.minor_lanes_from_main
-            ) if exist_south and tpl.minor_lanes_from_main > 0 else None
+                minor_edge_id(pos, "from", "S"), cfg.minor_lanes_departure
+            ) if exist_south and cfg.minor_lanes_departure > 0 else None
             R_target = (
                 main_edge_id("WB", pos, west), west_lanes
             ) if west is not None and west_lanes > 0 else None
             U_target = None
-            if tpl.median_continuous:
+            if cfg.median_continuous:
                 T_target = None
                 R_target = None
             if not (L_target or T_target or R_target or U_target):
@@ -1111,20 +1110,20 @@ def render_connections_xml(
 
         if exist_south:
             in_edge = minor_edge_id(pos, "to", "S")
-            s_count = tpl.minor_lanes_to_main
+            s_count = cfg.minor_lanes_approach
             west_lanes = pick_main("WB", west, pos) if west is not None else 0
             east_lanes = pick_main("EB", pos, east) if east is not None else 0
             L_target = (
                 main_edge_id("WB", pos, west), west_lanes
             ) if west is not None and west_lanes > 0 else None
             T_target = (
-                minor_edge_id(pos, "from", "N"), tpl.minor_lanes_from_main
-            ) if exist_north and tpl.minor_lanes_from_main > 0 else None
+                minor_edge_id(pos, "from", "N"), cfg.minor_lanes_departure
+            ) if exist_north and cfg.minor_lanes_departure > 0 else None
             R_target = (
                 main_edge_id("EB", pos, east), east_lanes
             ) if east is not None and east_lanes > 0 else None
             U_target = None
-            if tpl.median_continuous:
+            if cfg.median_continuous:
                 T_target = None
                 R_target = None
             if not (L_target or T_target or R_target or U_target):
