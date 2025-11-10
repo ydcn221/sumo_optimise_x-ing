@@ -113,6 +113,31 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
   * Junction crossings: `Xwalk.{pos}.{cardinal}`, with optional split halves yielding `Xwalk.{pos}.{cardinal}.{N|S|E|W}_half` via `crossing_id_main_split`.
   * Mid-block crossings: `Xwalk.{pos}` or `Xwalk.{pos}.{N|S}_half` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
 
+### Traffic-signal movement tokens
+
+Traffic-light programmes now consume explicit movement identifiers that align with the
+shared conflict table in `src/sumo_optimise/conversion/data/conflict_table(prototype).txt`.
+Tokens fall into two groups:
+
+* **Vehicle:** `{N|E|S|W}B_{L|T|R|U}` with an optional `_p{r|g}` suffix (e.g., `NB_R_pg`).
+  These reference the direction the vehicles travel *before* entering the junction and
+  the manoeuvre (left/straight/right/U). The `_p{r|g}` suffix specifies whether the
+  adjacent crosswalk should be red or green while that movement is active, letting the
+  conflict table differentiate between yielding versus protected turns.
+* **Pedestrian:** `PedX_{N|E|S|W…}` to address one or more crosswalks at once (order-free, e.g., `PedX_NS`, `PedX_NESW`), or the more granular
+  `XE_N-half` / `XW_S-half` tokens emitted by the replace table for two-stage crossings. Single-direction tokens can optionally target one half via `PedX_E_south`, etc.
+
+Internally the converter maps any legacy tokens (`main_L`, `EB_T`, `pedestrian`, etc.)
+onto the new identifiers so existing specs continue to load, but the resolver now
+computes the final `G/g/r` state purely from the table:
+
+* All conflicts yielding `"P"` promote the movement to `G`.
+* A mix containing `"Y"`/`"X"` (but no `"S"`) becomes a permissive `g`.
+* Any `"S"` forces the movement red (`r`).
+
+Right turns automatically add their matching U-turn movement when the approach
+provides that connection, preserving the previous shortcut.
+
 ### Build + netconvert (if `netconvert` is on PATH)
 
 Some setups run it automatically. If not, you can run manually:

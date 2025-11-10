@@ -1,0 +1,47 @@
+--------------- Equivalence_Replace_Table ---------------				
+Base	Inflow=NB	Inflow=EB	Inflow=SB	Inflow=NB
+1B	NB	EB	SB	WB
+2B	EB	SB	WB	NB
+3B	SB	WB	NB	EB
+4B	WB	NB	EB	SB
+X1_4-half	XN_W-half	XE_N-half	XS_E-half	XW_S-half
+X1_2-half	XN_E-half	XE_S-half	XS_W-half	XW_N-half
+X2_1-half	XE_N-half	XS_E-half	XW_S-half	XN_W-half
+X2_3-half	XE_S-half	XS_W-half	XW_N-half	XN_E-half
+X3_2-half	XS_E-half	XW_S-half	XN_W-half	XE_N-half
+X3_4-half	XS_W-half	XW_N-half	XN_E-half	XE_S-half
+X4_3-half	XW_S-half	XN_W-half	XE_N-half	XS_E-half
+X4_1-half	XW_N-half	XN_E-half	XE_S-half	XS_W-half
+--------------- Equivalence-Replace-Table END ---------------				
+--------------- Conflict_Table ---------------				
+"NB_R_pg"Å∏"NB_R"Å∏"NB". P=Priority; Y=Yield; S=Stop; X=Should not happen (Emit warning and fallback to "Y"ield)				
+allowed_movement_A	another_movement_allowed_B	A_state	B_state	
+1B	X3_4-half	P	S	
+1B_L	4B_T	Y	P	
+1B_L	3B_R	Y	Y	
+1B_L	2B_U	Y	Y	
+1B_L_pr	X4_3-half	P	S	
+1B_L_pg	X4_3-half	Y	P	
+1B_T	4B_T	X	X	
+1B_T	4B_R	P	Y	
+1B_T	3B_R	P	Y	
+1B_T	3B_U	P	Y	
+1B_T	2B_L	P	Y	
+1B_T	2B_T	X	X	
+1B_T	2B_R	X	X	
+1B_T	X1_4-half	P	S	
+1B_R	4B_T	X	X	
+1B_R	4B_R	X	X	
+1B_R	4B_U	Y	Y	
+1B_R	3B_L	Y	Y	
+1B_R	3B_T	Y	P	
+1B_R	2B_T	Y	P	
+1B_R	2B_R	X	X	
+1B_R_pr	X2_1-half	P	S	
+1B_R_pg	X2_1-half	Y	P	
+1B_U	4B_L	Y	Y	
+1B_U	3B_T	Y	P	
+1B_U	2B_R	Y	Y	
+1B_U_pr	X3_2-half	P	S	
+1B_U_pg	X3_2-half	Y	P	
+--------------- Conflict_Table END ---------------				

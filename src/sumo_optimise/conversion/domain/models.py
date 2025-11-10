@@ -425,6 +425,7 @@ class BuildResult:
     pedestrian_graph: Optional[Any] = None
     network_image_path: Optional[Path] = None
     sumocfg_path: Optional[Path] = None
+    defaults: Optional[Defaults] = None
 
 
 @dataclass

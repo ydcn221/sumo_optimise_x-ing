@@ -39,6 +39,26 @@ from ..utils.logging import get_logger
 LOG = get_logger()
 
 
+_PED_INTERSECTION_PATTERN = (
+    r"PedX(?:"
+    r"|_[NESW]+"
+    r"|_(?:N|S)_(?:E|W)-half"
+    r"|_(?:E|W)_(?:N|S)-half"
+    r")?"
+)
+
+INTERSECTION_MOVEMENT_RE = re.compile(
+    rf"^(?:"
+    rf"{_PED_INTERSECTION_PATTERN}"
+    r"|[NESW]B_(?:[LTRU]{1,4})(?:_p[gr])?"
+    r"|pedestrian"
+    r"|(?:main|EB|WB|minor)_(?:L|T|R)"
+    r")$"
+)
+VEHICLE_TURN_RE = re.compile(r"^(?P<dir>[NESW])B_(?P<turns>[LTRU]{1,4})(?:_p[gr])?$")
+MIDBLOCK_MOVEMENT_RE = re.compile(r"^(?:EB|WB|PedX|PedX_N|PedX_S)$")
+
+
 def load_json_file(json_path: Path) -> Dict:
     if not json_path.exists():
         raise SpecFileNotFound(f"JSON not found: {json_path}")
@@ -139,8 +159,6 @@ def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
 
 
 def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileDef]]:
-    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|EB|WB|minor)_(?:L|T|R))$")
-
     profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]] = {
         EventKind.TEE.value: {},
         EventKind.CROSS.value: {},
@@ -152,24 +170,15 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
-        ped_cutoff_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
         ped_early_cutoff_raw = p.get("ped_early_cutoff_s")
-        if ped_cutoff_required:
-            if ped_early_cutoff_raw is None:
-                errors.append(
-                    f"[VAL] E305 ped_early_cutoff_s is required for intersections: profile={pid} kind={kind}"
-                )
-                ped_early_cutoff = 0
-            else:
-                ped_early_cutoff = int(ped_early_cutoff_raw)
+        if ped_early_cutoff_raw is None:
+            scope = "midblock crossings" if kind == EventKind.XWALK_MIDBLOCK.value else "intersections"
+            errors.append(
+                f"[VAL] E305 ped_early_cutoff_s is required for {scope}: profile={pid} kind={kind}"
+            )
+            ped_early_cutoff = 0
         else:
-            if ped_early_cutoff_raw is not None:
-                errors.append(
-                    f"[VAL] E305 ped_early_cutoff_s is not allowed for midblock crossings: profile={pid} kind={kind}"
-                )
-                ped_early_cutoff = int(ped_early_cutoff_raw)
-            else:
-                ped_early_cutoff = 0
+            ped_early_cutoff = int(ped_early_cutoff_raw)
         yellow_duration_raw = p.get("yellow_duration_s")
         if yellow_duration_raw is None:
             errors.append(
@@ -178,6 +187,7 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
             yellow_duration = 0
         else:
             yellow_duration = int(yellow_duration_raw)
+        movement_re = MIDBLOCK_MOVEMENT_RE if kind == EventKind.XWALK_MIDBLOCK.value else INTERSECTION_MOVEMENT_RE
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
@@ -221,9 +231,19 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
         for ph in phases_data:
             dur = int(ph["duration_s"])
             amv_list = list(ph.get("allow_movements", []))
-            bad = [m for m in amv_list if not MOVEMENT_RE.match(str(m))]
+            bad = [m for m in amv_list if not movement_re.match(str(m))]
             if bad:
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
+            for movement_token in amv_list:
+                token_str = str(movement_token)
+                match = VEHICLE_TURN_RE.match(token_str)
+                if match:
+                    turns = match.group("turns")
+                    if len(set(turns)) != len(turns):
+                        errors.append(
+                            f"[VAL] E301 duplicate vehicle turn spec in token='{token_str}' "
+                            f"profile={pid} kind={kind}"
+                        )
             phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
         if ped_early_cutoff < 0 or ped_early_cutoff >= cycle:

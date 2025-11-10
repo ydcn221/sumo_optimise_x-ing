@@ -12,9 +12,9 @@
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {"left": false, "right": false},
         "phases": [
-          { "duration_s": 28, "allow_movements": ["main_T", "pedestrian"              ] },
-          { "duration_s": 14, "allow_movements": ["main_R", "minor_L",    "pedestrian"] },
-          { "duration_s": 48, "allow_movements": ["main_L", "minor_R",    "pedestrian"] }
+          { "duration_s": 28, "allow_movements": ["EB_T_pg", "WB_T_pg", "PedX_NESW"                        ] },
+          { "duration_s": 14, "allow_movements": ["EB_R_pg", "WB_R_pg", "NB_L_pg",   "SB_L_pg", "PedX_NESW"] },
+          { "duration_s": 48, "allow_movements": ["EB_L_pg", "WB_L_pg", "NB_R_pg",   "SB_R_pg", "PedX_NESW"] }
         ]
       },
       {
@@ -24,9 +24,9 @@
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {"left": true, "right": true},
         "phases": [
-          { "duration_s": 40, "allow_movements": ["main_L",     "main_T",  "main_R", "pedestrian"] },
-          { "duration_s": 20, "allow_movements": ["pedestrian"                                   ] },
-          { "duration_s": 40, "allow_movements": ["minor_L",    "minor_R", "main_L", "pedestrian"] }
+          { "duration_s": 40, "allow_movements": ["EB_LTR_pg", "WB_LTR_pg", "PedX_NESW"                        ] },
+          { "duration_s": 20, "allow_movements": ["PedX_NESW"                                                  ] },
+          { "duration_s": 40, "allow_movements": ["NB_LR_pg",  "SB_LR_pg",  "EB_L_pg",   "WB_L_pg", "PedX_NESW"] }
         ]
       }
     ],
@@ -38,10 +38,10 @@
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {"left": false, "right": true},
         "phases": [
-          { "duration_s": 30, "allow_movements": ["main_T",  "main_L",     "pedestrian"] },
-          { "duration_s": 16, "allow_movements": ["main_R",  "pedestrian"              ] },
-          { "duration_s": 36, "allow_movements": ["minor_T", "minor_L",    "minor_R"   ] },
-          { "duration_s": 18, "allow_movements": ["minor_R", "pedestrian"              ] }
+          { "duration_s": 30, "allow_movements": ["EB_LT_pg",  "WB_LT_pg",  "PedX_NESW"] },
+          { "duration_s": 16, "allow_movements": ["EB_R_pg",   "WB_R_pg",   "PedX_NESW"] },
+          { "duration_s": 36, "allow_movements": ["NB_LTR_pg", "SB_LTR_pg"             ] },
+          { "duration_s": 18, "allow_movements": ["NB_R_pg",   "SB_R_pg",   "PedX_NESW"] }
         ]
       },
       {
@@ -51,12 +51,12 @@
         "yellow_duration_s": 4,
         "pedestrian_conflicts": {"left": true, "right": false},
         "phases": [
-          { "duration_s": 10, "allow_movements": ["main_T",     "main_L",     "EB_R",       "pedestrian"] },
-          { "duration_s": 28, "allow_movements": ["EB_L",       "EB_T",       "EB_R",       "pedestrian"] },
-          { "duration_s": 14, "allow_movements": ["pedestrian"                                          ] },
-          { "duration_s": 28, "allow_movements": ["minor_L",    "minor_T",    "pedestrian"              ] },
-          { "duration_s": 30, "allow_movements": ["minor_R",    "pedestrian"                            ] },
-          { "duration_s": 10, "allow_movements": ["pedestrian"                                          ] }
+          { "duration_s": 10, "allow_movements": ["EB_LTR_pg", "WB_LT_pg", "PedX"] },
+          { "duration_s": 28, "allow_movements": ["EB_LTR_pg", "PedX"            ] },
+          { "duration_s": 14, "allow_movements": ["PedX"                         ] },
+          { "duration_s": 28, "allow_movements": ["NB_LT_pg",  "SB_LT_pg", "PedX"] },
+          { "duration_s": 30, "allow_movements": ["NB_R_pg",   "SB_R_pg",  "PedX"] },
+          { "duration_s": 10, "allow_movements": ["PedX"                         ] }
         ]
       }
     ],
@@ -66,8 +66,8 @@
         "cycle_s": 70,
         "yellow_duration_s": 6,
         "phases": [
-          { "duration_s": 46, "allow_movements": ["main_T"    ] },
-          { "duration_s": 24, "allow_movements": ["pedestrian"] }
+          { "duration_s": 46, "allow_movements": ["EB",   "WB"] },
+          { "duration_s": 24, "allow_movements": ["PedX"      ] }
         ]
       },
       {
@@ -75,8 +75,8 @@
         "cycle_s": 60,
         "yellow_duration_s": 4,
         "phases": [
-          { "duration_s": 40, "allow_movements": ["main_T"    ] },
-          { "duration_s": 20, "allow_movements": ["pedestrian"] }
+          { "duration_s": 40, "allow_movements": ["EB",   "WB"] },
+          { "duration_s": 20, "allow_movements": ["PedX"      ] }
         ]
       }
     ]

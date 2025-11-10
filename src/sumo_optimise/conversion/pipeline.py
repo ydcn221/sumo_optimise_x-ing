@@ -165,6 +165,7 @@ def build_corridor_artifacts(spec_path: Path, options: BuildOptions) -> BuildRes
         vehicle_endpoint_ids=veh_endpoint_ids,
         junction_ids=junction_ids,
         pedestrian_graph=ped_graph,
+        defaults=defaults,
     )
 
 
@@ -280,6 +281,9 @@ def build_and_persist(
     result.manifest_path = manifest_path
 
     if options.run_netconvert and task.includes_network():
+        sidewalk_width = None
+        if result.defaults and result.defaults.sidewalk_width_m is not None:
+            sidewalk_width = float(result.defaults.sidewalk_width_m)
         run_two_step_netconvert(
             artifacts.outdir,
             artifacts.nodes_path,
@@ -288,6 +292,7 @@ def build_and_persist(
             artifacts.tll_path,
             plain_prefix=artifacts.netconvert_prefix,
             network_output=artifacts.network_path,
+            sidewalk_width=sidewalk_width,
         )
 
     if options.run_netedit:

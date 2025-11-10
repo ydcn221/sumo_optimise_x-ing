@@ -13,12 +13,12 @@
         "yellow_duration_s": 3,
         "pedestrian_conflicts": {"left": true, "right": false},
         "phases": [
-          { "duration_s": 24, "allow_movements": ["main_T",  "main_L",     "main_R",  "pedestrian"] },
-          { "duration_s": 19, "allow_movements": ["main_R",  "pedestrian"                         ] },
-          { "duration_s": 2,  "allow_movements": [                                                ] },
-          { "duration_s": 24, "allow_movements": ["minor_T", "minor_L",    "minor_R", "pedestrian"] },
-          { "duration_s": 19, "allow_movements": ["minor_L", "pedestrian"                         ] },
-          { "duration_s": 2,  "allow_movements": [                                                ] }
+          { "duration_s": 24, "allow_movements": ["EB_LTR", "WB_LTR", "PedX"] },
+          { "duration_s": 19, "allow_movements": ["EB_R",   "WB_R",   "PedX"] },
+          { "duration_s": 2,  "allow_movements": [                          ] },
+          { "duration_s": 24, "allow_movements": ["SB_LTR", "NB_LTR", "PedX"] },
+          { "duration_s": 19, "allow_movements": ["SB_R",   "NB_R",   "PedX"] },
+          { "duration_s": 2,  "allow_movements": [                          ] }
         ]
       }
     ],
@@ -26,10 +26,12 @@
       {
         "id": "xwalk_mid",
         "cycle_s": 45,
+        "ped_early_cutoff_s": 6,
         "yellow_duration_s": 3,
         "phases": [
-          { "duration_s": 25, "allow_movements": ["main_T"    ] },
-          { "duration_s": 18, "allow_movements": ["pedestrian"] },
+          { "duration_s": 25, "allow_movements": ["EB",   "WB"] },
+          { "duration_s": 2,  "allow_movements": [            ] },
+          { "duration_s": 18, "allow_movements": ["PedX"      ] },
           { "duration_s": 2,  "allow_movements": [            ] }
         ]
       }

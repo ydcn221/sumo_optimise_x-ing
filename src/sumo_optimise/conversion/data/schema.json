@@ -110,8 +110,41 @@
 
     "movementString": {
       "type": "string",
-      "pattern": "^(pedestrian|(?:main|EB|WB|minor)_(?:L|T|R))$",
-      "description": "車両: main/minor と L/T/R の組合せ。歩行者: pedestrian。"
+      "pattern": "^(?:PedX(?:_[NESW]+|_(?:N|S)_(?:E|W)-half|_(?:E|W)_(?:N|S)-half)?|[NESW]B_[LTRU]{1,4}(?:_p[gr])?)$",
+      "description": "車両: {N|E|S|W}B_{L|T|R|U}（順不同で1〜4文字、重複不可）＋任意の _p{r|g}。歩行者: PedX（全方向一括）、PedX_{N|E|S|W…}（順不同で複数方角指定）、PedX_{N|S}_{E|W-half}、または PedX_{E|W}_{N|S-half}。"
+    },
+    "midblockMovementString": {
+      "type": "string",
+      "pattern": "^(EB|WB|PedX|PedX_N|PedX_S)$",
+      "description": "単路部横断TLの許容トークン。車両は主道路の EB/WB のみ、歩行者は全体(PedX)または片側(PedX_N/PedX_S)のみ。"
+    },
+    "signalPhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_s": { "type": "integer", "minimum": 1, "description": "フェーズ長[秒]" },
+        "allow_movements": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/movementString" },
+          "uniqueItems": true,
+          "description": "当該フェーズで許可する動作の集合。未指定時は空配列=全赤扱い。"
+        }
+      },
+      "required": ["duration_s", "allow_movements"]
+    },
+    "signalPhaseMidblock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_s": { "type": "integer", "minimum": 1, "description": "フェーズ長[秒]" },
+        "allow_movements": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/midblockMovementString" },
+          "uniqueItems": true,
+          "description": "単路部横断で許可する動作（EB/WB/PedX/PedX_N/PedX_S のみ）。未指定時は全赤扱い。"
+        }
+      },
+      "required": ["duration_s", "allow_movements"]
     },
 
     "signalRef": {
@@ -164,20 +197,7 @@
         "phases": {
           "type": "array",
           "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "duration_s": { "type": "integer", "minimum": 1, "description": "フェーズ長[秒]" },
-              "allow_movements": {
-                "type": "array",
-                "items": { "$ref": "#/definitions/movementString" },
-                "uniqueItems": true,
-                "description": "当該フェーズで許可する動作の集合。車両: main/minor の L/T/R。歩行者: pedestrian。未指定時は空配列=全赤扱い。"
-              }
-            },
-            "required": ["duration_s", "allow_movements"]
-          },
+          "items": { "$ref": "#/definitions/signalPhase" },
           "description": "固定時間フェーズ列。黄色相はJSONでは表現しない。"
         }
       },
@@ -194,9 +214,31 @@
 
     "signalProfileMidblock": {
       "allOf": [
-        { "$ref": "#/definitions/signalProfileBase" },
-        { "not": { "required": ["pedestrian_conflicts"] } },
-        { "not": { "required": ["ped_early_cutoff_s"] } }
+        {
+          "type": "object",
+          "properties": {
+            "id": { "$ref": "#/definitions/idString" },
+            "cycle_s": { "type": "integer", "minimum": 1 },
+            "ped_early_cutoff_s": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "歩行者横断信号を車両より先行して赤に切り替える時間[秒]"
+            },
+            "yellow_duration_s": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "車両現示切替時の黄現示時間[秒]"
+            },
+            "phases": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/definitions/signalPhaseMidblock" },
+              "description": "単路部横断用フェーズ列（車両=EB/WB、歩行者=PedX/PedX_N/PedX_S のサブセットのみ）。"
+            }
+          },
+          "required": ["id", "cycle_s", "ped_early_cutoff_s", "yellow_duration_s", "phases"]
+        },
+        { "not": { "required": ["pedestrian_conflicts"] } }
       ],
       "description": "単路部横断用信号プロファイル。歩行者競合は設定不可。"
     },

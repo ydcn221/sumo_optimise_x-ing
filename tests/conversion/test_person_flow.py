@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from io import StringIO
 from pathlib import Path
 
@@ -197,6 +198,35 @@ def test_render_person_flows_maps_minor_side_edges() -> None:
 
     assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.Minor.S_arm.NB.1000" arrivalPos="0.10"/>' in xml
     assert '<personTrip from="Edge.Main.EB.0-200" to="Edge.Minor.S_arm.SB.1000" arrivalPos="119.90"/>' in xml
+
+
+def test_person_flow_ids_remain_unique_for_duplicate_pairs() -> None:
+    row1 = EndpointDemandRow(endpoint_id="PedEnd.Main.W_end.N_sidewalk", flow_per_hour=1200.0, row_index=10)
+    row2 = EndpointDemandRow(endpoint_id="PedEnd.Main.W_end.N_sidewalk", flow_per_hour=600.0, row_index=11)
+    flows = [
+        ("PedEnd.Main.W_end.N_sidewalk", "Node.Main.100.S", 1200.0, row1),
+        ("PedEnd.Main.W_end.N_sidewalk", "Node.Main.100.S", 600.0, row2),
+    ]
+    defaults = Defaults(
+        minor_road_length_m=120,
+        ped_crossing_width_m=3.5,
+        speed_kmh=50,
+        ped_endpoint_offset_m=0.10,
+        sidewalk_width_m=2.0,
+    )
+    xml = render_person_flows(
+        flows,
+        ped_pattern=PersonFlowPattern.STEADY,
+        simulation_end_time=3600.0,
+        endpoint_offset_m=defaults.ped_endpoint_offset_m,
+        breakpoints=[0, 100],
+        defaults=defaults,
+    )
+    ids = re.findall(r'id="([^"]+)"', xml)
+    assert len(ids) == 2
+    assert len(set(ids)) == 2
+    assert ids[0].endswith("__0")
+    assert ids[1].endswith("__1")
 
 
 def test_render_person_flows_minor_endpoint_offsets() -> None:

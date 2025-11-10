@@ -235,13 +235,13 @@ def build_person_flow_entries(
         breakpoints=breakpoints,
         defaults=defaults,
     )
-    counter_by_row: Dict[int, int] = defaultdict(int)
+    counter_by_pair: Dict[Tuple[str, str], int] = defaultdict(int)
 
     entries: List[str] = []
     for origin, destination, value, row in flows:
-        row_key = row.row_index if row.row_index is not None else id(row)
-        seq = counter_by_row[row_key]
-        counter_by_row[row_key] += 1
+        pair_key = (origin, destination)
+        seq = counter_by_pair[pair_key]
+        counter_by_pair[pair_key] += 1
 
         pf_id = f"pf_{origin}__{destination}__{seq}"
         depart = resolver.resolve_depart(origin)
