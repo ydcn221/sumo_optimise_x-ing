@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
-from ..domain.models import JunctionTemplate, MainRoadConfig, SignalProfileDef, SnapRule
+from ..domain.models import MainRoadConfig, SignalProfileDef, SnapRule
 from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.snap import grid_upper_bound, round_position
 from ..utils.errors import SemanticValidationError
@@ -16,7 +16,6 @@ def validate_semantics(
     spec_json: Dict,
     snap_rule: SnapRule,
     main_road: MainRoadConfig,
-    junction_template_by_id: Dict[str, JunctionTemplate],
     signal_profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]],
 ) -> None:
     def norm_type(etype: str) -> str:
@@ -56,9 +55,18 @@ def validate_semantics(
             warnings.append(f"[VAL] W201 snapped position at endpoint: index={idx} type={etype} snap={pos_snap}")
 
         if etype in ("tee", "cross"):
-            tpl_id = e.get("template")
-            if not tpl_id or tpl_id not in junction_template_by_id:
-                errors.append(f"[VAL] E103 template missing/unknown: index={idx} type={etype} template={tpl_id}")
+            required_geometry_keys = [
+                "main_approach_begin_m",
+                "main_approach_lanes",
+                "minor_lanes_approach",
+                "minor_lanes_departure",
+                "median_continuous",
+            ]
+            missing_geom = [key for key in required_geometry_keys if key not in e]
+            if missing_geom:
+                errors.append(
+                    f"[VAL] E103 junction geometry missing fields: index={idx} type={etype} missing={','.join(sorted(missing_geom))}"
+                )
             if etype == "tee":
                 branch = e.get("branch")
                 if branch not in ("north", "south"):

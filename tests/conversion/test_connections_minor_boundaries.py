@@ -5,7 +5,7 @@ from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LayoutEvent,
     MainRoadConfig,
     SnapRule,
@@ -21,18 +21,15 @@ def _build_args(
     lanes: int = 1,
     breakpoints: Optional[list[int]] = None,
 ):
-    template_id = "Boundary"
     defaults = Defaults(minor_road_length_m=40, ped_crossing_width_m=3.0, speed_kmh=40)
     snap_rule = SnapRule(step_m=10, tie_break="toward_west")
     main_road = MainRoadConfig(length_m=length, center_gap_m=6.0, lanes=lanes)
-    template = JunctionTemplate(
-        id=template_id,
+    junction = JunctionConfig(
         main_approach_begin_m=0,
         main_approach_lanes=0,
-        minor_lanes_to_main=1,
-        minor_lanes_from_main=1,
+        minor_lanes_approach=1,
+        minor_lanes_departure=1,
         median_continuous=median,
-        kind=EventKind.CROSS,
     )
     cluster = Cluster(
         pos_m=pos,
@@ -41,7 +38,7 @@ def _build_args(
                 type=EventKind.CROSS,
                 pos_m_raw=float(pos),
                 pos_m=pos,
-                template_id=template_id,
+                junction=junction,
                 signalized=True,
             )
         ],
@@ -57,7 +54,6 @@ def _build_args(
         defaults,
         [cluster],
         bp,
-        {template_id: template},
         snap_rule,
         main_road,
         lane_overrides,

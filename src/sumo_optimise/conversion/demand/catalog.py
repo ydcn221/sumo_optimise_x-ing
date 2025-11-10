@@ -17,7 +17,7 @@ from ..domain.models import (
     Defaults,
     EndpointCatalog,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LaneOverride,
     MainRoadConfig,
     PedestrianEndpoint,
@@ -66,18 +66,12 @@ def _cluster_tl_id(cluster: Cluster) -> Optional[str]:
     return None
 
 
-def _resolve_template(
-    cluster: Cluster,
-    junction_template_by_id: Dict[str, JunctionTemplate],
-) -> Optional[JunctionTemplate]:
+def _resolve_junction_config(cluster: Cluster) -> Optional[JunctionConfig]:
     for ev in cluster.events:
         if ev.type not in (EventKind.TEE, EventKind.CROSS):
             continue
-        if not ev.template_id:
-            continue
-        tpl = junction_template_by_id.get(ev.template_id)
-        if tpl:
-            return tpl
+        if ev.junction:
+            return ev.junction
     return None
 
 
@@ -105,7 +99,6 @@ def build_endpoint_catalog(
     main_road: MainRoadConfig,
     clusters: List[Cluster],
     breakpoints: List[int],
-    junction_template_by_id: Dict[str, JunctionTemplate],
     lane_overrides: Dict[str, List[LaneOverride]],
     snap_rule: SnapRule,
 ) -> EndpointCatalog:
@@ -146,7 +139,7 @@ def build_endpoint_catalog(
         if not junction_events:
             continue
 
-        tpl = _resolve_template(cluster, junction_template_by_id)
+        tpl = _resolve_junction_config(cluster)
         if not tpl:
             LOG.warning("junction template missing for cluster at %s", pos)
             continue
@@ -213,7 +206,7 @@ def build_endpoint_catalog(
                 pos=pos,
                 category="minor_N",
                 edge_id=minor_edge_id(pos, "to", "N"),
-                lane_count=tpl.minor_lanes_to_main,
+                lane_count=tpl.minor_lanes_approach,
                 is_inbound=True,
                 tl_id=tl_id,
             )
@@ -221,7 +214,7 @@ def build_endpoint_catalog(
                 pos=pos,
                 category="minor_N",
                 edge_id=minor_edge_id(pos, "from", "N"),
-                lane_count=tpl.minor_lanes_from_main,
+                lane_count=tpl.minor_lanes_departure,
                 is_inbound=False,
                 tl_id=tl_id,
             )
@@ -231,7 +224,7 @@ def build_endpoint_catalog(
                 pos=pos,
                 category="minor_S",
                 edge_id=minor_edge_id(pos, "to", "S"),
-                lane_count=tpl.minor_lanes_to_main,
+                lane_count=tpl.minor_lanes_approach,
                 is_inbound=True,
                 tl_id=tl_id,
             )
@@ -239,7 +232,7 @@ def build_endpoint_catalog(
                 pos=pos,
                 category="minor_S",
                 edge_id=minor_edge_id(pos, "from", "S"),
-                lane_count=tpl.minor_lanes_from_main,
+                lane_count=tpl.minor_lanes_departure,
                 is_inbound=False,
                 tl_id=tl_id,
             )

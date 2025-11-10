@@ -39,19 +39,18 @@ def test_custom_templates_support_placeholders(tmp_path: Path, monkeypatch: pyte
     template = OutputDirectoryTemplate(
         root=str(tmp_path / "runs" / "{year}{month}{day}"),
         run="{hour}{minute}{second}-{uid}-{seq:04}",
-        seq_digits=4,
     )
 
     sqids = Sqids()
-    expected_uid_first = sqids.encode([ns_value, 1])
-    expected_uid_second = sqids.encode([ns_value, 2])
+    epoch_ms = ns_value // 1_000_000
+    expected_uid = sqids.encode([epoch_ms])
 
     first = io.ensure_output_directory(template)
     second = io.ensure_output_directory(template)
 
     expected_root = tmp_path / "runs" / "20231231"
-    assert first.outdir == expected_root / f"235958-{expected_uid_first}-0001"
-    assert second.outdir == expected_root / f"235958-{expected_uid_second}-0002"
+    assert first.outdir == expected_root / f"235958-{expected_uid}-0001"
+    assert second.outdir == expected_root / f"235958-{expected_uid}-0002"
 
 
 def test_run_template_must_be_relative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,6 +62,35 @@ def test_run_template_must_be_relative(tmp_path: Path, monkeypatch: pytest.Monke
 
     with pytest.raises(ValueError):
         io.ensure_output_directory(template)
+
+
+def test_existing_run_directory_must_be_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 2, 2, 2, 2, 2)
+    _freeze_time(monkeypatch, now=frozen, ns=84)
+
+    template = OutputDirectoryTemplate(root=str(tmp_path / "runs"), run="custom")
+    target = tmp_path / "runs" / "custom"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.mkdir()
+    (target / "existing.txt").write_text("data", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not empty"):
+        io.ensure_output_directory(template)
+
+
+def test_existing_run_directory_reused_when_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    frozen = datetime.datetime(2024, 2, 2, 2, 2, 2)
+    _freeze_time(monkeypatch, now=frozen, ns=168)
+
+    template = OutputDirectoryTemplate(root=str(tmp_path / "runs"), run="custom")
+    target = tmp_path / "runs" / "custom"
+    target.mkdir(parents=True, exist_ok=True)
+
+    artifacts = io.ensure_output_directory(template)
+
+    assert artifacts.outdir == target
 
 
 def test_build_artifacts_exposes_tll_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,8 +117,10 @@ def test_persist_xml_writes_all_outputs(tmp_path: Path, monkeypatch: pytest.Monk
         connections="<connections/>",
         tll="<tlLogics/>",
     )
+    io.persist_routes(artifacts, demand="<routes/>")
 
     assert artifacts.nodes_path.read_text(encoding="utf-8") == "<nodes/>"
     assert artifacts.edges_path.read_text(encoding="utf-8") == "<edges/>"
     assert artifacts.connections_path.read_text(encoding="utf-8") == "<connections/>"
     assert artifacts.tll_path.read_text(encoding="utf-8") == "<tlLogics/>"
+    assert artifacts.routes_path.read_text(encoding="utf-8") == "<routes/>"

@@ -15,7 +15,7 @@ from ..domain.models import (
     CorridorSpec,
     Defaults,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LayoutEvent,
     MainRoadConfig,
     PedestrianConflictConfig,
@@ -37,6 +37,26 @@ from ..utils.errors import (
 from ..utils.logging import get_logger
 
 LOG = get_logger()
+
+
+_PED_INTERSECTION_PATTERN = (
+    r"PedX(?:"
+    r"|_[NESW]+"
+    r"|_(?:N|S)_(?:E|W)-half"
+    r"|_(?:E|W)_(?:N|S)-half"
+    r")?"
+)
+
+INTERSECTION_MOVEMENT_RE = re.compile(
+    rf"^(?:"
+    rf"{_PED_INTERSECTION_PATTERN}"
+    r"|[NESW]B_(?:[LTRU]{1,4})(?:_p[gr])?"
+    r"|pedestrian"
+    r"|(?:main|EB|WB|minor)_(?:L|T|R)"
+    r")$"
+)
+VEHICLE_TURN_RE = re.compile(r"^(?P<dir>[NESW])B_(?P<turns>[LTRU]{1,4})(?:_p[gr])?$")
+MIDBLOCK_MOVEMENT_RE = re.compile(r"^(?:EB|WB|PedX|PedX_N|PedX_S)$")
 
 
 def load_json_file(json_path: Path) -> Dict:
@@ -90,8 +110,8 @@ def validate_json_schema(spec_json: Dict, schema_json: Dict) -> None:
 
 def ensure_supported_version(spec_json: Dict) -> None:
     version = str(spec_json.get("version", ""))
-    if not version.startswith("1.3"):
-        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.3.*)')
+    if not version.startswith("1.4"):
+        raise UnsupportedVersionError(f'unsupported "version": {version} (expected 1.4.*)')
 
 
 def parse_snap_rule(spec_json: Dict) -> SnapRule:
@@ -131,37 +151,6 @@ def parse_main_road(spec_json: Dict) -> MainRoadConfig:
     return main
 
 
-def parse_junction_templates(spec_json: Dict) -> Dict[str, JunctionTemplate]:
-    result: Dict[str, JunctionTemplate] = {}
-    dup_ids: Dict[str, List[str]] = {}
-    jt_root = spec_json.get("junction_templates", {})
-    for kind in (EventKind.TEE.value, EventKind.CROSS.value):
-        arr = jt_root.get(kind, [])
-        if not isinstance(arr, list):
-            continue
-        for t in arr:
-            tpl_id = str(t["id"])
-            tpl = JunctionTemplate(
-                id=tpl_id,
-                main_approach_begin_m=int(t["main_approach_begin_m"]),
-                main_approach_lanes=int(t["main_approach_lanes"]),
-                minor_lanes_to_main=int(t["minor_lanes_to_main"]),
-                minor_lanes_from_main=int(t["minor_lanes_from_main"]),
-                median_continuous=bool(t["median_continuous"]),
-                kind=EventKind(kind),
-            )
-            if tpl_id in result:
-                dup_ids.setdefault(tpl_id, [result[tpl_id].kind.value]).append(kind)
-            else:
-                result[tpl_id] = tpl
-    if dup_ids:
-        for dup_id, kinds in dup_ids.items():
-            kinds_str = ",".join(sorted(set(kinds)))
-            LOG.error("[VAL] E107 duplicate junction_template id: id=%s kinds=%s", dup_id, kinds_str)
-        raise SemanticValidationError(f"duplicate junction_template id(s): {', '.join(sorted(dup_ids.keys()))}")
-    LOG.info("junction_templates: %d", len(result))
-    return result
-
 
 def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
     if not obj:
@@ -170,8 +159,6 @@ def parse_signal_ref(obj: Optional[Dict]) -> Optional[SignalRef]:
 
 
 def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileDef]]:
-    MOVEMENT_RE = re.compile(r"^(pedestrian|(?:main|EB|WB|minor)_(?:L|T|R))$")
-
     profiles_by_kind: Dict[str, Dict[str, SignalProfileDef]] = {
         EventKind.TEE.value: {},
         EventKind.CROSS.value: {},
@@ -183,24 +170,15 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     def add_profile(kind: str, p: Dict, idx: int) -> None:
         pid = str(p["id"])
         cycle = int(p["cycle_s"])
-        ped_cutoff_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
         ped_early_cutoff_raw = p.get("ped_early_cutoff_s")
-        if ped_cutoff_required:
-            if ped_early_cutoff_raw is None:
-                errors.append(
-                    f"[VAL] E305 ped_early_cutoff_s is required for intersections: profile={pid} kind={kind}"
-                )
-                ped_early_cutoff = 0
-            else:
-                ped_early_cutoff = int(ped_early_cutoff_raw)
+        if ped_early_cutoff_raw is None:
+            scope = "midblock crossings" if kind == EventKind.XWALK_MIDBLOCK.value else "intersections"
+            errors.append(
+                f"[VAL] E305 ped_early_cutoff_s is required for {scope}: profile={pid} kind={kind}"
+            )
+            ped_early_cutoff = 0
         else:
-            if ped_early_cutoff_raw is not None:
-                errors.append(
-                    f"[VAL] E305 ped_early_cutoff_s is not allowed for midblock crossings: profile={pid} kind={kind}"
-                )
-                ped_early_cutoff = int(ped_early_cutoff_raw)
-            else:
-                ped_early_cutoff = 0
+            ped_early_cutoff = int(ped_early_cutoff_raw)
         yellow_duration_raw = p.get("yellow_duration_s")
         if yellow_duration_raw is None:
             errors.append(
@@ -209,6 +187,7 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
             yellow_duration = 0
         else:
             yellow_duration = int(yellow_duration_raw)
+        movement_re = MIDBLOCK_MOVEMENT_RE if kind == EventKind.XWALK_MIDBLOCK.value else INTERSECTION_MOVEMENT_RE
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
@@ -252,9 +231,19 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
         for ph in phases_data:
             dur = int(ph["duration_s"])
             amv_list = list(ph.get("allow_movements", []))
-            bad = [m for m in amv_list if not MOVEMENT_RE.match(str(m))]
+            bad = [m for m in amv_list if not movement_re.match(str(m))]
             if bad:
                 errors.append(f"[VAL] E301 invalid movement token(s) in profile={pid} kind={kind}: {bad}")
+            for movement_token in amv_list:
+                token_str = str(movement_token)
+                match = VEHICLE_TURN_RE.match(token_str)
+                if match:
+                    turns = match.group("turns")
+                    if len(set(turns)) != len(turns):
+                        errors.append(
+                            f"[VAL] E301 duplicate vehicle turn spec in token='{token_str}' "
+                            f"profile={pid} kind={kind}"
+                        )
             phases.append(SignalPhaseDef(duration_s=dur, allow_movements=[str(m) for m in amv_list]))
             sum_dur += dur
         if ped_early_cutoff < 0 or ped_early_cutoff >= cycle:
@@ -313,6 +302,19 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     return profiles_by_kind
 
 
+def _parse_junction_config(event: Dict) -> JunctionConfig:
+    try:
+        return JunctionConfig(
+            main_approach_begin_m=int(event["main_approach_begin_m"]),
+            main_approach_lanes=int(event["main_approach_lanes"]),
+            minor_lanes_approach=int(event["minor_lanes_approach"]),
+            minor_lanes_departure=int(event["minor_lanes_departure"]),
+            median_continuous=bool(event["median_continuous"]),
+        )
+    except KeyError as exc:  # pragma: no cover - enforced by schema
+        raise SemanticValidationError(f"missing junction geometry field: {exc}") from exc
+
+
 def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoadConfig) -> List[LayoutEvent]:
     events: List[LayoutEvent] = []
     length = float(main_road.length_m)
@@ -344,8 +346,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
             continue
 
         if event_type in (EventKind.TEE.value, EventKind.CROSS.value):
-            tpl_raw = e.get("template")
-            template_id = str(tpl_raw) if tpl_raw is not None else None
+            junction = _parse_junction_config(e)
             branch_raw = e.get("branch") if event_type == EventKind.TEE.value else None
             branch = None
             if isinstance(branch_raw, str):
@@ -357,7 +358,7 @@ def parse_layout_events(spec_json: Dict, snap_rule: SnapRule, main_road: MainRoa
                 type=EventKind(event_type),
                 pos_m_raw=pos_raw,
                 pos_m=pos_snapped,
-                template_id=template_id,
+                junction=junction,
                 signalized=bool(e.get("signalized")),
                 signal=parse_signal_ref(e.get("signal")),
                 main_ped_crossing_placement=e.get("main_ped_crossing_placement"),
@@ -397,7 +398,6 @@ def load_specification(spec_path: Path, schema_path: Path) -> CorridorSpec:
     snap_rule = parse_snap_rule(spec_json)
     defaults = parse_defaults(spec_json)
     main_road = parse_main_road(spec_json)
-    junction_templates = parse_junction_templates(spec_json)
     signal_profiles = parse_signal_profiles(spec_json)
     layout_events = parse_layout_events(spec_json, snap_rule, main_road)
     return CorridorSpec(
@@ -405,7 +405,6 @@ def load_specification(spec_path: Path, schema_path: Path) -> CorridorSpec:
         snap=snap_rule,
         defaults=defaults,
         main_road=main_road,
-        junction_templates=junction_templates,
         signal_profiles=signal_profiles,
         layout=layout_events,
     )

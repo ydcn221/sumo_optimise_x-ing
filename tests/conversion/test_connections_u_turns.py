@@ -3,7 +3,7 @@ from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
     EventKind,
-    JunctionTemplate,
+    JunctionConfig,
     LaneOverride,
     LayoutEvent,
     MainRoadConfig,
@@ -13,7 +13,6 @@ from sumo_optimise.conversion.emitters.connections import render_connections_xml
 
 
 def _build_args(median: bool = False, allow_uturn: bool = True):
-    template_id = "X_UTurn_Median" if median else "X_UTurn_Base"
     defaults = Defaults(minor_road_length_m=80, ped_crossing_width_m=3.0, speed_kmh=40)
     snap_rule = SnapRule(step_m=10, tie_break="toward_west")
     main_road = MainRoadConfig(length_m=200, center_gap_m=6.0, lanes=2)
@@ -21,14 +20,12 @@ def _build_args(median: bool = False, allow_uturn: bool = True):
         "EB": [LaneOverride(start=0, end=100, lanes=4)],
         "WB": [LaneOverride(start=100, end=200, lanes=4)],
     }
-    template = JunctionTemplate(
-        id=template_id,
+    junction = JunctionConfig(
         main_approach_begin_m=0,
         main_approach_lanes=0,
-        minor_lanes_to_main=1,
-        minor_lanes_from_main=1,
+        minor_lanes_approach=1,
+        minor_lanes_departure=1,
         median_continuous=median,
-        kind=EventKind.CROSS,
     )
     cluster = Cluster(
         pos_m=100,
@@ -37,7 +34,7 @@ def _build_args(median: bool = False, allow_uturn: bool = True):
                 type=EventKind.CROSS,
                 pos_m_raw=100.0,
                 pos_m=100,
-                template_id=template_id,
+                junction=junction,
                 main_u_turn_allowed=allow_uturn,
                 signalized=True,
             )
@@ -47,7 +44,6 @@ def _build_args(median: bool = False, allow_uturn: bool = True):
         defaults,
         [cluster],
         [0, 100, 200],
-        {template_id: template},
         snap_rule,
         main_road,
         lane_overrides,

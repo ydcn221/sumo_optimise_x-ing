@@ -1,7 +1,8 @@
 """High-level helpers for personFlow generation."""
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from dataclasses import dataclass
+from typing import List, Optional, Sequence
 
 from ...domain.models import (
     Cluster,
@@ -14,9 +15,14 @@ from ...utils.logging import get_logger
 from .demand_input import load_endpoint_demands, load_junction_turn_weights
 from .flow_propagation import compute_od_flows
 from .graph_builder import build_pedestrian_graph
-from .route_output import render_person_flows
+from .route_output import build_person_flow_entries
 
 LOG = get_logger()
+
+
+@dataclass(frozen=True)
+class PersonRouteResult:
+    entries: List[str]
 
 
 def prepare_person_flow_routes(
@@ -27,7 +33,7 @@ def prepare_person_flow_routes(
     clusters: Sequence[Cluster],
     breakpoints: Sequence[int],
     catalog: EndpointCatalog,
-) -> Optional[str]:
+) -> Optional[PersonRouteResult]:
     """Generate the personFlow routes document if demand inputs are provided."""
 
     ped_endpoint = options.ped_endpoint_csv
@@ -53,7 +59,7 @@ def prepare_person_flow_routes(
     od_flows = compute_od_flows(graph, turn_weight_map, endpoint_rows)
     LOG.info("derived %d OD flows", len(od_flows))
 
-    return render_person_flows(
+    entries = build_person_flow_entries(
         od_flows,
         ped_pattern=pattern,
         simulation_end_time=options.simulation_end_time,
@@ -61,6 +67,7 @@ def prepare_person_flow_routes(
         breakpoints=breakpoints,
         defaults=defaults,
     )
+    return PersonRouteResult(entries=entries)
 
 
-__all__ = ["prepare_person_flow_routes"]
+__all__ = ["PersonRouteResult", "prepare_person_flow_routes"]

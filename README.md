@@ -1,17 +1,17 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.3)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.4)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
 
-> This repository hosts the modular corridor converter introduced for schema v1.3.
+> This repository hosts the modular corridor converter introduced for schema v1.4.
 
 ---
 
 ## Key capabilities
 
-* **Schema-driven input (v1.3)** with draft-07 JSON Schema.
+* **Schema-driven input (v1.4)** with draft-07 JSON Schema.
 * **Semantic validation** (range checks, duplicate/near-duplicate events, template/profile consistency).
 * **Grid snapping** with configurable step and tie-break.
-* **Template-based intersections** (tee/cross), lane override regions, continuous median rules.
+* **Per-junction geometry controls** (tee/cross) embedded directly in layout events: approach-lane tapers, minor in/out lane counts, `median_continuous`, and `main_u_turn_allowed`.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
 * **Vehicle turn connections** (L/T/R) with deterministic lane mapping (left-to-left, straight fan-out, rightmost sharing).
 * **Two-step `netconvert` integration** (optional) and structured build logs.
@@ -31,9 +31,9 @@ sumo_optimise/
     sumo_integration/      # netconvert / netedit wrappers
     domain/                # Dataclasses & enums
     utils/                 # Logging, IO, constants, errors
-    data/schema.json       # Embedded JSON Schema (v1.3)
+    data/schema.json       # Embedded JSON Schema (v1.4)
     pipeline.py            # Orchestration
-data/reference/             # Sample specifications (e.g., schema_v1.3_sample.json)
+data/reference/             # Sample specifications (e.g., SUMO_OPTX_v1.4_sample.json)
 jsonschema/                # (Local namespace; *not* the PyPI package)
 ```
 
@@ -75,9 +75,9 @@ $ python -m pip install -e .
 
 ## Quick start
 
-1. **Prepare input JSON** (v1.3). Use your own file or adapt the provided sample under `data/reference/`.
-2. **Run the CLI** to build PlainXML (nodes/edges/connections).
-3. **Optionally run `netconvert`** to produce `3-n+e+c+t.net.xml`.
+1. **Prepare input JSON** (v1.4). Use your own file or adapt the provided sample under `data/reference/` (e.g., `SUMO_OPTX_v1.4_sample.json`).
+2. **Run the CLI** best suited for your task (network, demand, or both).
+3. **Optionally run `netconvert`/`netedit`/`sumo-gui`** via the CLI flags.
 
 ### Minimal build
 
@@ -91,7 +91,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
 
 **Default behavior**
 
-* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.3).
+* The converter validates against **`sumo_optimise/conversion/data/schema.json`** (v1.4).
 * Output directory is created under **`plainXML_out/`** (timestamped, e.g., `1012_001`).
 * Files written:
 
@@ -99,6 +99,7 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
   * `1-generated.edg.xml` — edges
   * `1-generated.con.xml` — vehicle connections and pedestrian crossings
   * `1-generated.tll.xml` — traffic-light logic programmes
+  * `config.sumocfg` — minimal SUMO config referencing the final net/routes (written when demand is emitted)
   * `build.log` — structured log
 
   **Identifier schema (excerpt)**
@@ -111,6 +112,31 @@ PS> python -m sumo_optimise.conversion.cli.main --input path\to\spec.json
   * Cluster joins / TLS IDs: `Cluster.{pos}`.
   * Junction crossings: `Xwalk.{pos}.{cardinal}`, with optional split halves yielding `Xwalk.{pos}.{cardinal}.{N|S|E|W}_half` via `crossing_id_main_split`.
   * Mid-block crossings: `Xwalk.{pos}` or `Xwalk.{pos}.{N|S}_half` produced by `crossing_id_midblock` / `crossing_id_midblock_split`.
+
+### Traffic-signal movement tokens
+
+Traffic-light programmes now consume explicit movement identifiers that align with the
+shared conflict table in `src/sumo_optimise/conversion/data/conflict_table(prototype).txt`.
+Tokens fall into two groups:
+
+* **Vehicle:** `{N|E|S|W}B_{L|T|R|U}` with an optional `_p{r|g}` suffix (e.g., `NB_R_pg`).
+  These reference the direction the vehicles travel *before* entering the junction and
+  the manoeuvre (left/straight/right/U). The `_p{r|g}` suffix specifies whether the
+  adjacent crosswalk should be red or green while that movement is active, letting the
+  conflict table differentiate between yielding versus protected turns.
+* **Pedestrian:** `PedX_{N|E|S|W…}` to address one or more crosswalks at once (order-free, e.g., `PedX_NS`, `PedX_NESW`), or the more granular
+  `XE_N-half` / `XW_S-half` tokens emitted by the replace table for two-stage crossings. Single-direction tokens can optionally target one half via `PedX_E_south`, etc.
+
+Internally the converter maps any legacy tokens (`main_L`, `EB_T`, `pedestrian`, etc.)
+onto the new identifiers so existing specs continue to load, but the resolver now
+computes the final `G/g/r` state purely from the table:
+
+* All conflicts yielding `"P"` promote the movement to `G`.
+* A mix containing `"Y"`/`"X"` (but no `"S"`) becomes a permissive `g`.
+* Any `"S"` forces the movement red (`r`).
+
+Right turns automatically add their matching U-turn movement when the approach
+provides that connection, preserving the previous shortcut.
 
 ### Build + netconvert (if `netconvert` is on PATH)
 
@@ -140,22 +166,25 @@ Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ## Demand-driven pedestrian flows
 
-`v0.3.0` ships a first-class `personFlow` generator driven by signed endpoint
- demand and junction turning ratios. The feature is documented in
+`v0.3.0` ships a first-class routed demand generator for both pedestrians
+ (`personFlow`) and vehicles (`flow`). Supply signed endpoint demand and junction
+ turning ratios for whichever modes you need; the converter merges the results
+into a single `demandflow.rou.xml`. The feature is documented in
  **`docs/demand_personflow_spec.md`** and activated via the CLI:
 
 ```bash
-$ python -m sumo_optimise.conversion.cli.main \
-    path/to/spec.json \
-    --ped-endpoint-demand data/reference/DemandPerEndpoint_SampleUpdated.csv \
-    --ped-junction-turn-weight data/reference/JunctionTurnWeight_SampleUpdated.csv \
+$ python -m sumo_optimise.conversion.cli.main path/to/spec.json \
+    --ped-endpoint-demand data/reference/ped_EP_demand_sampleUpd.csv \
+    --ped-junction-turn-weight data/reference/ped_jct_turn_weight_sampleUpd.csv \
+    --veh-endpoint-demand data/reference/veh_EP_demand_sampleUpd.csv \
+    --veh-junction-turn-weight data/reference/veh_jct_turn_weight_sampleUpd.csv \
     --demand-sim-end 3600
 ```
 
 Key points:
 
-- `DemandPerEndpoint.csv` declares the flow pattern on the first row
-  (`Pattern,persons_per_hour` / `period` / `poisson`), followed by the header
+- `ped_EP_demand_sampleUpd.csv` declares the flow pattern on the first row
+  (`Pattern,steady` / `poisson`), followed by the header
   row (`SidewalkEndID,PedFlow,Label`) and one endpoint per subsequent row with signed
   persons/hour volumes (positive = origin, negative = sink).
 - Minor approaches expose separate east/west sidewalk endpoints:
@@ -164,50 +193,71 @@ Key points:
 - West-side endpoints resolve to the northbound minor sidewalk (`Edge.Minor{N|S}.NB.{pos}`),
   while east-side endpoints resolve to the southbound sidewalk (`Edge.Minor{N|S}.SB.{pos}`),
   keeping the demand export aligned with the physical sidewalk placement.
-- `JunctionTurnWeight_SampleUpdated.csv` provides raw weights for each direction/side
+- `ped_jct_turn_weight_sampleUpd.csv` provides raw weights for each direction/side
   combination; U-turn branches are suppressed automatically and the remainder
   re-normalised.
+- Vehicle demand mirrors the pedestrian interface: `veh_EP_demand_sampleUpd.csv`
+  lists signed endpoint flows (aliasing `Node.Main.E_end`/`W_end` is supported).
+  `veh_jct_turn_weight_sampleUpd.csv` carries the 4-way turn ratios
+  (`ToNorth|ToWest|ToSouth|ToEast`). When both pedestrian and vehicle data are
+  provided the converter emits a single `routes` document containing `<personFlow>`
+  and `<flow>` entries side by side.
 - A NetworkX-backed pedestrian graph models sidewalks, crosswalks, and minor
   approaches. Each OD pair expands into one `<personFlow>` + `<personTrip>` in
-  `plainXML_out/.../1-generated.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
+  `plainXML_out/.../demandflow.rou.xml`. The configured `defaults.ped_endpoint_offset_m`
   (corridor JSON) is applied at the lane start for west-end north halves, east-end south halves,
   minor north east-side endpoints, and minor south west-side endpoints, and at
   `length - offset` for their opposite halves so that flows spawn and terminate
   at the physically correct sidewalk ends.
-- Vehicle demand (endpoint demand + turn weights) will share the same command-line
-  structure via `--veh-endpoint-demand` / `--veh-junction-turn-weight`; the loaders are prepared
-  but emission will ship in a future release.
+- The emitted `config.sumocfg` references the cooked net (`3-n+e+c+t.net.xml`) and
+  the merged routes file so you can immediately launch simulations once the net
+  exists (via the two-step `netconvert` or any other pipeline).
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
-  `DemandPerEndpoint_template.csv` / `JunctionTurnWeight_template.csv` with
-  prefilled IDs in the run directory.
+  `template_ped_dem.csv`, `template_ped_turn.csv`, `template_veh_dem.csv`, and
+  `template_veh_turn.csv` prefilled with the discovered endpoints/junctions.
+
+### Choose the right CLI for your workflow
+
+| Task | Entry point | Example |
+| --- | --- | --- |
+| Network build only | `python -m sumo_optimise.conversion.cli.network SPEC.json [flags]` | `python -m sumo_optimise.conversion.cli.network data/.../SUMO_OPTX_v1.4_sample.json --run-netconvert --run-netedit` |
+| Demand build only (reusing an existing network) | `python -m sumo_optimise.conversion.cli.demand SPEC.json --ped-endpoint-demand ... --ped-junction-turn-weight ... --veh-endpoint-demand ... --veh-junction-turn-weight ... [--network-input path/to/3-n+e+c+t.net.xml] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.demand spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --network-input ./networks/base.net.xml --run-sumo-gui` |
+| Full pipeline (network + demand) | `python -m sumo_optimise.conversion.cli.main SPEC.json [demand flags] [--run-netconvert] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.main spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --run-netconvert --run-netedit --run-sumo-gui` |
+
+Newly added options:
+
+* `--network-input PATH` — reuse an existing `net.xml` during demand runs (the file is copied into the output directory so you can iterate on routes without rebuilding the network).
+* `--run-sumo-gui` — launch `sumo-gui -c config.sumocfg` once demand outputs are written (requires a network, either freshly built or provided via `--network-input`).
+* Every long-form CLI flag also has a short alias (e.g. `-s` for `--schema`, `-c` for `--run-netconvert`, `-P` for `--ped-endpoint-demand`, etc.) so you can keep command lines concise.
 
 See the spec for data schemas, propagation rules, and output semantics.
 
 ---
 
-## Input specification (v1.3 overview)
+## Input specification (v1.4 overview)
 
-* `version`: `"1.3"`
+* `version`: `"1.4"`
 * `snap`: `{ "step_m": int>=1, "tie_break": "toward_west" | "toward_east" }`
-* `defaults`: e.g., minor road length, crossing width, speed_kmh
+* `defaults`: e.g., minor road length, crossing width, speed_kmh (with optional sidewalk width/endpoint offsets)
 * `main_road`: `{ "length_m": number, "center_gap_m": number, "lanes": int }`
-* `junction_templates`: templates for `tee` and `cross` (approach length, lane overrides, `median_continuous`, etc.)
 * `signal_profiles`: fixed-time profiles for `tee` / `cross` / `xwalk_midblock` (cycle, phases, allowed movements).
-  * `cycle_s` must equal the sum of the listed phase durations.
-  * `yellow_duration_s` defines the yellow interval that **replaces** the tail of the last continuous green stretch for a vehicle
-    movement before it turns red. If the movement remains green across multiple successive phases, total their durations until
-    the phase that first turns the movement red, then treat the final `yellow_duration_s` seconds of that combined green time as
-    yellow before entering the red phase.
-  * `ped_early_cutoff_s` (intersections only) shortens the pedestrian clearance: pedestrians turn red `ped_early_cutoff_s` seconds
-    before the next phase begins.
-* `layout`: ordered events along the main road:
+  * `cycle_s` must equal the sum of listed phase durations.
+  * `yellow_duration_s` replaces the tail of the last continuous green stretch for a vehicle movement before it turns red. If the movement stays green across multiple phases, total their durations and treat the final `yellow_duration_s` seconds as yellow.
+  * `ped_early_cutoff_s` (intersections only) shortens pedestrian clearance so pedestrians turn red `ped_early_cutoff_s` seconds before the next phase.
+* `layout`: ordered events along the corridor. Intersections now carry their geometry inline—no more `junction_templates` section.
 
-  * `tee`: `{ pos_m, branch: "north"|"south", template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
-  * `cross`: `{ pos_m, template, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * Shared geometry fields for `tee` and `cross`:
+    * `main_approach_begin_m`: snapped distance upstream to start the lane override.
+    * `main_approach_lanes`: lane count to apply within the override (0 keeps the corridor default).
+    * `minor_lanes_approach`: lanes for minor traffic travelling **toward** the main road.
+    * `minor_lanes_departure`: lanes for movements leaving the main road onto the minor leg.
+    * `median_continuous`: whether the median stays closed through the junction (blocks main right + U turns, minor straight-throughs, etc.).
+  * `tee`: `{ pos_m, branch: "north"|"south", <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
+  * `cross`: `{ pos_m, <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
 
-    * `two_stage_tll_control` — required boolean field that is present only when `signalized=true` and `refuge_island_on_main=true`.
-    * `main_u_turn_allowed` — required boolean for intersections. `false` prohibits main-road U-turns in both directions; `true` keeps them.
+    * `two_stage_tll_control` — required boolean present only when `signalized=true` **and** `refuge_island_on_main=true`.
+    * `main_u_turn_allowed` — required boolean for intersections. `false` removes main-road U-turns in both directions; `true` keeps them.
 
 **Rules (selected):**
 

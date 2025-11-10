@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from ..builder.ids import main_edge_id, main_node_id, minor_edge_id, minor_end_node_id
-from ..domain.models import Cluster, Defaults, JunctionTemplate, LaneOverride, MainRoadConfig
+from ..domain.models import Cluster, Defaults, LaneOverride, MainRoadConfig
 from ..planner.lanes import pick_lanes_for_segment
 from ..planner.snap import kmh_to_mps
 from ..utils.errors import InvalidConfigurationError
@@ -26,7 +26,6 @@ def render_edges_xml(
     defaults: Defaults,
     clusters: List[Cluster],
     breakpoints: List[int],
-    junction_template_by_id: Dict[str, JunctionTemplate],
     lane_overrides: Dict[str, List[LaneOverride]],
 ) -> str:
     speed_mps = kmh_to_mps(defaults.speed_kmh)
@@ -53,13 +52,10 @@ def render_edges_xml(
         for layout_event in cluster.events:
             if layout_event.type.value not in ("tee", "cross"):
                 continue
-            if not layout_event.template_id:
-                LOG.warning("junction at %s has no template_id (skip)", pos)
+            if not layout_event.junction:
+                LOG.warning("junction at %s has no geometry (skip)", pos)
                 continue
-            tpl = junction_template_by_id.get(layout_event.template_id)
-            if not tpl:
-                LOG.warning("junction template not found: id=%s (pos=%s)", layout_event.template_id, pos)
-                continue
+            tpl = layout_event.junction
 
             if layout_event.type.value == "tee":
                 branches = [layout_event.branch.value] if layout_event.branch else []
@@ -72,12 +68,12 @@ def render_edges_xml(
                 lines.append(
                     f'  <edge id="{minor_edge_id(pos, "to", ns)}" '
                     f'from="{minor_end_node_id(pos, ns)}" to="{attach_node}" '
-                    f'numLanes="{tpl.minor_lanes_to_main}" speed="{speed_mps:.3f}"/>'
+                    f'numLanes="{tpl.minor_lanes_approach}" speed="{speed_mps:.3f}"/>'
                 )
                 lines.append(
                     f'  <edge id="{minor_edge_id(pos, "from", ns)}" '
                     f'from="{attach_node}" to="{minor_end_node_id(pos, ns)}" '
-                    f'numLanes="{tpl.minor_lanes_from_main}" speed="{speed_mps:.3f}"/>'
+                    f'numLanes="{tpl.minor_lanes_departure}" speed="{speed_mps:.3f}"/>'
                 )
 
     lines.append("</edges>")

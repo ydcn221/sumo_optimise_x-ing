@@ -16,7 +16,6 @@ from sumo_optimise.conversion.parser.spec_loader import (
     load_json_file,
     load_schema_file,
     parse_defaults,
-    parse_junction_templates,
     parse_layout_events,
     parse_main_road,
     parse_snap_rule,
@@ -30,7 +29,7 @@ from sumo_optimise.conversion.demand.person_flow.identifier import minor_endpoin
 
 
 def _prepare_inputs():
-    spec_path = Path("data/reference/SUMO_OPTX_demo(connection_build)") / "SUMO_OPTX_v1.3_sample.json"
+    spec_path = Path("data/reference/SUMO_OPTX_demo(connection_build)") / "SUMO_OPTX_v1.4_sample.json"
     schema_path = Path("src/sumo_optimise/conversion/data/schema.json")
 
     spec_json = load_json_file(spec_path)
@@ -40,12 +39,9 @@ def _prepare_inputs():
     snap_rule = parse_snap_rule(spec_json)
     defaults = parse_defaults(spec_json)
     main_road = parse_main_road(spec_json)
-    junction_template_by_id = parse_junction_templates(spec_json)
     layout_events = parse_layout_events(spec_json, snap_rule, main_road)
     clusters = build_clusters(layout_events)
-    lane_overrides = compute_lane_overrides(
-        main_road, clusters, junction_template_by_id, snap_rule
-    )
+    lane_overrides = compute_lane_overrides(main_road, clusters, snap_rule)
     breakpoints, _ = collect_breakpoints_and_reasons(
         main_road, clusters, lane_overrides, snap_rule
     )
@@ -54,7 +50,6 @@ def _prepare_inputs():
         main_road,
         clusters,
         breakpoints,
-        junction_template_by_id,
         lane_overrides,
         snap_rule,
     )
@@ -66,7 +61,6 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         main_road,
         clusters,
         breakpoints,
-        junction_template_by_id,
         lane_overrides,
         snap_rule,
     ) = _prepare_inputs()
@@ -76,7 +70,6 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         main_road=main_road,
         clusters=clusters,
         breakpoints=breakpoints,
-        junction_template_by_id=junction_template_by_id,
         lane_overrides=lane_overrides,
         snap_rule=snap_rule,
     )
@@ -85,7 +78,6 @@ def test_endpoint_catalog_is_deterministic_and_matches_expected():
         main_road=main_road,
         clusters=clusters,
         breakpoints=breakpoints,
-        junction_template_by_id=junction_template_by_id,
         lane_overrides=lane_overrides,
         snap_rule=snap_rule,
     )

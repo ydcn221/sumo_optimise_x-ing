@@ -5,9 +5,9 @@ and junction turn weights into SUMO `personFlow` definitions.
 
 ## Inputs
 
-- **Endpoint demand CSV (`DemandPerEndpoint.csv`)**
+- **Endpoint demand CSV (`template_ped_dem.csv` as a starting point)**
   - Encoding: `utf-8-sig`
-  - Row 1 declares the flow pattern: `Pattern,persons_per_hour` (or `period`, `poisson`)
+  - Row 1 declares the flow pattern: `Pattern,steady` (or `poisson`)
   - Row 2 is the header: `SidewalkEndID`, `PedFlow`, optional `Label`
   - `PedFlow` is signed (`+` origin, `-` sink) in persons/hour
   - Rows are processed independently and never aggregated
@@ -34,8 +34,8 @@ and junction turn weights into SUMO `personFlow` definitions.
    Negative (sink) rows are propagated as positive sources and flipped at the
    end.
 4. **Route emission** – each OD pair becomes a `<personFlow>` with a matching
-   `<personTrip>`. Supported patterns: `personsPerHour`, fixed `period`, or
-   Poisson arrival (`period="exp(λ)"`). The configured `defaults.ped_endpoint_offset_m`
+   `<personTrip>`. Supported patterns: `steady` (`personsPerHour=…`) or
+   Poisson arrivals (`period="exp(λ)"`). The configured `defaults.ped_endpoint_offset_m`
    applies relative to the correct end of the lane: start-side endpoints
    (main-road north halves at the west terminus, main-road south halves at the
    east terminus, minor north east-side endpoints, minor south west-side
@@ -46,7 +46,7 @@ and junction turn weights into SUMO `personFlow` definitions.
 
 ## Output
 
-- Routes are written to `plainXML_out/.../1-generated.rou.xml`
+- Routes are written to `plainXML_out/.../demandflow.rou.xml`
 - The document is valid against `routes_file.xsd` and uses `begin="0"`
   / `end="T"` from the CLI options.
 
@@ -57,7 +57,7 @@ and junction turn weights into SUMO `personFlow` definitions.
 - `--veh-endpoint-demand` / `--veh-junction-turn-weight` – reserved for the upcoming vehicle flow inputs
 - `--demand-sim-end` – simulation end time (seconds) shared by pedestrian and future vehicle flows
 - `--generate-demand-templates` – emit blank CSVs with all known IDs for rapid
-  spreadsheet preparation (`DemandPerEndpoint_template.csv` and `JunctionTurnWeight_template.csv`)
+  spreadsheet preparation (`template_ped_dem.csv`, `template_ped_turn.csv`, `template_veh_dem.csv`, `template_veh_turn.csv`)
 - Endpoint IDs distinguish sidewalk sides along both mainline and minor approaches:
   - Mainline endpoints follow `PedEnd.Main.{E|W}_end.{N|S}_sidewalk`. The `E_end` / `W_end`
     tokens map to the extreme main breakpoints, allowing CSV authors to speak in cardinal halves
@@ -75,7 +75,17 @@ Both CSV options are required to activate the demand pipeline.
 - The flow pattern must be declared in the first row of the endpoint CSV; the CLI no longer accepts
   `--demand-pattern`.
 
+## Vehicle demand overview
+
+- `veh_EP_demand_sampleUpd.csv` follows the same two-row preamble as the pedestrian
+  dataset (`Pattern,<value>` then `EndID,vehFlow,Label`). Signed values are supported and the same
+  aliasing rules apply (`Node.Main.E_end` / `Node.Main.W_end` resolve to the proper corridor nodes).
+- `veh_jct_turn_weight_sampleUpd.csv` lists four columns per junction: `ToNorth`, `ToWest`, `ToSouth`,
+  `ToEast`. U-turn shares are automatically zeroed during propagation.
+- When vehicle inputs are supplied alongside pedestrian CSVs the converter merges both modalities into
+  a single routes document (and writes `config.sumocfg` referencing the standard net + routes files).
+
 ## File naming
 
-- The generated routes file follows the same numbering convention as the other
-  PlainXML artefacts and is referenced in manifests for downstream tooling.
+- The generated routes file is emitted as `demandflow.rou.xml` (mirroring the default manifest entry)
+  and is referenced in manifests for downstream tooling.

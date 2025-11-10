@@ -6,7 +6,24 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..utils.constants import OUTPUT_DIR_PREFIX
+from ..utils.constants import (
+    CONNECTIONS_FILE_NAME,
+    EDGES_FILE_NAME,
+    LOG_FILE_NAME,
+    MANIFEST_NAME,
+    NETWORK_FILE_NAME,
+    NODES_FILE_NAME,
+    OUTPUT_DIR_PREFIX,
+    PED_ENDPOINT_TEMPLATE_NAME,
+    PED_JUNCTION_TEMPLATE_NAME,
+    PED_NETWORK_IMAGE_NAME,
+    PLAIN_NETCONVERT_PREFIX,
+    ROUTES_FILE_NAME,
+    SUMO_CONFIG_FILE_NAME,
+    TLL_FILE_NAME,
+    VEH_ENDPOINT_TEMPLATE_NAME,
+    VEH_JUNCTION_TEMPLATE_NAME,
+)
 
 
 @dataclass(frozen=True)
@@ -15,7 +32,37 @@ class OutputDirectoryTemplate:
 
     root: str = OUTPUT_DIR_PREFIX
     run: str = "{month}{day}_{seq:03}"
-    seq_digits: int = 3
+
+
+@dataclass(frozen=True)
+class OutputFileTemplates:
+    """Templates controlling where each generated artefact is written."""
+
+    log: str = field(default=LOG_FILE_NAME, metadata={"path": True})
+    manifest: str = field(default=MANIFEST_NAME, metadata={"path": True})
+    nodes: str = field(default=NODES_FILE_NAME, metadata={"path": True})
+    edges: str = field(default=EDGES_FILE_NAME, metadata={"path": True})
+    connections: str = field(default=CONNECTIONS_FILE_NAME, metadata={"path": True})
+    tll: str = field(default=TLL_FILE_NAME, metadata={"path": True})
+    routes: str = field(default=ROUTES_FILE_NAME, metadata={"path": True})
+    sumocfg: str = field(default=SUMO_CONFIG_FILE_NAME, metadata={"path": True})
+    network: str = field(default=NETWORK_FILE_NAME, metadata={"path": True})
+    pedestrian_network: str = field(default=PED_NETWORK_IMAGE_NAME, metadata={"path": True})
+    demand_endpoint_template: str = field(
+        default=PED_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
+    )
+    demand_junction_template: str = field(
+        default=PED_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
+    )
+    vehicle_endpoint_template: str = field(
+        default=VEH_ENDPOINT_TEMPLATE_NAME, metadata={"path": True}
+    )
+    vehicle_junction_template: str = field(
+        default=VEH_JUNCTION_TEMPLATE_NAME, metadata={"path": True}
+    )
+    netconvert_plain_prefix: str = field(
+        default=PLAIN_NETCONVERT_PREFIX, metadata={"path": False}
+    )
 
 
 class DirectionMain(str, Enum):
@@ -88,14 +135,12 @@ class MainRoadConfig:
 
 
 @dataclass(frozen=True)
-class JunctionTemplate:
-    id: str
+class JunctionConfig:
     main_approach_begin_m: int
     main_approach_lanes: int
-    minor_lanes_to_main: int
-    minor_lanes_from_main: int
+    minor_lanes_approach: int
+    minor_lanes_departure: int
     median_continuous: bool
-    kind: EventKind
 
 
 @dataclass(frozen=True)
@@ -132,7 +177,7 @@ class LayoutEvent:
     type: EventKind
     pos_m_raw: float
     pos_m: int
-    template_id: Optional[str] = None
+    junction: Optional[JunctionConfig] = None
     signalized: Optional[bool] = None
     signal: Optional[SignalRef] = None
     main_ped_crossing_placement: Optional[Dict[str, bool]] = None
@@ -293,8 +338,7 @@ class EndpointCatalog:
 
 
 class PersonFlowPattern(str, Enum):
-    PERSONS_PER_HOUR = "persons_per_hour"
-    PERIOD = "period"
+    STEADY = "steady"
     POISSON = "poisson"
 
 
@@ -336,7 +380,6 @@ class CorridorSpec:
     snap: SnapRule
     defaults: Defaults
     main_road: MainRoadConfig
-    junction_templates: Dict[str, JunctionTemplate]
     signal_profiles: Dict[str, Dict[str, SignalProfileDef]]
     layout: List[LayoutEvent]
 
@@ -346,10 +389,25 @@ class BuildOptions:
     schema_path: Path
     run_netconvert: bool = False
     run_netedit: bool = False
+    run_sumo_gui: bool = False
     console_log: bool = False
     output_template: OutputDirectoryTemplate = field(default_factory=OutputDirectoryTemplate)
+    output_files: OutputFileTemplates = field(default_factory=OutputFileTemplates)
     demand: Optional[DemandOptions] = None
     generate_demand_templates: bool = False
+    network_input: Optional[Path] = None
+
+
+class BuildTask(str, Enum):
+    NETWORK = "network"
+    DEMAND = "demand"
+    ALL = "all"
+
+    def includes_network(self) -> bool:
+        return self in (BuildTask.NETWORK, BuildTask.ALL)
+
+    def includes_demand(self) -> bool:
+        return self in (BuildTask.DEMAND, BuildTask.ALL)
 
 
 @dataclass
@@ -362,9 +420,12 @@ class BuildResult:
     demand_xml: Optional[str] = None
     manifest_path: Optional[Path] = None
     endpoint_ids: Optional[List[str]] = None
+    vehicle_endpoint_ids: Optional[List[str]] = None
     junction_ids: Optional[List[str]] = None
     pedestrian_graph: Optional[Any] = None
     network_image_path: Optional[Path] = None
+    sumocfg_path: Optional[Path] = None
+    defaults: Optional[Defaults] = None
 
 
 @dataclass

@@ -11,7 +11,6 @@ from sumo_optimise.conversion.domain.models import (
     Cluster,
     Defaults,
     EventKind,
-    JunctionTemplate,
     LaneOverride,
     LayoutEvent,
     MainRoadConfig,
@@ -23,7 +22,7 @@ from sumo_optimise.conversion.domain.models import (
     SignalRef,
     SnapRule,
 )
-from sumo_optimise.conversion.emitters.tll import _pedestrian_allowed, render_tll_xml
+from sumo_optimise.conversion.emitters.tll import render_tll_xml
 
 
 def _make_defaults() -> Defaults:
@@ -32,10 +31,6 @@ def _make_defaults() -> Defaults:
 
 def _make_main_road() -> MainRoadConfig:
     return MainRoadConfig(length_m=300.0, center_gap_m=0.0, lanes=2)
-
-
-def _empty_templates() -> Dict[str, JunctionTemplate]:
-    return {}
 
 
 def _empty_lane_overrides() -> List[LaneOverride]:
@@ -80,7 +75,6 @@ def _render(
         defaults=_make_defaults(),
         clusters=clusters,
         breakpoints=[],
-        junction_template_by_id=_empty_templates(),
         snap_rule=_snap_rule(),
         main_road=_make_main_road(),
         lane_overrides=_empty_lane_overrides(),
@@ -105,7 +99,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
         ped_early_cutoff_s=1,
         yellow_duration_s=2,
         phases=[
-            SignalPhaseDef(duration_s=6, allow_movements=["EB_R", "pedestrian"]),
+            SignalPhaseDef(duration_s=6, allow_movements=["EB_R_pg", "PedX_NS"]),
             SignalPhaseDef(duration_s=4, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
@@ -135,7 +129,7 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
     xml = _render(clusters=[cluster], profiles=profiles, links=links)
     states = _extract_states(xml)
 
-    assert states == ["gG", "yG", "yr", "rr"]
+    assert states == ["GG", "yG", "yr", "rr"]
 
 
 def test_main_right_phase_enables_u_turn_when_available():
@@ -145,7 +139,7 @@ def test_main_right_phase_enables_u_turn_when_available():
         ped_early_cutoff_s=0,
         yellow_duration_s=0,
         phases=[
-            SignalPhaseDef(duration_s=4, allow_movements=["main_R"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["EB_R_pg"]),
         ],
         kind=EventKind.CROSS,
         pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
@@ -174,7 +168,7 @@ def test_main_right_phase_enables_u_turn_when_available():
     xml = _render(clusters=[cluster], profiles=profiles, links=links)
     states = _extract_states(xml)
 
-    assert states == ["gG"]
+    assert states == ["GG"]
 
 
 def test_two_stage_ped_split_distinguishes_halves():
@@ -184,8 +178,8 @@ def test_two_stage_ped_split_distinguishes_halves():
         ped_early_cutoff_s=0,
         yellow_duration_s=1,
         phases=[
-            SignalPhaseDef(duration_s=4, allow_movements=["EB_L", "pedestrian"]),
-            SignalPhaseDef(duration_s=4, allow_movements=["minor_N_R", "pedestrian"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["EB_L_pg", "PedX_W"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["SB_R_pg", "PedX_W"]),
             SignalPhaseDef(duration_s=2, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
@@ -237,7 +231,53 @@ def test_two_stage_ped_split_distinguishes_halves():
     xml = _render(clusters=[cluster], profiles=profiles, links=links)
     states = _extract_states(xml)
 
-    assert states == ["GrrG", "yrrG", "rgGr", "ryGr", "rrrr"]
+    assert states == ["GrrG", "yrrG", "rgGG", "ryGG", "rrrr"]
+
+
+def test_half_tokens_respected_without_two_stage():
+    profile = SignalProfileDef(
+        id="half_profile",
+        cycle_s=6,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[
+            SignalPhaseDef(duration_s=3, allow_movements=["PedX_W_N-half"]),
+            SignalPhaseDef(duration_s=3, allow_movements=["PedX_W_S-half"]),
+        ],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"half_profile": profile}}
+    cluster = _cluster_with_signal(
+        pos=140,
+        profile_id="half_profile",
+        kind=EventKind.CROSS,
+        two_stage=False,
+        refuge=True,
+    )
+    links = [
+        SignalLink(
+            tl_id=cluster_id(140),
+            movement="ped_main_west_north",
+            slot_index=0,
+            link_index=0,
+            kind="crossing",
+            element_id="ped_w_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(140),
+            movement="ped_main_west_south",
+            slot_index=1,
+            link_index=1,
+            kind="crossing",
+            element_id="ped_w_s",
+        ),
+    ]
+
+    xml = _render(clusters=[cluster], profiles=profiles, links=links)
+    states = _extract_states(xml)
+
+    assert states == ["Gr", "rG"]
 
 
 def test_movement_stays_green_across_phases():
@@ -247,8 +287,8 @@ def test_movement_stays_green_across_phases():
         ped_early_cutoff_s=0,
         yellow_duration_s=2,
         phases=[
-            SignalPhaseDef(duration_s=4, allow_movements=["EB_T"]),
-            SignalPhaseDef(duration_s=4, allow_movements=["EB_T"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["EB_T_pg"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["EB_T_pg"]),
             SignalPhaseDef(duration_s=2, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
@@ -273,13 +313,75 @@ def test_movement_stays_green_across_phases():
     assert states == ["G", "y", "r"]
 
 
+def test_eastbound_flow_blocks_west_crosswalk_via_aggregate_conflict():
+    profile = SignalProfileDef(
+        id="profile",
+        cycle_s=6,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[
+            SignalPhaseDef(duration_s=3, allow_movements=["EB_LTR", "WB_LTR", "PedX_W"]),
+            SignalPhaseDef(duration_s=3, allow_movements=["PedX_W"]),
+        ],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"profile": profile}}
+    cluster = _cluster_with_signal(
+        pos=165,
+        profile_id="profile",
+        kind=EventKind.CROSS,
+        refuge=True,
+        two_stage=True,
+    )
+    links = [
+        SignalLink(
+            tl_id=cluster_id(165),
+            movement="main_EB_T",
+            slot_index=0,
+            link_index=0,
+            kind="connection",
+            element_id="veh_eb",
+        ),
+        SignalLink(
+            tl_id=cluster_id(165),
+            movement="main_WB_T",
+            slot_index=1,
+            link_index=1,
+            kind="connection",
+            element_id="veh_wb",
+        ),
+        SignalLink(
+            tl_id=cluster_id(165),
+            movement="ped_main_west_north",
+            slot_index=2,
+            link_index=2,
+            kind="crossing",
+            element_id="ped_w_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(165),
+            movement="ped_main_west_south",
+            slot_index=3,
+            link_index=3,
+            kind="crossing",
+            element_id="ped_w_s",
+        ),
+    ]
+
+    xml = _render(clusters=[cluster], profiles=profiles, links=links)
+    states = _extract_states(xml)
+
+    assert states == ["GGrr", "rrGG"]
+
+
 def test_controlled_connections_emitted():
     profile = SignalProfileDef(
         id="profile",
         cycle_s=6,
         ped_early_cutoff_s=0,
         yellow_duration_s=0,
-        phases=[SignalPhaseDef(duration_s=6, allow_movements=["main_T"])],
+        phases=[SignalPhaseDef(duration_s=6, allow_movements=["EB_T_pg", "WB_T_pg"])],
         kind=EventKind.CROSS,
         pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
@@ -317,3 +419,96 @@ def test_controlled_connections_emitted():
         '<connection from="Edge.A" to="Edge.B" fromLane="0" toLane="1" '
         f'tl="{tl_id}" linkIndex="0"/>'
     ) in xml
+
+
+def _midblock_links(pos: int, include_vehicle: bool = False) -> List[SignalLink]:
+    tl = cluster_id(pos)
+    links: List[SignalLink] = []
+    slot = 0
+    if include_vehicle:
+        links.append(
+            SignalLink(
+                tl_id=tl,
+                movement="main_EB_T",
+                slot_index=slot,
+                link_index=slot,
+                kind="connection",
+                element_id="veh_EB",
+            )
+        )
+        slot += 1
+    links.append(
+        SignalLink(
+            tl_id=tl,
+            movement="ped_mid_north",
+            slot_index=slot,
+            link_index=slot,
+            kind="crossing",
+            element_id="ped_mid_n",
+        )
+    )
+    slot += 1
+    links.append(
+        SignalLink(
+            tl_id=tl,
+            movement="ped_mid_south",
+            slot_index=slot,
+            link_index=slot,
+            kind="crossing",
+            element_id="ped_mid_s",
+        )
+    )
+    return links
+
+
+def test_midblock_single_side_without_two_stage_forces_red():
+    profile = SignalProfileDef(
+        id="mid_profile",
+        cycle_s=4,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[SignalPhaseDef(duration_s=4, allow_movements=["PedX_N"])],
+        kind=EventKind.XWALK_MIDBLOCK,
+        pedestrian_conflicts=PedestrianConflictConfig(left=False, right=False),
+    )
+    profiles = {EventKind.XWALK_MIDBLOCK.value: {"mid_profile": profile}}
+    cluster = _cluster_with_signal(
+        pos=300,
+        profile_id="mid_profile",
+        kind=EventKind.XWALK_MIDBLOCK,
+        two_stage=False,
+        refuge=False,
+    )
+    xml = _render(clusters=[cluster], profiles=profiles, links=_midblock_links(300))
+    states = _extract_states(xml)
+    assert states == ["rr"]
+
+
+def test_midblock_flow_blocks_corresponding_crosswalk():
+    profile = SignalProfileDef(
+        id="mid_profile",
+        cycle_s=6,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[
+            SignalPhaseDef(duration_s=4, allow_movements=["EB", "PedX"]),
+            SignalPhaseDef(duration_s=2, allow_movements=["PedX"]),
+        ],
+        kind=EventKind.XWALK_MIDBLOCK,
+        pedestrian_conflicts=PedestrianConflictConfig(left=False, right=False),
+    )
+    profiles = {EventKind.XWALK_MIDBLOCK.value: {"mid_profile": profile}}
+    cluster = _cluster_with_signal(
+        pos=320,
+        profile_id="mid_profile",
+        kind=EventKind.XWALK_MIDBLOCK,
+        two_stage=False,
+        refuge=False,
+    )
+    xml = _render(
+        clusters=[cluster],
+        profiles=profiles,
+        links=_midblock_links(320, include_vehicle=True),
+    )
+    states = _extract_states(xml)
+    assert states == ["GrG", "rGG"]

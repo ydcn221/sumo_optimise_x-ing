@@ -1,6 +1,7 @@
 """Emission of ``1-generated.tll.xml`` traffic light programmes."""
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Set
@@ -8,19 +9,42 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Set
 from ..builder.ids import cluster_id
 from ..domain.models import (
     Cluster,
+    ControlledConnection,
     Defaults,
-    JunctionTemplate,
+    EventKind,
     LaneOverride,
     MainRoadConfig,
-    PedestrianConflictConfig,
-    ControlledConnection,
     SignalLink,
     SignalProfileDef,
     SnapRule,
 )
+from ..utils.logging import get_logger
+from .conflict_table import GLOBAL_CONFLICT_MATRIX
 
+LOG = get_logger()
 
 PEDESTRIAN_PREFIX = "ped_"
+
+_VEHICLE_DIR_MAP = {
+    "main_EB": "EB",
+    "main_WB": "WB",
+    "minor_N": "SB",  # North branch -> southbound traffic
+    "minor_S": "NB",  # South branch -> northbound traffic
+}
+
+_PED_ORIENTATION_HALVES = {
+    "N": ("XN_W-half", "XN_E-half"),
+    "E": ("XE_N-half", "XE_S-half"),
+    "S": ("XS_E-half", "XS_W-half"),
+    "W": ("XW_S-half", "XW_N-half"),
+}
+
+
+@dataclass(frozen=True)
+class PhaseToken:
+    canonical: str
+    movements: Sequence[str]
+    raw_token: str
 
 
 @dataclass(frozen=True)
@@ -30,6 +54,7 @@ class _TlProgram:
     offset: int
     refuge_island_on_main: bool
     two_stage_tll_control: bool
+    is_midblock: bool
 
 
 def _group_links_by_tl(links: Iterable[SignalLink]) -> Dict[str, List[SignalLink]]:
@@ -76,53 +101,9 @@ def _collect_programs(
                 offset=event.signal.offset_s,
                 refuge_island_on_main=bool(event.refuge_island_on_main),
                 two_stage_tll_control=bool(event.two_stage_tll_control),
+                is_midblock=event.type == EventKind.XWALK_MIDBLOCK,
             )
     return programs
-
-
-def _expand_vehicle_movements(
-    tokens: Iterable[str],
-    available_movements: Sequence[str],
-) -> Set[str]:
-    veh_movements = {mv for mv in available_movements if not mv.startswith(PEDESTRIAN_PREFIX)}
-    expanded: Set[str] = set()
-    for token in tokens:
-        if token == "pedestrian":
-            continue
-        for movement in veh_movements:
-            parts = movement.split("_")
-            if len(parts) < 3:
-                continue
-            prefix, direction, turn = parts[0], parts[1], parts[2]
-            if token == movement:
-                expanded.add(movement)
-                continue
-            if token.startswith(prefix) and token.endswith(turn) and len(token.split("_")) == 2:
-                # main_L/main_T/main_R, minor_L/minor_T/minor_R
-                expanded.add(movement)
-                continue
-            if prefix == "main" and token == f"{direction}_{turn}":
-                expanded.add(movement)
-                continue
-
-    if expanded:
-        for movement in list(expanded):
-            if not movement.startswith("main_"):
-                continue
-            if not movement.endswith("_R"):
-                continue
-            prefix = movement.rsplit("_", 1)[0]
-            u_turn = f"{prefix}_U"
-            if u_turn in veh_movements:
-                expanded.add(u_turn)
-    return expanded
-
-
-def _ped_matches(pattern: str, ped_name: str) -> bool:
-    if pattern.endswith("*"):
-        prefix = pattern[:-1]
-        return ped_name.startswith(prefix)
-    return pattern == ped_name
 
 
 def _ped_base(name: str) -> str:
@@ -132,103 +113,443 @@ def _ped_base(name: str) -> str:
     return name
 
 
-_SEGMENT_TO_PEDS: Mapping[str, Set[str]] = {
-    "S-W": {"ped_minor_south"},
-    "S-E": {"ped_minor_south"},
-    "E-S": {"ped_main_east_south"},
-    "E-N": {"ped_main_east_north"},
-    "N-E": {"ped_minor_north"},
-    "N-W": {"ped_minor_north"},
-    "W-N": {"ped_main_west_north"},
-    "W-S": {"ped_main_west_south"},
-}
+class MovementCatalog:
+    """Helper that maps canonical movement tokens to actual signal links."""
 
+    def __init__(self, movements: Sequence[str]) -> None:
+        self.movements = list(movements)
+        self.vehicle_tokens: Dict[str, List[str]] = defaultdict(list)
+        self.movement_bases: Dict[str, str] = {}
+        self.ped_half_tokens: Dict[str, List[str]] = defaultdict(list)
+        self.ped_orientations: Set[str] = set()
 
-_MOVEMENT_SEGMENT_STATUS: Mapping[str, Mapping[str, str]] = {
-    "main_EB_L": {"W-N": "never", "N-W": "left"},
-    "main_EB_T": {"W-N": "never", "E-N": "never"},
-    "main_EB_R": {"W-N": "never", "S-E": "right"},
-    "main_EB_U": {"W-N": "never", "W-S": "right"},
-    "main_WB_L": {"E-S": "never", "S-E": "left"},
-    "main_WB_T": {"E-S": "never", "W-S": "never"},
-    "main_WB_R": {"E-S": "never", "N-W": "right"},
-    "main_WB_U": {"E-S": "never", "E-N": "right"},
-    "minor_N_L": {"N-E": "never", "E-N": "left"},
-    "minor_N_T": {"N-E": "never"},
-    "minor_N_R": {"N-E": "never", "W-S": "right"},
-    "minor_N_U": {"N-E": "never", "N-W": "right"},
-    "minor_S_L": {"S-W": "never", "W-S": "left"},
-    "minor_S_T": {"S-W": "never"},
-    "minor_S_R": {"S-W": "never", "E-N": "right"},
-    "minor_S_U": {"S-W": "never", "S-E": "right"},
-}
-
-
-def _vehicle_conflicts() -> Dict[str, Dict[str, Set[str]]]:
-    """Return a static conflict map between vehicle movements and crossings."""
-
-    status_to_key = {"never": "mandatory", "left": "left", "right": "right"}
-
-    conflicts: Dict[str, Dict[str, Set[str]]] = {}
-    for movement, segment_map in _MOVEMENT_SEGMENT_STATUS.items():
-        info: Dict[str, Set[str]] = {"mandatory": set(), "left": set(), "right": set()}
-        for segment, status in segment_map.items():
-            ped_names = _SEGMENT_TO_PEDS.get(segment)
-            if not ped_names:
+        for movement in movements:
+            if movement.startswith(PEDESTRIAN_PREFIX):
+                halves = _ped_half_tokens_for_movement(movement)
+                if not halves:
+                    continue
+                for half in halves:
+                    self.ped_half_tokens[half].append(movement)
+                    orientation = half[1]  # e.g. XN_W-half -> N
+                    self.ped_orientations.add(orientation)
                 continue
-            target_key = status_to_key.get(status)
-            if not target_key:
+
+            base = _vehicle_base_token(movement)
+            if not base:
                 continue
-            for ped_name in ped_names:
-                info[target_key].add(ped_name)
-        conflicts[movement] = info
+            self.vehicle_tokens[base].append(movement)
+            self.movement_bases[movement] = base
 
-    for movement in ("main_EB_T", "main_WB_T"):
-        info = conflicts.setdefault(movement, {"mandatory": set(), "left": set(), "right": set()})
-        info["mandatory"].update({"ped_mid", "ped_mid_north", "ped_mid_south"})
 
-    coupled_segments = {
-        "ped_main_west": ("ped_main_west_north", "ped_main_west_south"),
-        "ped_main_east": ("ped_main_east_north", "ped_main_east_south"),
+def _vehicle_base_token(movement: str) -> str | None:
+    parts = movement.split("_")
+    if len(parts) < 3:
+        return None
+    prefix = f"{parts[0]}_{parts[1]}"
+    turn = parts[2].upper()
+    direction = _VEHICLE_DIR_MAP.get(prefix)
+    if not direction:
+        return None
+    if turn not in {"L", "T", "R", "U"}:
+        return None
+    return f"{direction}_{turn}"
+
+
+def _ped_half_tokens_for_movement(movement: str) -> Set[str]:
+    tokens: Set[str] = set()
+    if movement.startswith("ped_main_"):
+        _, _, side, *rest = movement.split("_")
+        orientation = {"west": "W", "east": "E"}.get(side)
+        if not orientation:
+            return tokens
+        halves = _ped_halves_for_orientation(orientation)
+        if rest:
+            half_key = rest[0]
+            mapped = _ped_half_token_for_suffix(orientation, half_key)
+            if mapped:
+                tokens.add(mapped)
+                return tokens
+        tokens.update(halves)
+        return tokens
+
+    if movement.startswith("ped_minor_"):
+        _, _, branch = movement.split("_")
+        orientation = {"north": "N", "south": "S"}.get(branch)
+        if not orientation:
+            return tokens
+        tokens.update(_ped_halves_for_orientation(orientation))
+        return tokens
+
+    if movement.startswith("ped_mid"):
+        parts = movement.split("_")
+        if len(parts) == 3:
+            orientation = {"north": "N", "south": "S"}.get(parts[2])
+            if orientation:
+                tokens.update(_ped_halves_for_orientation(orientation))
+                return tokens
+        tokens.update(_ped_halves_for_orientation("N"))
+        tokens.update(_ped_halves_for_orientation("S"))
+        return tokens
+
+    return tokens
+
+
+def _ped_halves_for_orientation(orientation: str) -> Tuple[str, str]:
+    return _PED_ORIENTATION_HALVES.get(orientation.upper(), tuple())
+
+
+def _ped_half_token_for_suffix(orientation: str, suffix: str | None) -> str | None:
+    orientation = orientation.upper()
+    raw = (suffix or "").strip()
+    normalized = raw.upper()
+    mapping = {
+        ("E", "N"): "XE_N-half",
+        ("E", "S"): "XE_S-half",
+        ("W", "N"): "XW_N-half",
+        ("W", "S"): "XW_S-half",
+        ("N", "W"): "XN_W-half",
+        ("N", "E"): "XN_E-half",
+        ("S", "E"): "XS_E-half",
+        ("S", "W"): "XS_W-half",
     }
-    for info in conflicts.values():
-        for merged, components in coupled_segments.items():
-            for key in ("mandatory", "left", "right"):
-                if any(component in info[key] for component in components):
-                    info[key].add(merged)
+    if normalized.endswith("-HALF"):
+        key = normalized[:-5]
+        token = mapping.get((orientation, key))
+        if token:
+            return token
+    legacy_alias = {
+        "north": "N",
+        "south": "S",
+        "east": "E",
+        "west": "W",
+    }
+    legacy_key = legacy_alias.get(raw.lower())
+    if legacy_key:
+        return mapping.get((orientation, legacy_key))
+    return None
 
-    return conflicts
+
+def _parse_ped_descriptor(descriptor: str) -> Tuple[List[str], str | None]:
+    descriptor = descriptor.strip()
+    if not descriptor:
+        return [], None
+    if "_" not in descriptor:
+        if descriptor.isalpha() and all(ch in "NESW" for ch in descriptor):
+            descriptor = descriptor.upper()
+            orientations = list(dict.fromkeys(descriptor))
+            return orientations, None
+        return [], None
+    head, tail = descriptor.split("_", 1)
+    head = head.strip().upper()
+    tail = tail.strip()
+    if head not in {"N", "E", "S", "W"} or not tail:
+        return [], None
+    return [head], tail
 
 
-_VEHICLE_CONFLICTS = _vehicle_conflicts()
+_VEHICLE_TOKEN_RE = re.compile(r"^(?P<dir>[NSEW](?:B)?)_(?P<turns>[LTRU]+)$", re.IGNORECASE)
+_PED_SUFFIX_RE = re.compile(r"_p([rg])$", re.IGNORECASE)
 
 
-def _pedestrian_allowed(
-    *,
-    ped_name: str,
-    vehicle_movements: Iterable[str],
-    ped_token_present: bool,
-    conflicts: PedestrianConflictConfig,
-) -> bool:
-    if not ped_token_present:
-        return False
+def _normalize_vehicle_token(token: str) -> List[Tuple[str, str]]:
+    """Return (canonical_token, base_token) pairs for vehicle movements."""
 
-    for movement in vehicle_movements:
-        info = _VEHICLE_CONFLICTS.get(movement)
-        if not info:
+    token = token.strip()
+    if not token:
+        return []
+
+    suffix_match = _PED_SUFFIX_RE.search(token)
+    suffix = "_pg"
+    core = token
+    if suffix_match:
+        suffix = f"_p{suffix_match.group(1).lower()}"
+        core = token[: suffix_match.start()]
+
+    bare_direction = core.upper()
+    if bare_direction in {"EB", "WB", "NB", "SB"}:
+        canonical = f"{bare_direction}_T{suffix}"
+        base = f"{bare_direction}_T"
+        return [(canonical, base)]
+
+    results: List[Tuple[str, str]] = []
+    match = _VEHICLE_TOKEN_RE.match(core)
+    if match:
+        dir_token = match.group("dir").upper()
+        if len(dir_token) == 1:
+            dir_token += "B"
+        turns = match.group("turns").upper()
+        if len(set(turns)) != len(turns):
+            return results
+        for turn in turns:
+            if turn not in {"L", "T", "R", "U"}:
+                continue
+            canonical = f"{dir_token}_{turn}{suffix}"
+            base = f"{dir_token}_{turn}"
+            results.append((canonical, base))
+        return results
+
+    legacy_core = core
+    if legacy_core.startswith("main_"):
+        _, rest = legacy_core.split("_", 1)
+        if rest in {"L", "T", "R", "U"}:
+            for direction in ("EB", "WB"):
+                canonical = f"{direction}_{rest}{suffix}"
+                base = f"{direction}_{rest}"
+                results.append((canonical, base))
+            return results
+        parts = rest.split("_")
+        if len(parts) == 2:
+            direction, turn = parts[0].upper(), parts[1].upper()
+            direction = f"{direction}B" if len(direction) == 1 else direction
+            canonical = f"{direction}_{turn}{suffix}"
+            base = f"{direction}_{turn}"
+            results.append((canonical, base))
+            return results
+
+    if legacy_core.startswith("minor_"):
+        _, rest = legacy_core.split("_", 1)
+        if rest in {"L", "T", "R", "U"}:
+            for direction in ("NB", "SB"):
+                canonical = f"{direction}_{rest}{suffix}"
+                base = f"{direction}_{rest}"
+                results.append((canonical, base))
+            return results
+        parts = rest.split("_")
+        if len(parts) == 2:
+            branch, turn = parts[0].upper(), parts[1].upper()
+            direction = "SB" if branch == "N" else "NB"
+            canonical = f"{direction}_{turn}{suffix}"
+            base = f"{direction}_{turn}"
+            results.append((canonical, base))
+            return results
+
+    if legacy_core == "main_R":  # backwards compatibility
+        for direction in ("EB", "WB"):
+            canonical = f"{direction}_R{suffix}"
+            base = f"{direction}_R"
+            results.append((canonical, base))
+        return results
+
+    return results
+
+
+def _expand_vehicle_tokens(
+    token: str,
+    catalog: MovementCatalog,
+) -> List[PhaseToken]:
+    normalized = _normalize_vehicle_token(token)
+    phase_tokens: List[PhaseToken] = []
+    for canonical, base in normalized:
+        movements = list(catalog.vehicle_tokens.get(base, []))
+        if not movements:
             continue
-        mandatory = info.get("mandatory", set())
-        if any(_ped_matches(pattern, ped_name) for pattern in mandatory):
-            return False
-        if not conflicts.left:
-            left_patterns = info.get("left", set())
-            if any(_ped_matches(pattern, ped_name) for pattern in left_patterns):
-                return False
-        if not conflicts.right:
-            right_patterns = info.get("right", set())
-            if any(_ped_matches(pattern, ped_name) for pattern in right_patterns):
-                return False
-    return True
+        extended = list(movements)
+        if base.endswith("_R"):
+            u_base = base[:-2] + "_U"
+            extended.extend(catalog.vehicle_tokens.get(u_base, []))
+        seen: Set[str] = set()
+        deduped = []
+        for movement in extended:
+            if movement not in seen:
+                deduped.append(movement)
+                seen.add(movement)
+        phase_tokens.append(PhaseToken(canonical=canonical, movements=deduped, raw_token=token))
+    return phase_tokens
+
+
+def _expand_ped_tokens(token: str, catalog: MovementCatalog) -> List[PhaseToken]:
+    token = token.strip()
+    if not token:
+        return []
+
+    phase_tokens: List[PhaseToken] = []
+
+    if token.lower() == "pedestrian":
+        halves = set(catalog.ped_half_tokens.keys())
+        for half in halves:
+            phase_tokens.append(PhaseToken(canonical=half, movements=catalog.ped_half_tokens[half], raw_token=token))
+        return phase_tokens
+
+    if token.lower() == "pedx":
+        accumulated: Set[str] = set()
+        for orientation in ("N", "E", "S", "W"):
+            halves = _ped_halves_for_orientation(orientation)
+            for half in halves:
+                if half in catalog.ped_half_tokens and half not in accumulated:
+                    accumulated.add(half)
+                    phase_tokens.append(
+                        PhaseToken(canonical=half, movements=catalog.ped_half_tokens[half], raw_token=token)
+                    )
+        return phase_tokens
+
+    if token.startswith("PedX_") or token.startswith("pedx_"):
+        descriptor = token.split("_", 1)[1]
+        orientations, suffix = _parse_ped_descriptor(descriptor)
+        seen_halves: Set[str] = set()
+        for orientation in orientations:
+            halves = list(_ped_halves_for_orientation(orientation))
+            if suffix:
+                candidate = _ped_half_token_for_suffix(orientation, suffix)
+                if candidate:
+                    halves = [candidate]
+            for half in halves:
+                if half in catalog.ped_half_tokens and half not in seen_halves:
+                    seen_halves.add(half)
+                    phase_tokens.append(
+                        PhaseToken(canonical=half, movements=catalog.ped_half_tokens[half], raw_token=token)
+                    )
+        return phase_tokens
+
+    if token.startswith("X") and token.endswith("-half"):
+        if token in catalog.ped_half_tokens:
+            phase_tokens.append(PhaseToken(canonical=token, movements=catalog.ped_half_tokens[token], raw_token=token))
+        return phase_tokens
+
+    return phase_tokens
+
+
+def _expand_phase_tokens(tokens: Iterable[str], catalog: MovementCatalog) -> List[PhaseToken]:
+    phase_tokens: List[PhaseToken] = []
+    for token in tokens:
+        produced = _expand_vehicle_tokens(token, catalog)
+        if not produced:
+            produced = _expand_ped_tokens(token, catalog)
+        if not produced and token:
+            LOG.warning("[TLS] unsupported allow_movement token '%s'", token)
+        phase_tokens.extend(produced)
+    return phase_tokens
+
+
+def _normalize_conflict_state(token_a: str, token_b: str, state: str) -> str:
+    if state == "X":
+        LOG.warning(
+            "[TLS] conflict table reported 'X' for %s vs %s; falling back to 'Y'",
+            token_a,
+            token_b,
+        )
+        return "Y"
+    if state in {"P", "Y", "S"}:
+        return state
+    return "P"
+
+
+def _state_from_markers(markers: Sequence[str]) -> str:
+    if not markers:
+        return "G"
+    if "S" in markers:
+        return "r"
+    if "Y" in markers:
+        return "g"
+    return "G"
+
+
+def _evaluate_conflicts(tokens: Sequence[str]) -> Dict[str, str]:
+    if not tokens:
+        return {}
+    severity: Dict[str, List[str]] = defaultdict(list)
+    unique_tokens: List[str] = []
+    for token in tokens:
+        if token not in unique_tokens:
+            unique_tokens.append(token)
+    for idx, token_a in enumerate(unique_tokens):
+        for token_b in unique_tokens[idx + 1 :]:
+            state_a, state_b = GLOBAL_CONFLICT_MATRIX.relation(token_a, token_b)
+            severity[token_a].append(_normalize_conflict_state(token_a, token_b, state_a))
+            severity[token_b].append(_normalize_conflict_state(token_b, token_a, state_b))
+    return {token: _state_from_markers(severity.get(token, [])) for token in unique_tokens}
+
+
+def _reduce_states(states: Sequence[str]) -> str:
+    if not states:
+        return "r"
+    if "r" in states:
+        return "r"
+    if "g" in states:
+        return "g"
+    if "G" in states:
+        return "G"
+    return "r"
+
+
+def _midblock_ped_allowances(tokens: Iterable[str]) -> Set[str]:
+    allowed: Set[str] = set()
+    for token in tokens:
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        lower = cleaned.lower()
+        if lower == "pedx":
+            allowed.update({"N", "S"})
+            continue
+        if lower.startswith("pedx_"):
+            descriptor = cleaned.split("_", 1)[1]
+            orientations, _ = _parse_ped_descriptor(descriptor)
+            for orient in orientations:
+                if orient in {"N", "S"}:
+                    allowed.add(orient)
+    return allowed
+
+
+def _vehicle_group_active(
+    phase_state: Mapping[str, str],
+    movements: Sequence[str],
+    prefix: str,
+) -> bool:
+    for movement in movements:
+        if movement.startswith(prefix) and phase_state.get(movement, "r") in {"G", "g"}:
+            return True
+    return False
+
+
+def _midblock_orientation_for_movement(movement: str) -> str | None:
+    if not movement.startswith(PEDESTRIAN_PREFIX):
+        return None
+    lowered = movement.lower()
+    if "north" in lowered:
+        return "N"
+    if "south" in lowered:
+        return "S"
+    return None
+
+
+def _apply_midblock_overrides(
+    phase_state: Dict[str, str],
+    allowed_orients: Set[str],
+    *,
+    eb_active: bool,
+    wb_active: bool,
+    two_stage: bool,
+) -> None:
+    ped_groups: Dict[str, List[str]] = {"N": [], "S": []}
+    for movement in list(phase_state.keys()):
+        orientation = _midblock_orientation_for_movement(movement)
+        if orientation in ped_groups:
+            ped_groups[orientation].append(movement)
+
+    if not ped_groups["N"] and not ped_groups["S"]:
+        return
+
+    allowed = set(allowed_orients)
+    if not allowed:
+        allowed = set()
+
+    enforce_all_red = False
+    if allowed and not two_stage and allowed != {"N", "S"}:
+        enforce_all_red = True
+
+    for orient, names in ped_groups.items():
+        for name in names:
+            if enforce_all_red or orient not in allowed:
+                phase_state[name] = "r"
+                continue
+            if orient == "N" and eb_active:
+                phase_state[name] = "r"
+                continue
+            if orient == "S" and wb_active:
+                phase_state[name] = "r"
+                continue
+            if phase_state.get(name) == "r":
+                phase_state[name] = "G"
 
 
 def _apply_tail_substitution(
@@ -282,55 +603,68 @@ def _build_timelines(
         movement: ["r"] * cycle for movement in movements
     }
 
+    catalog = MovementCatalog(movements)
+
     available_movements = list(movements)
-    conflicts = profile.pedestrian_conflicts
     time_cursor = 0
 
     for phase in profile.phases:
-        tokens = list(phase.allow_movements)
-        veh_movements = _expand_vehicle_movements(tokens, available_movements)
-        ped_token_present = "pedestrian" in tokens
-
-        veh_state_map: Dict[str, str] = {}
-        for movement in veh_movements:
-            veh_state_map[movement] = "g" if movement.endswith("_R") else "G"
-
-        ped_state_map: Dict[str, str] = {}
-        for movement in movements:
-            if not movement.startswith(PEDESTRIAN_PREFIX):
+        phase_tokens = _expand_phase_tokens(phase.allow_movements, catalog)
+        midblock_ped_allow = (
+            _midblock_ped_allowances(phase.allow_movements) if program.is_midblock else set()
+        )
+        half_specific_bases: Set[str] = set()
+        for token in phase_tokens:
+            if "-half" not in token.raw_token.lower():
                 continue
-            allow = _pedestrian_allowed(
-                ped_name=movement,
-                vehicle_movements=veh_movements,
-                ped_token_present=ped_token_present,
-                conflicts=conflicts,
-            )
-            if allow:
-                ped_state_map[movement] = "G"
-            else:
-                ped_state_map[movement] = "r"
+            for movement in token.movements:
+                if movement.startswith(PEDESTRIAN_PREFIX):
+                    half_specific_bases.add(_ped_base(movement))
+        canonical_order = [token.canonical for token in phase_tokens]
+        token_states = _evaluate_conflicts(canonical_order)
 
-        if not program.two_stage_tll_control or not program.refuge_island_on_main:
+        movement_phase_states: Dict[str, List[str]] = defaultdict(list)
+        for token in phase_tokens:
+            state = token_states.get(token.canonical, "r")
+            for movement in token.movements:
+                movement_phase_states[movement].append(state)
+
+        phase_state: Dict[str, str] = {}
+        for movement in movements:
+            phase_state[movement] = _reduce_states(movement_phase_states.get(movement, []))
+
+        if program.is_midblock:
+            eb_active = _vehicle_group_active(phase_state, movements, "main_EB")
+            wb_active = _vehicle_group_active(phase_state, movements, "main_WB")
+            _apply_midblock_overrides(
+                phase_state,
+                midblock_ped_allow,
+                eb_active=eb_active,
+                wb_active=wb_active,
+                two_stage=bool(
+                    program.two_stage_tll_control and program.refuge_island_on_main
+                ),
+            )
+
+        if (not program.two_stage_tll_control or not program.refuge_island_on_main) and not program.is_midblock:
             grouped: Dict[str, List[str]] = defaultdict(list)
-            for name in ped_state_map:
-                base = _ped_base(name)
-                if base == name:
+            for movement in movements:
+                if not movement.startswith(PEDESTRIAN_PREFIX):
                     continue
-                grouped[base].append(name)
-            for names in grouped.values():
-                if len(names) < 2:
+                base = _ped_base(movement)
+                if base == movement:
                     continue
-                if any(ped_state_map[name] == "r" for name in names):
+                grouped[base].append(movement)
+            for base, names in grouped.items():
+                if len(names) < 2 or base in half_specific_bases:
+                    continue
+                if any(phase_state.get(name) == "r" for name in names):
                     for name in names:
-                        ped_state_map[name] = "r"
+                        phase_state[name] = "r"
                 else:
                     for name in names:
-                        ped_state_map[name] = "G"
-
-        phase_state = {}
-        phase_state.update({mv: "r" for mv in movements})
-        phase_state.update(ped_state_map)
-        phase_state.update(veh_state_map)
+                        if phase_state.get(name) != "r":
+                            phase_state[name] = "G"
 
         for offset in range(phase.duration_s):
             slot = (time_cursor + offset) % cycle
@@ -407,7 +741,6 @@ def render_tll_xml(
     defaults: Defaults,
     clusters: Sequence[Cluster],
     breakpoints: Sequence[int],
-    junction_template_by_id: Dict[str, JunctionTemplate],
     snap_rule: SnapRule,
     main_road: MainRoadConfig,
     lane_overrides: Sequence[LaneOverride],
@@ -417,7 +750,7 @@ def render_tll_xml(
 ) -> str:
     """Render a ``1-generated.tll.xml`` document with deterministic ordering."""
 
-    _ = (defaults, breakpoints, junction_template_by_id, snap_rule, main_road, lane_overrides)
+    _ = (defaults, breakpoints, snap_rule, main_road, lane_overrides)
 
     programs = _collect_programs(clusters, signal_profiles_by_kind)
     links_by_tl = _group_links_by_tl(connection_links)

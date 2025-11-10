@@ -11,7 +11,9 @@ sumo_optimise/
   conversion/
     pipeline.py            # Orchestrates the build (entry from CLI)
     cli/
-      main.py              # CLI entrypoint: python -m sumo_optimise.conversion.cli.main
+      main.py              # Combined CLI entrypoint (network + demand)
+      network.py           # Network-only CLI: python -m sumo_optimise.conversion.cli.network
+      demand.py            # Demand-only CLI: python -m sumo_optimise.conversion.cli.demand
     parser/
       spec_loader.py       # Load JSON + schema, map to domain models
     checks/
@@ -31,7 +33,7 @@ sumo_optimise/
       netconvert.py        # Two-step netconvert wrapper (optional)
       netedit.py           # Helper for launching netedit (optional)
     domain/
-      models.py            # Dataclasses/Enums: Snap, Main, Templates, Signals, Events, IR
+      models.py            # Dataclasses/Enums: Snap, Main, Junction configs, Signals, Events, IR
     utils/
       constants.py         # Shared constants (e.g., movement tokens)
       errors.py            # Exception taxonomy (schema/semantic/build/netconvert)
@@ -40,10 +42,10 @@ sumo_optimise/
     config/
       __init__.py          # Defaults/paths/version guard (if any)
     data/
-      schema.json          # JSON Schema (v1.3)
+      schema.json          # JSON Schema (v1.4)
 data/
   reference/
-    schema_v1.3_sample.json# Sample specification for smoke tests
+    SUMO_OPTX_v1.4_sample.json# Sample specification for smoke tests
 jsonschema/
   __init__.py                      # (Namespace stub; do not confuse with PyPI jsonschema)
 sumo_optimise.egg-info/            # Package metadata (editable install)
@@ -71,3 +73,14 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 ### Quick reference
 - Prefer orientation-neutral wording in new comments/docstrings (`north/south halves`, `begin/end positions`).
 - When documenting a new helper, include the literal identifier pattern and the validation rule (e.g., `main_edge_id` raising when direction/order clash) so downstream CLI and docs stay in sync.
+
+## 4) Demand & Config Outputs
+
+- The converter now emits a merged `demandflow.rou.xml` containing `<personFlow>` and `<flow>`
+  elements whenever pedestrian and/or vehicle demand CSVs are supplied.
+- Vehicle demand files mirror the pedestrian ones:
+  `veh_EP_demand_sampleUpd.csv` (signed `EndID` + `vehFlow`) and
+  `veh_jct_turn_weight_sampleUpd.csv` (`ToNorth|ToWest|ToSouth|ToEast` weights).
+  Main endpoints accept the `Node.Main.{E|W}_end` aliases; canonical IDs are resolved to the boundary nodes.
+- A minimal `config.sumocfg` is written alongside the PlainXML artefacts whenever a routes file exists.
+  It references `3-n+e+c+t.net.xml` (produced by the optional two-step `netconvert`) and `demandflow.rou.xml`.
