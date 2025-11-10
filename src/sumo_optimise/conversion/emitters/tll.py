@@ -340,20 +340,10 @@ def _expand_vehicle_tokens(
     normalized = _normalize_vehicle_token(token)
     phase_tokens: List[PhaseToken] = []
     for canonical, base in normalized:
-        movements = list(catalog.vehicle_tokens.get(base, []))
+        movements = catalog.vehicle_tokens.get(base, [])
         if not movements:
             continue
-        extended = list(movements)
-        if base.endswith("_R"):
-            u_base = base[:-2] + "_U"
-            extended.extend(catalog.vehicle_tokens.get(u_base, []))
-        seen: Set[str] = set()
-        deduped = []
-        for movement in extended:
-            if movement not in seen:
-                deduped.append(movement)
-                seen.add(movement)
-        phase_tokens.append(PhaseToken(canonical=canonical, movements=deduped, raw_token=token))
+        phase_tokens.append(PhaseToken(canonical=canonical, movements=movements, raw_token=token))
     return phase_tokens
 
 

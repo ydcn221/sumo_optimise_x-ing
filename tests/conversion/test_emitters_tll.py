@@ -139,7 +139,7 @@ def test_main_right_phase_enables_u_turn_when_available():
         ped_early_cutoff_s=0,
         yellow_duration_s=0,
         phases=[
-            SignalPhaseDef(duration_s=4, allow_movements=["EB_R_pg"]),
+            SignalPhaseDef(duration_s=4, allow_movements=["EB_R_pg", "EB_U_pg"]),
         ],
         kind=EventKind.CROSS,
         pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),

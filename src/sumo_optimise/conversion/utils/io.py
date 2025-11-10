@@ -9,12 +9,7 @@ from itertools import count
 from pathlib import Path
 from typing import Mapping, Sequence
 
-try:  # pragma: no cover - exercised indirectly
-    from sqids import Sqids
-except ModuleNotFoundError:  # pragma: no cover - fallback for environments without sqids
-    class Sqids:  # type: ignore[override]
-        def encode(self, values: Sequence[int]) -> str:
-            return "_".join(f"{value:x}" for value in values)
+from sqids import Sqids
 
 from ..domain.models import OutputDirectoryTemplate, OutputFileTemplates
 

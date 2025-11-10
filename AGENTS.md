@@ -84,3 +84,10 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
   Main endpoints accept the `Node.Main.{E|W}_end` aliases; canonical IDs are resolved to the boundary nodes.
 - A minimal `config.sumocfg` is written alongside the PlainXML artefacts whenever a routes file exists.
   It references `3-n+e+c+t.net.xml` (produced by the optional two-step `netconvert`) and `demandflow.rou.xml`.
+
+## 5) Codex Virtual Environment
+
+- Codex performs all local work inside `.codex-venv` (Python 3.12). If it is missing or stale, recreate it with `python3 -m venv --upgrade-deps .codex-venv` (add `--clear` when you need to blow away a broken env).
+- Immediately install project + test dependencies into that env via `.codex-venv/bin/pip install -e '.[test]'` so CLI runs, pytest, etc. all share the same toolchain.
+- Activate the environment for every Codex command sequence using `source .codex-venv/bin/activate`; leave any user-managed envs such as `.venv` untouched.
+- When documenting repro steps or scripts, assume `.codex-venv` is already active so paths like `python -m sumo_optimise.conversion.cli` resolve against the editable install.

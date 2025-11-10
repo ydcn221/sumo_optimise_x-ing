@@ -6,7 +6,7 @@ from typing import Iterable
 
 class Sqids:
     def __init__(self, alphabet: str | None = None, min_length: int | None = None) -> None:
-        self._alphabet = alphabet or "abcdefghijklmnopqrstuvwxyz0123456789"
+        self._alphabet = "ab"
         self._min_length = max(min_length or 0, 0)
 
     def encode(self, values: Iterable[int]) -> str:
