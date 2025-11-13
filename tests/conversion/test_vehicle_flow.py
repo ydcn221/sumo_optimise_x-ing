@@ -1,3 +1,4 @@
+import re
 from math import isclose
 from pathlib import Path
 from typing import Dict
@@ -76,6 +77,26 @@ def test_vehicle_flow_propagation_and_rendering() -> None:
     combined = render_routes_document(person_entries=None, vehicle_entries=entries)
     assert combined is not None
     assert "<flow" in combined
+
+
+def test_vehicle_flow_ids_remain_unique_for_duplicate_pairs() -> None:
+    row1 = EndpointDemandRow(endpoint_id="VehEnd_Minor_100_N_end", flow_per_hour=500.0, row_index=5)
+    row2 = EndpointDemandRow(endpoint_id="VehEnd_Minor_100_N_end", flow_per_hour=250.0, row_index=6)
+    flows = [
+        ("Node.Main.0.N", "Node.Main.200.S", 500.0, row1),
+        ("Node.Main.0.N", "Node.Main.200.S", 250.0, row2),
+    ]
+
+    entries = build_vehicle_flow_entries(
+        flows,
+        vehicle_pattern=PersonFlowPattern.STEADY,
+        simulation_end_time=1800.0,
+    )
+    ids = [re.search(r'id="([^"]+)"', entry).group(1) for entry in entries]
+    assert ids == [
+        "vf_Node.Main.0.N__Node.Main.200.S__0",
+        "vf_Node.Main.0.N__Node.Main.200.S__1",
+    ]
 
 
 def test_vehicle_od_reachability_filters_unreachable_pairs() -> None:

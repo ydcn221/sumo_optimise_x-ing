@@ -14,13 +14,14 @@ def build_vehicle_flow_entries(
     vehicle_pattern: PersonFlowPattern,
     simulation_end_time: float,
 ) -> List[str]:
-    counter_by_row = defaultdict(int)
+    counter_by_pair = defaultdict(int)
     entries: List[str] = []
     for origin, destination, value, row in flows:
-        row_key = row.row_index if row.row_index is not None else id(row)
-        seq = counter_by_row[row_key]
-        counter_by_row[row_key] += 1
+        pair_key = (origin, destination)
+        seq = counter_by_pair[pair_key]
+        counter_by_pair[pair_key] += 1
 
+        # Keep IDs stable and unique per OD pair: vf_{origin}__{destination}__{n}
         flow_id = f"vf_{origin}__{destination}__{seq}"
         attr = _format_pattern_attribute(vehicle_pattern, value)
         entry = (

@@ -120,12 +120,14 @@ def load_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonFlowPatte
                 errors.add(f"row {index}: SidewalkEndID is required")
                 continue
             if not flow_token:
-                errors.add(f"row {index}: PedFlow is required")
+                # Empty flow entries are intentionally ignored instead of treated as errors
                 continue
             try:
                 flow = float(flow_token)
             except ValueError:
                 errors.add(f"row {index}: PedFlow must be numeric (got {flow_token!r})")
+                continue
+            if flow == 0:
                 continue
             rows.append(
                 EndpointDemandRow(

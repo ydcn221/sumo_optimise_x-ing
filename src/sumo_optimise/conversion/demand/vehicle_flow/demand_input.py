@@ -104,12 +104,14 @@ def load_vehicle_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonF
                 errors.add(f"row {index}: EndID is required")
                 continue
             if not flow_token:
-                errors.add(f"row {index}: vehFlow is required")
+                # Skip empty vehicle flow cells; they do not contribute demand
                 continue
             try:
                 flow = float(flow_token)
             except ValueError:
                 errors.add(f"row {index}: vehFlow must be numeric (got {flow_token!r})")
+                continue
+            if flow == 0:
                 continue
             rows.append(
                 EndpointDemandRow(
