@@ -234,7 +234,7 @@ def test_two_stage_ped_split_distinguishes_halves():
     assert states == ["GrrG", "yrrG", "rgGG", "ryGG", "rrrr"]
 
 
-def test_half_tokens_respected_without_two_stage():
+def test_half_tokens_require_pairs_without_two_stage():
     profile = SignalProfileDef(
         id="half_profile",
         cycle_s=6,
@@ -277,7 +277,7 @@ def test_half_tokens_respected_without_two_stage():
     xml = _render(clusters=[cluster], profiles=profiles, links=links)
     states = _extract_states(xml)
 
-    assert states == ["Gr", "rG"]
+    assert states == ["rr"]
 
 
 def test_movement_stays_green_across_phases():

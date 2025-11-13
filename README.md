@@ -125,7 +125,7 @@ Tokens fall into two groups:
   adjacent crosswalk should be red or green while that movement is active, letting the
   conflict table differentiate between yielding versus protected turns.
 * **Pedestrian:** `PedX_{N|E|S|W…}` to address one or more crosswalks at once (order-free, e.g., `PedX_NS`, `PedX_NESW`), or the more granular
-  `XE_N-half` / `XW_S-half` tokens emitted by the replace table for two-stage crossings. Single-direction tokens can optionally target one half via `PedX_E_south`, etc.
+  `XE_N-half` / `XW_S-half` tokens emitted by the replace table for two-stage crossings. Single-direction tokens can optionally target one half via `PedX_E_south`, etc.; however, for single-stage crossings (no refuge island or `two_stage_tll_control=false`) both halves must be granted in the same phase or the converter will keep the entire crossing red.
 
 Internally the converter maps any legacy tokens (`main_L`, `EB_T`, `pedestrian`, etc.)
 onto the new identifiers so existing specs continue to load, but the resolver now

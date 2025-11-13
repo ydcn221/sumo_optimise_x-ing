@@ -603,13 +603,6 @@ def _build_timelines(
         midblock_ped_allow = (
             _midblock_ped_allowances(phase.allow_movements) if program.is_midblock else set()
         )
-        half_specific_bases: Set[str] = set()
-        for token in phase_tokens:
-            if "-half" not in token.raw_token.lower():
-                continue
-            for movement in token.movements:
-                if movement.startswith(PEDESTRIAN_PREFIX):
-                    half_specific_bases.add(_ped_base(movement))
         canonical_order = [token.canonical for token in phase_tokens]
         token_states = _evaluate_conflicts(canonical_order)
 
@@ -646,8 +639,9 @@ def _build_timelines(
                     continue
                 grouped[base].append(movement)
             for base, names in grouped.items():
-                if len(names) < 2 or base in half_specific_bases:
+                if len(names) < 2:
                     continue
+                # Single-stage crossings only turn green when every half is permitted together.
                 if any(phase_state.get(name) == "r" for name in names):
                     for name in names:
                         phase_state[name] = "r"
