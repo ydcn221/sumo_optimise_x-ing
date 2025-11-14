@@ -127,6 +127,11 @@ Tokens fall into two groups:
 * **Pedestrian:** `PedX_{N|E|S|W…}` to address one or more crosswalks at once (order-free, e.g., `PedX_NS`, `PedX_NESW`), or the more granular
   `XE_N-half` / `XW_S-half` tokens emitted by the replace table for two-stage crossings. Single-direction tokens can optionally target one half via `PedX_E_south`, etc.; however, for single-stage crossings (no refuge island or `two_stage_tll_control=false`) both halves must be granted in the same phase or the converter will keep the entire crossing red.
 
+Pedestrian early cut-off handling follows SUMO’s expectations: `ped_early_cutoff_s`
+only trims pedestrian walks that overlap an approaching vehicle green. Phases that
+are exclusively pedestrian (including two-stage half crossings) keep their full
+duration even when the cut-off is longer than the phase length.
+
 Internally the converter maps any legacy tokens (`main_L`, `EB_T`, `pedestrian`, etc.)
 onto the new identifiers so existing specs continue to load, but the resolver now
 computes the final `G/g/r` state purely from the table:

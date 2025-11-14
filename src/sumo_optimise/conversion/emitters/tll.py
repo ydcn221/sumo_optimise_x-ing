@@ -107,7 +107,13 @@ def _collect_programs(
 
 
 def _ped_base(name: str) -> str:
-    for suffix in ("_EB", "_WB", "_north", "_south"):
+    """Return the grouping key for half-split crossings."""
+
+    if name.startswith(("ped_main_", "ped_mid_")):
+        for suffix in ("_north", "_south"):
+            if name.endswith(suffix):
+                return name[: -len(suffix)]
+    for suffix in ("_EB", "_WB"):
         if name.endswith(suffix):
             return name[: -len(suffix)]
     return name
@@ -552,10 +558,26 @@ def _apply_tail_substitution(
         return
 
     cycle = len(next(iter(states.values()))) if states else 0
+    if cycle == 0:
+        return
+
+    vehicle_green: List[bool] = [False] * cycle
+    if ped_cutoff > 0:
+        for movement, timeline in states.items():
+            if movement.startswith(PEDESTRIAN_PREFIX):
+                continue
+            for idx, state in enumerate(timeline):
+                if state in ("G", "g"):
+                    vehicle_green[idx] = True
 
     for movement, timeline in states.items():
         if movement.startswith(PEDESTRIAN_PREFIX):
             if ped_cutoff <= 0:
+                continue
+            # Only trim pedestrian phases that actually overlap a vehicle green; purely
+            # pedestrian windows (common for two-stage halves) should retain their full duration.
+            overlaps_vehicle = any(vehicle_green[idx] and timeline[idx] == "G" for idx in range(cycle))
+            if not overlaps_vehicle:
                 continue
             for idx in range(cycle):
                 nxt = timeline[(idx + 1) % cycle]
@@ -589,6 +611,17 @@ def _build_timelines(
         return {}
 
     movements = [link.movement for link in links]
+    movement_halves: Dict[str, Set[str]] = {
+        movement: _ped_half_tokens_for_movement(movement) for movement in movements
+    }
+    movements_by_base: Dict[str, List[str]] = defaultdict(list)
+    halves_by_base: Dict[str, Set[str]] = defaultdict(set)
+    for movement in movements:
+        base = _ped_base(movement)
+        if base == movement:
+            continue
+        movements_by_base[base].append(movement)
+        halves_by_base[base].update(movement_halves.get(movement, set()))
     movement_states: Dict[str, List[str]] = {
         movement: ["r"] * cycle for movement in movements
     }
@@ -607,10 +640,18 @@ def _build_timelines(
         token_states = _evaluate_conflicts(canonical_order)
 
         movement_phase_states: Dict[str, List[str]] = defaultdict(list)
+        movement_granted_halves: Dict[str, Set[str]] = defaultdict(set)
+        base_granted_halves: Dict[str, Set[str]] = defaultdict(set)
         for token in phase_tokens:
             state = token_states.get(token.canonical, "r")
             for movement in token.movements:
                 movement_phase_states[movement].append(state)
+                halves = movement_halves.get(movement)
+                if halves and token.canonical in halves:
+                    movement_granted_halves[movement].add(token.canonical)
+                base = _ped_base(movement)
+                if base != movement:
+                    base_granted_halves[base].add(token.canonical)
 
         phase_state: Dict[str, str] = {}
         for movement in movements:
@@ -629,19 +670,30 @@ def _build_timelines(
                 ),
             )
 
-        if (not program.two_stage_tll_control or not program.refuge_island_on_main) and not program.is_midblock:
-            grouped: Dict[str, List[str]] = defaultdict(list)
-            for movement in movements:
-                if not movement.startswith(PEDESTRIAN_PREFIX):
+        for movement, required_halves in movement_halves.items():
+            if not required_halves:
+                continue
+            granted = movement_granted_halves.get(movement, set())
+            if not required_halves.issubset(granted):
+                phase_state[movement] = "r"
+
+        single_stage_crossing = (
+            (not program.two_stage_tll_control or not program.refuge_island_on_main)
+            and not program.is_midblock
+        )
+        if single_stage_crossing:
+            for base, names in movements_by_base.items():
+                required = halves_by_base.get(base, set())
+                if not required:
                     continue
-                base = _ped_base(movement)
-                if base == movement:
-                    continue
-                grouped[base].append(movement)
-            for base, names in grouped.items():
+                granted = base_granted_halves.get(base, set())
+                if not required.issubset(granted):
+                    for name in names:
+                        phase_state[name] = "r"
+
+            for base, names in movements_by_base.items():
                 if len(names) < 2:
                     continue
-                # Single-stage crossings only turn green when every half is permitted together.
                 if any(phase_state.get(name) == "r" for name in names):
                     for name in names:
                         phase_state[name] = "r"

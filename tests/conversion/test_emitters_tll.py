@@ -280,6 +280,128 @@ def test_half_tokens_require_pairs_without_two_stage():
     assert states == ["rr"]
 
 
+def test_partial_orientation_tokens_hold_minor_crossings_red():
+    allow = ["PedX_E_S-half", "PedX_W_N-half", "PedX_S_E-half", "PedX_N_W-half"]
+    profile = SignalProfileDef(
+        id="multi_half",
+        cycle_s=6,
+        ped_early_cutoff_s=0,
+        yellow_duration_s=0,
+        phases=[SignalPhaseDef(duration_s=6, allow_movements=allow)],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"multi_half": profile}}
+    cluster = _cluster_with_signal(
+        pos=200,
+        profile_id="multi_half",
+        kind=EventKind.CROSS,
+        two_stage=False,
+        refuge=False,
+    )
+    links = [
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_main_east_north",
+            slot_index=0,
+            link_index=0,
+            kind="crossing",
+            element_id="ped_e_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_main_east_south",
+            slot_index=1,
+            link_index=1,
+            kind="crossing",
+            element_id="ped_e_s",
+        ),
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_main_west_north",
+            slot_index=2,
+            link_index=2,
+            kind="crossing",
+            element_id="ped_w_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_main_west_south",
+            slot_index=3,
+            link_index=3,
+            kind="crossing",
+            element_id="ped_w_s",
+        ),
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_minor_north",
+            slot_index=4,
+            link_index=4,
+            kind="crossing",
+            element_id="ped_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(200),
+            movement="ped_minor_south",
+            slot_index=5,
+            link_index=5,
+            kind="crossing",
+            element_id="ped_s",
+        ),
+    ]
+
+    xml = _render(clusters=[cluster], profiles=profiles, links=links)
+    states = _extract_states(xml)
+
+    assert states == ["rrrrrr"]
+
+
+def test_ped_cutoff_preserves_ped_only_half_phase():
+    profile = SignalProfileDef(
+        id="ped_only",
+        cycle_s=4,
+        ped_early_cutoff_s=3,
+        yellow_duration_s=0,
+        phases=[
+            SignalPhaseDef(duration_s=2, allow_movements=["PedX_W_N-half", "PedX_E_S-half"]),
+            SignalPhaseDef(duration_s=2, allow_movements=[]),
+        ],
+        kind=EventKind.CROSS,
+        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
+    )
+    profiles = {EventKind.CROSS.value: {"ped_only": profile}}
+    cluster = _cluster_with_signal(
+        pos=210,
+        profile_id="ped_only",
+        kind=EventKind.CROSS,
+        two_stage=True,
+        refuge=True,
+    )
+    links = [
+        SignalLink(
+            tl_id=cluster_id(210),
+            movement="ped_main_west_north",
+            slot_index=0,
+            link_index=0,
+            kind="crossing",
+            element_id="ped_w_n",
+        ),
+        SignalLink(
+            tl_id=cluster_id(210),
+            movement="ped_main_east_south",
+            slot_index=1,
+            link_index=1,
+            kind="crossing",
+            element_id="ped_e_s",
+        ),
+    ]
+
+    xml = _render(clusters=[cluster], profiles=profiles, links=links)
+    states = _extract_states(xml)
+
+    assert states[0] == "GG"
+
+
 def test_movement_stays_green_across_phases():
     profile = SignalProfileDef(
         id="profile",
