@@ -56,6 +56,8 @@ def run_two_step_netconvert(
         "--lefthand",
         "--sidewalks.guess",
         "--no-internal-links",
+        "--no-turnarounds.fringe",
+        "true",
         "--node-files",
         _cli_path(nodes_file, outdir),
         "--edge-files",

@@ -9,6 +9,7 @@ from sumo_optimise.conversion.sumo_integration import netconvert
 from sumo_optimise.conversion.utils.constants import (
     CONNECTIONS_FILE_NAME,
     EDGES_FILE_NAME,
+    NETWORK_FILE_NAME,
     NODES_FILE_NAME,
     TLL_FILE_NAME,
 )
@@ -52,7 +53,7 @@ def test_run_two_step_netconvert_includes_tll_file(tmp_path: Path, monkeypatch: 
         connections,
         tll,
         plain_prefix="plain",
-        network_output=outdir / "3-n+e+c+t.net.xml",
+        network_output=outdir / NETWORK_FILE_NAME,
     )
 
     assert len(commands) == 2
@@ -63,3 +64,5 @@ def test_run_two_step_netconvert_includes_tll_file(tmp_path: Path, monkeypatch: 
 
     step1 = commands[0]
     assert "--no-internal-links" in step1
+    assert "--no-turnarounds.fringe" in step1
+    assert step1[step1.index("--no-turnarounds.fringe") + 1] == "true"

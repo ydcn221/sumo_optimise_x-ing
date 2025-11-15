@@ -10,6 +10,7 @@ from sumo_optimise.conversion.domain.models import (
     OutputFileTemplates,
 )
 from sumo_optimise.conversion.pipeline import build_and_persist
+from sumo_optimise.conversion.utils.constants import NETWORK_FILE_NAME
 
 
 SPEC_PATH = Path("data/reference/SUMO_OPTX_demo(connection_build)/SUMO_OPTX_v1.4_sample.json")
@@ -47,7 +48,7 @@ def test_demand_run_reuses_existing_network(tmp_path):
 
     assert result.manifest_path is not None
     outdir = result.manifest_path.parent
-    copied_net = outdir / "3-n+e+c+t.net.xml"
+    copied_net = outdir / NETWORK_FILE_NAME
     assert copied_net.exists()
     assert copied_net.read_text(encoding="utf-8") == content
     assert result.sumocfg_path is not None and result.sumocfg_path.exists()
