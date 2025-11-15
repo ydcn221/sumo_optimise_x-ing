@@ -30,6 +30,10 @@ def _reasons() -> dict[int, BreakpointInfo]:
     return {100: BreakpointInfo(pos=100, reasons={"cluster"})}
 
 
+def _lane_change_reasons() -> dict[int, BreakpointInfo]:
+    return {100: BreakpointInfo(pos=100, reasons={"lane_change"})}
+
+
 def _extract_join_line(xml: str) -> str:
     for line in xml.splitlines():
         if line.strip().startswith("<join"):
@@ -86,6 +90,7 @@ def test_signalised_cluster_sets_traffic_light_attributes() -> None:
     join_line = _extract_join_line(xml)
     assert 'type="traffic_light"' in join_line
     assert f'tl="{tl_id}"' in join_line
+    assert 'keepClear' not in join_line
 
 
 def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
@@ -122,6 +127,20 @@ def test_unsignalised_cluster_has_no_traffic_light_attributes() -> None:
     join_line = _extract_join_line(xml)
     assert 'type="traffic_light"' not in join_line
     assert ' tl="' not in join_line
+    assert 'keepClear="false"' in join_line
+
+
+def test_lane_change_only_join_sets_keepclear_false() -> None:
+    xml = render_nodes_xml(
+        main_road=_make_main_road(),
+        defaults=_make_defaults(),
+        clusters=[],
+        breakpoints=_breakpoints(),
+        reason_by_pos=_lane_change_reasons(),
+    )
+
+    join_line = _extract_join_line(xml)
+    assert 'keepClear="false"' in join_line
 
 
 def test_main_endpoints_marked_as_outer_fringe() -> None:

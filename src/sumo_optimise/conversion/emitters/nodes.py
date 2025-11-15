@@ -29,6 +29,16 @@ def render_nodes_xml(
         for cluster in clusters
         if any(bool(event.signalized) for event in cluster.events)
     }
+    unsignalised_positions = {
+        cluster.pos_m
+        for cluster in clusters
+        if any(event.signalized is False for event in cluster.events if event.type.value in ("tee", "cross"))
+    }
+    lane_change_only_positions = {
+        pos
+        for pos, info in reason_by_pos.items()
+        if info.reasons and info.reasons <= {"lane_change"}
+    }
 
     def _attrs_for_main(half: str, pos: int, y: float) -> str:
         attrs = [
@@ -63,6 +73,11 @@ def render_nodes_xml(
         if pos in signalised_positions:
             attrs.append(("type", "traffic_light"))
             attrs.append(("tl", cluster_id(pos)))
+        keep_clear = True
+        if pos in unsignalised_positions or pos in lane_change_only_positions:
+            keep_clear = False
+        if not keep_clear:
+            attrs.append(("keepClear", "false"))
         attr_text = " ".join(f'{name}="{value}"' for name, value in attrs)
         lines.append(f"  <join {attr_text}/>  <!-- reasons: {reasons_text} -->")
 

@@ -83,7 +83,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
   `veh_jct_turn_weight_sampleUpd.csv` (`ToNorth|ToWest|ToSouth|ToEast` weights).
   Main endpoints accept the `Node.Main.{E|W}_end` aliases; canonical IDs are resolved to the boundary nodes.
 - A minimal `config.sumocfg` is written alongside the PlainXML artefacts whenever a routes file exists.
-  It references `3-n+e+c+t.net.xml` (produced by the optional two-step `netconvert`) and `demandflow.rou.xml`.
+  It references `3-assembled.net.xml` (produced by the optional two-step `netconvert`) and `demandflow.rou.xml`.
 
 ## 5) Codex Virtual Environment
 

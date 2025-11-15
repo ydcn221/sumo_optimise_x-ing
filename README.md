@@ -1,6 +1,6 @@
 # SUMO Linear Corridor Network Converter
 
-Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.4)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-n+e+c+t.net.xml`.
+Generate a SUMO network (PlainXML) for a **single, straight main road** with orthogonal minor roads (tee/cross intersections) and mid-block pedestrian crossings from a **JSON specification (v1.4)**. The converter validates the JSON, plans lanes and crossings, emits `1-generated.nod.xml` / `1-generated.edg.xml` / `1-generated.con.xml` / `1-generated.tll.xml`, and can optionally run `netconvert` to build a runnable `3-assembled.net.xml`.
 
 > This repository hosts the modular corridor converter introduced for schema v1.4.
 
@@ -152,6 +152,7 @@ Some setups run it automatically. If not, you can run manually:
 $ netconvert --lefthand \
   --sidewalks.guess \
   --no-internal-links \
+  --no-turnarounds.fringe true \
   --node-files 1-generated.nod.xml \
   --edge-files 1-generated.edg.xml \
   --plain-output-prefix 2-cooked
@@ -162,10 +163,10 @@ $ netconvert --lefthand \
   --edge-files 2-cooked.edg.xml \
   --connection-files 1-generated.con.xml \
   --tllogic-files 1-generated.tll.xml \
-  --output 3-n+e+c+t.net.xml
+  --output 3-assembled.net.xml
 ```
 
-Open `3-n+e+c+t.net.xml` in **SUMO-GUI** or **netedit** to inspect.
+Open `3-assembled.net.xml` in **SUMO-GUI** or **netedit** to inspect.
 
 ---
 
@@ -214,7 +215,7 @@ Key points:
   minor north east-side endpoints, and minor south west-side endpoints, and at
   `length - offset` for their opposite halves so that flows spawn and terminate
   at the physically correct sidewalk ends.
-- The emitted `config.sumocfg` references the cooked net (`3-n+e+c+t.net.xml`) and
+- The emitted `config.sumocfg` references the cooked net (`3-assembled.net.xml`) and
   the merged routes file so you can immediately launch simulations once the net
   exists (via the two-step `netconvert` or any other pipeline).
 - Need placeholder spreadsheets? Add `--generate-demand-templates` to emit
@@ -226,7 +227,7 @@ Key points:
 | Task | Entry point | Example |
 | --- | --- | --- |
 | Network build only | `python -m sumo_optimise.conversion.cli.network SPEC.json [flags]` | `python -m sumo_optimise.conversion.cli.network data/.../SUMO_OPTX_v1.4_sample.json --run-netconvert --run-netedit` |
-| Demand build only (reusing an existing network) | `python -m sumo_optimise.conversion.cli.demand SPEC.json --ped-endpoint-demand ... --ped-junction-turn-weight ... --veh-endpoint-demand ... --veh-junction-turn-weight ... [--network-input path/to/3-n+e+c+t.net.xml] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.demand spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --network-input ./networks/base.net.xml --run-sumo-gui` |
+| Demand build only (reusing an existing network) | `python -m sumo_optimise.conversion.cli.demand SPEC.json --ped-endpoint-demand ... --ped-junction-turn-weight ... --veh-endpoint-demand ... --veh-junction-turn-weight ... [--network-input path/to/3-assembled.net.xml] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.demand spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --network-input ./networks/base.net.xml --run-sumo-gui` |
 | Full pipeline (network + demand) | `python -m sumo_optimise.conversion.cli.main SPEC.json [demand flags] [--run-netconvert] [--run-sumo-gui]` | `python -m sumo_optimise.conversion.cli.main spec.json --ped-endpoint-demand ped.csv --ped-junction-turn-weight ped_turn.csv --veh-endpoint-demand veh.csv --veh-junction-turn-weight veh_turn.csv --run-netconvert --run-netedit --run-sumo-gui` |
 
 Newly added options:
@@ -356,7 +357,7 @@ Typical flags (names may vary by release):
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
-  * `2-cooked.*` PlainXML and `3-n+e+c+t.net.xml` — if `netconvert` runs.
+  * `2-cooked.*` PlainXML and `3-assembled.net.xml` — if `netconvert` runs.
 
 ---
 
