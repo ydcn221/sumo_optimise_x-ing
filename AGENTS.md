@@ -91,3 +91,7 @@ sumo_optimise.egg-info/            # Package metadata (editable install)
 - Immediately install project + test dependencies into that env via `.codex-venv/bin/pip install -e '.[test]'` so CLI runs, pytest, etc. all share the same toolchain.
 - Activate the environment for every Codex command sequence using `source .codex-venv/bin/activate`; leave any user-managed envs such as `.venv` untouched.
 - When documenting repro steps or scripts, assume `.codex-venv` is already active so paths like `python -m sumo_optimise.conversion.cli` resolve against the editable install.
+
+## 6) Workspace helpers
+
+- The `workspace/` directory intentionally keeps standalone scripts/examples that interact with the converter **only through the published CLI entry points**. Do not import `sumo_optimise` modules from those helpers; shell out with `python -m sumo_optimise.conversion.cli.*` (or equivalent) so they stay decoupled from internal APIs.
