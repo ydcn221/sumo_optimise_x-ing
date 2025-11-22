@@ -102,9 +102,12 @@ def test_minor_straight_removed_when_median_continuous():
     in_edge = minor_edge_id(30, "to", "N")
     straight_edge = minor_edge_id(30, "from", "S")
     left_edge = main_edge_id("EB", 30, 60)
+    right_edge = main_edge_id("WB", 30, 0)
 
     assert f'from="{in_edge}" to="{straight_edge}"' not in xml
     assert f'from="{in_edge}" to="{left_edge}"' in xml
+    # Continuous median blocks the minor right turn as well.
+    assert f'from="{in_edge}" to="{right_edge}"' not in xml
 
 
 def test_link_metadata_orders_connections_for_signal():

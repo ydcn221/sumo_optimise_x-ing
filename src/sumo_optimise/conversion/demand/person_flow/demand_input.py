@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Union
 
 from ...domain.models import (
-    CardinalDirection,
     EndpointDemandRow,
     JunctionTurnWeights,
-    PedestrianSide,
     PersonFlowPattern,
+    TurnMovement,
 )
 from ...utils.errors import DemandValidationError
 
@@ -23,15 +22,15 @@ _LABEL_COLUMN = "Label"
 _PATTERN_KEY = "Pattern"
 
 _TURN_WEIGHT_ID_COLUMN = "JunctionID"
-_TURN_WEIGHT_COLUMNS: Dict[str, Tuple[CardinalDirection, PedestrianSide]] = {
-    "ToNorth_EastSide": (CardinalDirection.NORTH, PedestrianSide.EAST_SIDE),
-    "ToNorth_WestSide": (CardinalDirection.NORTH, PedestrianSide.WEST_SIDE),
-    "ToWest_NorthSide": (CardinalDirection.WEST, PedestrianSide.NORTH_SIDE),
-    "ToWest_SouthSide": (CardinalDirection.WEST, PedestrianSide.SOUTH_SIDE),
-    "ToSouth_WestSide": (CardinalDirection.SOUTH, PedestrianSide.WEST_SIDE),
-    "ToSouth_EastSide": (CardinalDirection.SOUTH, PedestrianSide.EAST_SIDE),
-    "ToEast_SouthSide": (CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE),
-    "ToEast_NorthSide": (CardinalDirection.EAST, PedestrianSide.NORTH_SIDE),
+_MAIN_TURN_COLUMNS: Dict[str, TurnMovement] = {
+    "Main_L": TurnMovement.LEFT,
+    "Main_T": TurnMovement.THROUGH,
+    "Main_R": TurnMovement.RIGHT,
+}
+_MINOR_TURN_COLUMNS: Dict[str, TurnMovement] = {
+    "Minor_L": TurnMovement.LEFT,
+    "Minor_T": TurnMovement.THROUGH,
+    "Minor_R": TurnMovement.RIGHT,
 }
 
 
@@ -159,7 +158,7 @@ def load_junction_turn_weights(source: JunctionTurnWeightSource) -> Dict[str, Ju
 
     try:
         reader = csv.DictReader(stream)
-        required = {_TURN_WEIGHT_ID_COLUMN, *_TURN_WEIGHT_COLUMNS.keys()}
+        required = {_TURN_WEIGHT_ID_COLUMN, *_MAIN_TURN_COLUMNS.keys(), *_MINOR_TURN_COLUMNS.keys()}
         missing = required - set(reader.fieldnames or [])
         if missing:
             errors.add(f"missing columns: {', '.join(sorted(missing))}")
@@ -174,9 +173,10 @@ def load_junction_turn_weights(source: JunctionTurnWeightSource) -> Dict[str, Ju
                 errors.add(f"row {index}: duplicate JunctionID {junction_id!r}")
                 continue
 
-            weights: Dict[Tuple[CardinalDirection, PedestrianSide], float] = {}
+            main_weights: Dict[TurnMovement, float] = {}
+            minor_weights: Dict[TurnMovement, float] = {}
             parse_errors: List[str] = []
-            for column, key in _TURN_WEIGHT_COLUMNS.items():
+            for column, movement in {**_MAIN_TURN_COLUMNS, **_MINOR_TURN_COLUMNS}.items():
                 token = (raw_row.get(column) or "").strip()
                 if not token:
                     parse_errors.append(f"{column} missing value")
@@ -186,13 +186,20 @@ def load_junction_turn_weights(source: JunctionTurnWeightSource) -> Dict[str, Ju
                 except ValueError:
                     parse_errors.append(f"{column} must be numeric (got {token!r})")
                     continue
-                weights[key] = weight
+                if column in _MAIN_TURN_COLUMNS:
+                    main_weights[movement] = weight
+                else:
+                    minor_weights[movement] = weight
 
             if parse_errors:
                 errors.add(f"row {index} ({junction_id}): " + "; ".join(parse_errors))
                 continue
 
-            turn_weights[junction_id] = JunctionTurnWeights(junction_id=junction_id, weights=weights)
+            turn_weights[junction_id] = JunctionTurnWeights(
+                junction_id=junction_id,
+                main=main_weights,
+                minor=minor_weights,
+            )
     finally:
         if should_close:
             stream.close()

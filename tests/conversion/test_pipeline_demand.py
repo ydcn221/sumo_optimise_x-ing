@@ -30,15 +30,27 @@ def test_demand_run_reuses_existing_network(tmp_path):
     run_name = "demo"
     (root / run_name).mkdir(parents=True, exist_ok=True)
 
+    # Write L/T/R junction CSVs into tmp_path to match new format
+    ped_junction_csv = tmp_path / "ped_jct_turn_weight.csv"
+    veh_junction_csv = tmp_path / "veh_jct_turn_weight.csv"
+    ped_junction_csv.write_text(
+        "JunctionID,Main_L,Main_T,Main_R,Minor_L,Minor_T,Minor_R\nCluster.100,1,1,1,1,0,1\n",
+        encoding="utf-8",
+    )
+    veh_junction_csv.write_text(
+        "JunctionID,Main_L,Main_T,Main_R,Minor_L,Minor_T,Minor_R\nCluster.100,1,1,1,1,0,1\n",
+        encoding="utf-8",
+    )
+
     options = BuildOptions(
         schema_path=SCHEMA_PATH,
         output_template=OutputDirectoryTemplate(root=str(root), run=run_name),
         output_files=OutputFileTemplates(),
         demand=DemandOptions(
             ped_endpoint_csv=PED_ENDPOINT_CSV,
-            ped_junction_turn_weight_csv=PED_JUNCTION_CSV,
+            ped_junction_turn_weight_csv=ped_junction_csv,
             veh_endpoint_csv=VEH_ENDPOINT_CSV,
-            veh_junction_turn_weight_csv=VEH_JUNCTION_CSV,
+            veh_junction_turn_weight_csv=veh_junction_csv,
             simulation_end_time=3600.0,
         ),
         network_input=network_input,

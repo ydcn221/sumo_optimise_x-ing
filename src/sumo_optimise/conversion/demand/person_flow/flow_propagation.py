@@ -4,7 +4,13 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Deque, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
-from ...domain.models import CardinalDirection, EndpointDemandRow, JunctionTurnWeights, PedestrianSide
+from ...domain.models import (
+    CardinalDirection,
+    EndpointDemandRow,
+    JunctionTurnWeights,
+    PedestrianSide,
+    TurnMovement,
+)
 from ...utils.errors import DemandValidationError
 from .graph_builder import GraphType
 from .identifier import parse_main_ped_endpoint_id
@@ -76,7 +82,7 @@ def _opposite_cardinal(cardinal: CardinalDirection) -> CardinalDirection:
     return mapping[cardinal]
 
 
-def _incoming_entry_direction(
+def _incoming_travel_direction(
     graph: GraphType,
     incoming: Optional[EdgeRef],
 ) -> Optional[CardinalDirection]:
@@ -84,8 +90,7 @@ def _incoming_entry_direction(
         return None
     prev_node, node, key = incoming
     edge_data = graph[prev_node][node][key]
-    travel_dir = _edge_direction(graph, prev_node, node, edge_data)
-    return _opposite_cardinal(travel_dir)
+    return _edge_direction(graph, prev_node, node, edge_data)
 
 
 def _main_position_bounds(graph: GraphType) -> Optional[Tuple[int, int]]:
@@ -137,114 +142,165 @@ def _graph_node_for_endpoint(
     return candidate
 
 
-def _half_for_side(side: PedestrianSide) -> Optional[str]:
-    if side == PedestrianSide.NORTH_SIDE:
-        return "N"
-    if side == PedestrianSide.SOUTH_SIDE:
-        return "S"
-    return None
-
-
-def _is_main_crosswalk_edge(node: str, neighbor: str) -> bool:
-    node_sig = _main_endpoint_signature(node)
-    neighbor_sig = _main_endpoint_signature(neighbor)
-    if not node_sig or not neighbor_sig:
-        return False
-    node_pos, node_half = node_sig
-    neighbor_pos, neighbor_half = neighbor_sig
-    return node_pos == neighbor_pos and node_half != neighbor_half
-
-
-def _candidate_edges_for_turn_weight(
-    graph: GraphType,
-    *,
-    node: str,
-    neighbors: List[Tuple[str, int, Mapping[str, object]]],
-    direction: CardinalDirection,
-    side: PedestrianSide,
-) -> List[Tuple[str, int, Mapping[str, object], bool]]:
-    direct: List[Tuple[str, int, Mapping[str, object], bool]] = []
-    for neighbor, key, edge_data in neighbors:
-        current_direction = _edge_direction(graph, node, neighbor, edge_data)
-        current_side = edge_data.get("side")
-        if not isinstance(current_side, PedestrianSide):
-            raise DemandValidationError(f"edge {node}->{neighbor} missing pedestrian side metadata")
-        if current_direction == direction and current_side == side:
-            direct.append((neighbor, key, edge_data, False))
-    if direct:
-        return direct
-
-    if direction in {CardinalDirection.EAST, CardinalDirection.WEST}:
-        target_half = _half_for_side(side)
-        node_sig = _main_endpoint_signature(node)
-        if not target_half or not node_sig:
-            return []
-        node_pos, node_half = node_sig
-        if node_half == target_half:
-            return []
-        for neighbor, key, edge_data in neighbors:
-            current_direction = _edge_direction(graph, node, neighbor, edge_data)
-            if current_direction not in {CardinalDirection.NORTH, CardinalDirection.SOUTH}:
-                continue
-            if not _is_main_crosswalk_edge(node, neighbor):
-                continue
-            cross_side = edge_data.get("side")
-            if not isinstance(cross_side, PedestrianSide):
-                raise DemandValidationError(f"edge {node}->{neighbor} missing pedestrian side metadata")
-            neighbor_sig = _main_endpoint_signature(neighbor)
-            if not neighbor_sig:
-                continue
-            neighbor_pos, neighbor_half = neighbor_sig
-            if neighbor_pos == node_pos and neighbor_half == target_half:
-                neighbor_neighbors = _collect_neighbors(graph, neighbor)
-                has_forward = any(
-                    _edge_direction(graph, neighbor, next_neighbor, next_data) == direction
-                    and next_data.get("side") == side
-                    for next_neighbor, next_key, next_data in neighbor_neighbors
-                )
-                return [(neighbor, key, edge_data, has_forward)]
-    return []
-
-
 def _distribute_with_turn_weights(
     graph: GraphType,
     *,
     node: str,
     neighbors: List[Tuple[str, int, Mapping[str, object]]],
-    incoming_direction: Optional[CardinalDirection],
-    turn_weights: JunctionTurnWeights,
+    incoming: Optional[EdgeRef],
+    turn_weights: Optional[JunctionTurnWeights],
 ) -> List[Tuple[str, int, float, Optional[Directive]]]:
-    weighted: List[Tuple[str, int, float, Optional[Directive]]] = []
-    total_weight = 0.0
+    if incoming is None:
+        return _default_distributions(graph, node=node, neighbors=neighbors, incoming=None)
 
-    for (direction, side), weight in turn_weights.weights.items():
-        if weight <= 0.0:
-            continue
-        if incoming_direction is not None and direction == incoming_direction:
-            continue
-        candidates = _candidate_edges_for_turn_weight(
-            graph,
-            node=node,
-            neighbors=neighbors,
-            direction=direction,
-            side=side,
+    incoming_dir = _incoming_travel_direction(graph, incoming)
+    if incoming_dir is None:
+        return _default_distributions(graph, node=node, neighbors=neighbors, incoming=incoming)
+
+    approach = _approach_for_pedestrian(graph, incoming)
+    if turn_weights is None:
+        movement_weights = _default_pedestrian_movement_weights(approach)
+    else:
+        movement_weights = _movement_weights_for_pedestrian(
+            approach=approach,
+            turn_weights=turn_weights,
         )
-        if not candidates:
-            continue
-        share = weight / len(candidates)
-        for neighbor, key, _, needs_continuation in candidates:
-            directive = (direction, side) if needs_continuation else None
-            weighted.append((neighbor, key, share, directive))
-            total_weight += share
 
+    direction_candidates: Dict[CardinalDirection, List[Tuple[str, int, Mapping[str, object]]]] = defaultdict(list)
+    for neighbor, key_edge, edge_data in neighbors:
+        if incoming and neighbor == incoming[0] and key_edge == incoming[2] and node == incoming[1]:
+            continue  # block U-turns
+        direction = _edge_direction(graph, node, neighbor, edge_data)
+        direction_candidates[direction].append((neighbor, key_edge, edge_data))
+
+    direction_weights = _direction_weights_from_movements(
+        direction_candidates=direction_candidates,
+        movement_weights=movement_weights,
+        approach=approach,
+        incoming_dir=incoming_dir,
+    )
+
+    total_weight = sum(value for value in direction_weights.values() if value > 0.0)
     if total_weight <= 0.0:
-        return []
+        fallback_direction_weights = _direction_weights_from_movements(
+            direction_candidates=direction_candidates,
+            movement_weights=_default_pedestrian_movement_weights(approach),
+            approach=approach,
+            incoming_dir=incoming_dir,
+        )
+        total_fallback = sum(value for value in fallback_direction_weights.values() if value > 0.0)
+        if total_fallback <= 0.0:
+            return _default_distributions(graph, node=node, neighbors=neighbors, incoming=incoming)
+        return [
+            (neighbor, key_edge, value / total_fallback, None)
+            for (neighbor, key_edge), value in fallback_direction_weights.items()
+            if value > 0.0
+        ]
 
     return [
-        (neighbor, key, weight / total_weight, directive)
-        for neighbor, key, weight, directive in weighted
-        if weight > 0.0
+        (neighbor, key_edge, value / total_weight, None)
+        for (neighbor, key_edge), value in direction_weights.items()
+        if value > 0.0
     ]
+
+
+def _movement_weights_for_pedestrian(
+    *,
+    approach: str,
+    turn_weights: JunctionTurnWeights,
+) -> Dict[TurnMovement, float]:
+    base = turn_weights.main if approach == "main" else turn_weights.minor
+    weights = dict(base)
+    if approach == "minor":
+        weights[TurnMovement.THROUGH] = 0.0
+    return weights
+
+
+def _movement_direction_for_pedestrian(
+    incoming: CardinalDirection,
+    movement: TurnMovement,
+) -> CardinalDirection:
+    mapping = {
+        CardinalDirection.EAST: {
+            TurnMovement.LEFT: CardinalDirection.NORTH,
+            TurnMovement.THROUGH: CardinalDirection.EAST,
+            TurnMovement.RIGHT: CardinalDirection.SOUTH,
+        },
+        CardinalDirection.WEST: {
+            TurnMovement.LEFT: CardinalDirection.SOUTH,
+            TurnMovement.THROUGH: CardinalDirection.WEST,
+            TurnMovement.RIGHT: CardinalDirection.NORTH,
+        },
+        CardinalDirection.NORTH: {
+            TurnMovement.LEFT: CardinalDirection.WEST,
+            TurnMovement.THROUGH: CardinalDirection.NORTH,
+            TurnMovement.RIGHT: CardinalDirection.EAST,
+        },
+        CardinalDirection.SOUTH: {
+            TurnMovement.LEFT: CardinalDirection.EAST,
+            TurnMovement.THROUGH: CardinalDirection.SOUTH,
+            TurnMovement.RIGHT: CardinalDirection.WEST,
+        },
+    }
+    try:
+        return mapping[incoming][movement]
+    except KeyError as exc:
+        raise DemandValidationError(
+            f"unsupported pedestrian movement mapping for incoming={incoming}, movement={movement}"
+        ) from exc
+
+
+def _default_pedestrian_movement_weights(approach: str) -> Dict[TurnMovement, float]:
+    return {
+        TurnMovement.LEFT: 1.0,
+        TurnMovement.THROUGH: 1.0 if approach == "main" else 0.0,
+        TurnMovement.RIGHT: 1.0,
+    }
+
+
+def _direction_weights_from_movements(
+    *,
+    direction_candidates: Dict[CardinalDirection, List[Tuple[str, int, Mapping[str, object]]]],
+    movement_weights: Dict[TurnMovement, float],
+    approach: str,
+    incoming_dir: CardinalDirection,
+) -> Dict[Tuple[str, int], float]:
+    direction_weights: Dict[Tuple[str, int], float] = defaultdict(float)
+    through_candidates = direction_candidates.get(
+        _movement_direction_for_pedestrian(incoming_dir, TurnMovement.THROUGH), []
+    )
+    through_bonus = 0.0
+
+    for movement, weight in movement_weights.items():
+        if approach == "minor" and movement is TurnMovement.THROUGH:
+            weight = 0.0
+        target_dir = _movement_direction_for_pedestrian(incoming_dir, movement)
+        candidates = direction_candidates.get(target_dir, [])
+        if not candidates:
+            if approach == "main" and movement in (TurnMovement.LEFT, TurnMovement.RIGHT):
+                through_bonus += weight
+            continue
+        if weight <= 0.0:
+            continue
+        share = weight / len(candidates)
+        for neighbor, key_edge, _ in candidates:
+            direction_weights[(neighbor, key_edge)] += share
+
+    if through_bonus > 0.0 and through_candidates:
+        share = through_bonus / len(through_candidates)
+        for neighbor, key_edge, _ in through_candidates:
+            direction_weights[(neighbor, key_edge)] += share
+
+    return direction_weights
+
+
+def _approach_for_pedestrian(graph: GraphType, incoming: EdgeRef) -> str:
+    prev_node, _, _ = incoming
+    prev_data = graph.nodes.get(prev_node, {})
+    node_type = str(prev_data.get("node_type", "")).lower()
+    if prev_node.startswith("PedEnd.Minor") or "minor" in node_type:
+        return "minor"
+    return "main"
 
 
 def _default_distributions(
@@ -323,36 +379,6 @@ def _propagate_single(
         cluster_id = node_data.get("cluster_id")
         is_endpoint = bool(node_data.get("is_endpoint"))
 
-        if directive is not None:
-            direction, side = directive
-            neighbors = _collect_neighbors(graph, node)
-            directed_edges = _candidate_edges_for_turn_weight(
-                graph,
-                node=node,
-                neighbors=neighbors,
-                direction=direction,
-                side=side,
-            )
-            if not directed_edges:
-                results[node] += flow
-                continue
-            share = 1.0 / len(directed_edges)
-            for neighbor, key_edge, _, needs_more in directed_edges:
-                if needs_more:
-                    next_directive: Optional[Directive] = (direction, side)
-                else:
-                    next_directive = None
-                next_flow = flow * share
-                if next_flow <= EPS:
-                    continue
-                edge_ref: EdgeRef = (node, neighbor, key_edge)
-                next_key = _state_key(neighbor, edge_ref, next_directive)
-                was_empty = next_key not in pending
-                pending[next_key] = pending.get(next_key, 0.0) + next_flow
-                if was_empty:
-                    queue.append(next_key)
-            continue
-
         if (node != source and is_endpoint) or (node == source and incoming is not None and is_endpoint):
             results[node] += flow
             continue
@@ -363,15 +389,13 @@ def _propagate_single(
             results[node] += flow
             continue
 
-        incoming_direction = _incoming_entry_direction(graph, incoming)
-
-        if cluster_id and cluster_id in turn_weight_map and not is_endpoint:
-            junction_turn_weights = turn_weight_map[cluster_id]
+        if cluster_id and not is_endpoint:
+            junction_turn_weights = turn_weight_map.get(cluster_id)
             distributions = _distribute_with_turn_weights(
                 graph,
                 node=node,
                 neighbors=neighbors,
-                incoming_direction=incoming_direction,
+                incoming=incoming,
                 turn_weights=junction_turn_weights,
             )
             if not distributions:

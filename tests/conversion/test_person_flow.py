@@ -21,6 +21,7 @@ from sumo_optimise.conversion.domain.models import (
     OutputDirectoryTemplate,
     PedestrianSide,
     PersonFlowPattern,
+    TurnMovement,
 )
 from sumo_optimise.conversion.demand.person_flow.demand_input import (
     load_endpoint_demands,
@@ -96,14 +97,19 @@ def _simple_graph() -> nx.MultiGraph:
 
 
 def _junction_weights() -> JunctionTurnWeights:
-    weights = {}
-    for direction in CardinalDirection:
-        for side in PedestrianSide:
-            weights[(direction, side)] = 0.0
-    weights[(CardinalDirection.EAST, PedestrianSide.SOUTH_SIDE)] = 1.0
-    weights[(CardinalDirection.NORTH, PedestrianSide.WEST_SIDE)] = 1.0
-    weights[(CardinalDirection.WEST, PedestrianSide.NORTH_SIDE)] = 1.0
-    return JunctionTurnWeights(junction_id="Cluster.100", weights=weights)
+    return JunctionTurnWeights(
+        junction_id="Cluster.100",
+        main={
+            TurnMovement.LEFT: 0.0,
+            TurnMovement.THROUGH: 0.0,
+            TurnMovement.RIGHT: 1.0,
+        },
+        minor={
+            TurnMovement.LEFT: 0.0,
+            TurnMovement.THROUGH: 0.0,
+            TurnMovement.RIGHT: 1.0,
+        },
+    )
 
 
 def test_compute_od_flows_positive_and_negative() -> None:
@@ -316,23 +322,21 @@ def test_load_endpoint_demands_and_weights() -> None:
         ",".join(
             [
                 "JunctionID",
-                "ToNorth_EastSide",
-                "ToNorth_WestSide",
-                "ToWest_NorthSide",
-                "ToWest_SouthSide",
-                "ToSouth_WestSide",
-                "ToSouth_EastSide",
-                "ToEast_SouthSide",
-                "ToEast_NorthSide",
+                "Main_L",
+                "Main_T",
+                "Main_R",
+                "Minor_L",
+                "Minor_T",
+                "Minor_R",
             ]
         )
         + "\n"
-        + "Cluster.100,0,0,0,0,1,0,0,0\n"
+        + "Cluster.100,0,0,0,1,0,0\n"
     )
     turn_weight_map = load_junction_turn_weights(turn_weight_csv)
     assert set(turn_weight_map) == {"Cluster.100"}
     weights = turn_weight_map["Cluster.100"]
-    assert weights.weight(CardinalDirection.SOUTH, PedestrianSide.WEST_SIDE) == 1.0
+    assert weights.minor[TurnMovement.LEFT] == 1.0
 
 
 def test_cli_accepts_demand_options() -> None:
@@ -413,12 +417,21 @@ def test_turn_weight_zeroing_keeps_forward_direction() -> None:
         length=100.0,
     )
 
-    weights = {}
-    for direction in CardinalDirection:
-        for side in PedestrianSide:
-            weights[(direction, side)] = 0.0
-    weights[(CardinalDirection.EAST, PedestrianSide.NORTH_SIDE)] = 1.0
-    turn_weights = {"Cluster.100": JunctionTurnWeights("Cluster.100", weights)}
+    turn_weights = {
+        "Cluster.100": JunctionTurnWeights(
+            "Cluster.100",
+            main={
+                TurnMovement.LEFT: 0.0,
+                TurnMovement.THROUGH: 1.0,
+                TurnMovement.RIGHT: 0.0,
+            },
+            minor={
+                TurnMovement.LEFT: 0.0,
+                TurnMovement.THROUGH: 0.0,
+                TurnMovement.RIGHT: 0.0,
+            },
+        )
+    }
 
     row = EndpointDemandRow(endpoint_id="PedEnd.Main.W_end.N_sidewalk", flow_per_hour=500.0)
     flows = compute_od_flows(graph, turn_weights, [row])
@@ -427,11 +440,23 @@ def test_turn_weight_zeroing_keeps_forward_direction() -> None:
 
 
 def _make_weights(overrides: dict[tuple[CardinalDirection, PedestrianSide], float], junction: str) -> JunctionTurnWeights:
-    weights = {}
-    for direction in CardinalDirection:
-        for side in PedestrianSide:
-            weights[(direction, side)] = overrides.get((direction, side), 0.0)
-    return JunctionTurnWeights(junction_id=junction, weights=weights)
+    def _sum(direction: CardinalDirection) -> float:
+        return sum(weight for (dir_token, _), weight in overrides.items() if dir_token == direction)
+
+    main_weights = {
+        TurnMovement.LEFT: _sum(CardinalDirection.NORTH),
+        TurnMovement.THROUGH: _sum(CardinalDirection.EAST) + _sum(CardinalDirection.WEST),
+        TurnMovement.RIGHT: _sum(CardinalDirection.SOUTH),
+    }
+    return JunctionTurnWeights(
+        junction_id=junction,
+        main=main_weights,
+        minor={
+            TurnMovement.LEFT: 0.0,
+            TurnMovement.THROUGH: 0.0,
+            TurnMovement.RIGHT: 0.0,
+        },
+    )
 
 
 def test_mainline_flow_directed_to_east_end() -> None:
@@ -616,7 +641,8 @@ def test_crosswalk_follows_west_side_for_north_half() -> None:
     row = EndpointDemandRow(endpoint_id="PedEnd.Main.150.S_sidewalk", flow_per_hour=180.0)
     flows = compute_od_flows(graph, turn_weights, [row])
 
-    assert flows == [("PedEnd.Main.150.S_sidewalk", "Node.Main.200.N", 180.0, row)]
+    totals = {dest: value for _, dest, value, _ in flows}
+    assert totals == {"Node.Main.200.N": 120.0, "Node.Main.200.S": 60.0}
 
 
 def test_crosswalk_handles_multiple_directions_without_conflict() -> None:
@@ -666,3 +692,20 @@ def test_crosswalk_handles_multiple_directions_without_conflict() -> None:
 
     assert summary[("PedEnd.Main.200.N_sidewalk", "Node.Main.300.S")] == pytest.approx(150.0)
     assert summary[("PedEnd.Main.200.N_sidewalk", "Node.Main.100.S")] == pytest.approx(150.0)
+
+
+def test_no_main_u_turn_od_pairs() -> None:
+    graph = _simple_graph()
+    turn_weights = {"Cluster.100": _junction_weights()}
+
+    positive_row = EndpointDemandRow(
+        endpoint_id="PedEnd.Main.W_end.N_sidewalk", flow_per_hour=1200.0, row_index=2
+    )
+    flows = compute_od_flows(graph, turn_weights, [positive_row])
+
+    for origin, destination, _, _ in flows:
+        if origin.startswith("PedEnd.Main") and destination.startswith("Node.Main"):
+            o_parts = origin.split(".")
+            d_parts = destination.split(".")
+            if len(o_parts) == 4 and len(d_parts) == 4 and o_parts[2] == d_parts[2] and o_parts[3] != d_parts[3]:
+                raise AssertionError(f"mainline U-turn flow detected: {origin} -> {destination}")

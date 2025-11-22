@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, TextIO, Tuple
 
-from ...domain.models import CardinalDirection, EndpointDemandRow, PersonFlowPattern
+from ...domain.models import EndpointDemandRow, JunctionTurnWeights, PersonFlowPattern, TurnMovement
 from ...utils.errors import DemandValidationError
 
 EndpointDemandSource = TextIO | Path
@@ -17,21 +16,16 @@ _FLOW_COLUMN = "vehFlow"
 _LABEL_COLUMN = "Label"
 
 _TURN_ID_COLUMN = "JunctionID"
-_TURN_COLUMNS = {
-    "ToNorth": CardinalDirection.NORTH,
-    "ToWest": CardinalDirection.WEST,
-    "ToSouth": CardinalDirection.SOUTH,
-    "ToEast": CardinalDirection.EAST,
+_MAIN_TURN_COLUMNS: Dict[str, TurnMovement] = {
+    "Main_L": TurnMovement.LEFT,
+    "Main_T": TurnMovement.THROUGH,
+    "Main_R": TurnMovement.RIGHT,
 }
-
-
-@dataclass(frozen=True)
-class VehicleTurnWeights:
-    junction_id: str
-    weights: Dict[CardinalDirection, float]
-
-    def weight(self, direction: CardinalDirection) -> float:
-        return self.weights.get(direction, 0.0)
+_MINOR_TURN_COLUMNS: Dict[str, TurnMovement] = {
+    "Minor_L": TurnMovement.LEFT,
+    "Minor_T": TurnMovement.THROUGH,
+    "Minor_R": TurnMovement.RIGHT,
+}
 
 
 class _ErrorCollector:
@@ -131,17 +125,21 @@ def load_vehicle_endpoint_demands(source: EndpointDemandSource) -> Tuple[PersonF
     return pattern, rows
 
 
-def load_vehicle_turn_weights(source: TurnWeightSource) -> Dict[str, VehicleTurnWeights]:
-    """Parse `veh_jct_turn_weight` CSV into cluster -> direction weights."""
+def load_vehicle_turn_weights(source: TurnWeightSource) -> Dict[str, JunctionTurnWeights]:
+    """Parse `veh_jct_turn_weight` CSV into cluster -> L/T/R weights."""
 
     stream, should_close = _open_source(source, context="Vehicle junction turn-weight CSV")
     errors = _ErrorCollector("invalid vehicle junction turn-weight rows")
-    turn_map: Dict[str, VehicleTurnWeights] = {}
+    turn_map: Dict[str, JunctionTurnWeights] = {}
 
     try:
         reader = csv.DictReader(stream)
         header = [cell.strip() for cell in (reader.fieldnames or [])]
-        missing = {_TURN_ID_COLUMN, *_TURN_COLUMNS.keys()} - set(header)
+        missing = {
+            _TURN_ID_COLUMN,
+            *_MAIN_TURN_COLUMNS.keys(),
+            *_MINOR_TURN_COLUMNS.keys(),
+        } - set(header)
         if missing:
             errors.add(f"missing columns: {', '.join(sorted(missing))}")
             errors.raise_if_any()
@@ -155,22 +153,32 @@ def load_vehicle_turn_weights(source: TurnWeightSource) -> Dict[str, VehicleTurn
                 errors.add(f"row {index}: duplicate JunctionID {junction_id!r}")
                 continue
 
-            weights: Dict[CardinalDirection, float] = {}
+            main_weights: Dict[TurnMovement, float] = {}
+            minor_weights: Dict[TurnMovement, float] = {}
             problems: List[str] = []
-            for column, direction in _TURN_COLUMNS.items():
+            for column, movement in {**_MAIN_TURN_COLUMNS, **_MINOR_TURN_COLUMNS}.items():
                 token = (raw_row.get(column) or "").strip()
                 if not token:
                     problems.append(f"{column} missing value")
                     continue
                 try:
-                    weights[direction] = float(token)
+                    weight = float(token)
                 except ValueError:
                     problems.append(f"{column} must be numeric (got {token!r})")
+                    continue
+                if column in _MAIN_TURN_COLUMNS:
+                    main_weights[movement] = weight
+                else:
+                    minor_weights[movement] = weight
             if problems:
                 errors.add(f"row {index} ({junction_id}): " + "; ".join(problems))
                 continue
 
-            turn_map[junction_id] = VehicleTurnWeights(junction_id=junction_id, weights=weights)
+            turn_map[junction_id] = JunctionTurnWeights(
+                junction_id=junction_id,
+                main=main_weights,
+                minor=minor_weights,
+            )
     finally:
         if should_close:
             stream.close()
@@ -179,4 +187,4 @@ def load_vehicle_turn_weights(source: TurnWeightSource) -> Dict[str, VehicleTurn
     return turn_map
 
 
-__all__ = ["load_vehicle_endpoint_demands", "load_vehicle_turn_weights", "VehicleTurnWeights"]
+__all__ = ["load_vehicle_endpoint_demands", "load_vehicle_turn_weights"]

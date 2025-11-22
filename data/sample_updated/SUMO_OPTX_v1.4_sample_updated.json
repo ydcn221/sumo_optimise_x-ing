@@ -64,6 +64,7 @@
       {
         "id": "xwalk_mid_70_three_phase",
         "cycle_s": 70,
+        "ped_early_cutoff_s": 3,
         "yellow_duration_s": 6,
         "phases": [
           { "duration_s": 46, "allow_movements": ["EB",   "WB"] },
@@ -73,6 +74,7 @@
       {
         "id": "xwalk_mid_60_two_phase",
         "cycle_s": 60,
+        "ped_early_cutoff_s": 3,
         "yellow_duration_s": 4,
         "phases": [
           { "duration_s": 40, "allow_movements": ["EB",   "WB"] },
@@ -98,8 +100,8 @@
       "main_approach_lanes": 4,
       "minor_lanes_approach": 2,
       "minor_lanes_departure": 1,
-      "median_continuous": false,
-      "main_u_turn_allowed": true,
+      "median_continuous": true,
+      "main_u_turn_allowed": false,
       "signalized": false,
       "main_ped_crossing_placement": {"west": true, "east": false},
       "refuge_island_on_main": false
