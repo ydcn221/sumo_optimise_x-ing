@@ -26,7 +26,8 @@ def build_vehicle_flow_entries(
         attr = _format_pattern_attribute(vehicle_pattern, value)
         entry = (
             f'  <flow id="{flow_id}" begin="0.00" end="{simulation_end_time:.2f}" '
-            f'fromJunction="{origin}" toJunction="{destination}" {attr}/>'
+            f'fromJunction="{origin}" toJunction="{destination}" '
+            f'departLane="best_prob" departSpeed="desired" {attr}/>'
         )
         entries.append(entry)
     return entries
