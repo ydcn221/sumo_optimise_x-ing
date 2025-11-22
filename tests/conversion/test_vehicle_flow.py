@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict
 
 from sumo_optimise.conversion.demand.routes import render_routes_document
-from sumo_optimise.conversion.demand.vehicle_flow.demand_input import VehicleTurnWeights
 from sumo_optimise.conversion.demand.vehicle_flow.flow_propagation import compute_vehicle_od_flows
 from sumo_optimise.conversion.demand.vehicle_flow.reachability import evaluate_vehicle_od_reachability
 from sumo_optimise.conversion.demand.vehicle_flow.route_output import build_vehicle_flow_entries
@@ -19,6 +18,8 @@ from sumo_optimise.conversion.domain.models import (
     EventKind,
     LayoutEvent,
     PersonFlowPattern,
+    JunctionTurnWeights,
+    TurnMovement,
 )
 
 
@@ -31,41 +32,38 @@ def test_vehicle_flow_propagation_and_rendering() -> None:
     breakpoints = [0, 100, 200]
     clusters = [_make_cluster(100)]
     network = build_vehicle_network(breakpoints, clusters)
-    turn_weights: Dict[str, VehicleTurnWeights] = {
-        "Cluster.100": VehicleTurnWeights(
+    turn_weights: Dict[str, JunctionTurnWeights] = {
+        "Cluster.100": JunctionTurnWeights(
             junction_id="Cluster.100",
-            weights={
-                CardinalDirection.NORTH: 0.0,
-                CardinalDirection.WEST: 2.0,
-                CardinalDirection.SOUTH: 4.0,
-                CardinalDirection.EAST: 8.0,
+            main={
+                TurnMovement.LEFT: 1.0,
+                TurnMovement.THROUGH: 1.0,
+                TurnMovement.RIGHT: 1.0,
+            },
+            minor={
+                TurnMovement.LEFT: 8.0,
+                TurnMovement.THROUGH: 0.0,
+                TurnMovement.RIGHT: 2.0,
             },
         )
     }
 
     rows = [
         EndpointDemandRow(endpoint_id="VehEnd_Minor_100_N_end", flow_per_hour=600.0),
-        EndpointDemandRow(endpoint_id="VehEnd_Minor_100_S_end", flow_per_hour=-300.0),
     ]
 
     od_flows = compute_vehicle_od_flows(rows, network=network, turn_weights=turn_weights)
     assert od_flows, "expected at least one OD flow"
 
-    # source row splits 600 veh/h into 2/14 (west), 4/14 (south endpoint), 8/14 (east end)
     source_totals = {
         dest: value
         for origin, dest, value, source_row in od_flows
         if source_row.endpoint_id == "VehEnd_Minor_100_N_end"
     }
-    assert isclose(source_totals["Node.Minor.100.S_end"], 600 * (4 / 14), rel_tol=1e-6)
-    assert source_totals["Node.Main.200.N"] > source_totals["Node.Main.0.S"]
-
-    sink_totals = {
-        origin: value
-        for origin, dest, value, source_row in od_flows
-        if source_row.endpoint_id == "VehEnd_Minor_100_S_end"
-    }
-    assert isclose(sink_totals["Node.Main.0.S"] + sink_totals["Node.Main.200.N"], 300.0)
+    assert isclose(source_totals["Node.Main.0.S"] + source_totals["Node.Main.200.N"], 600.0, rel_tol=1e-6)
+    # weights 8 (left to WB/main west) vs 2 (right to EB/main east) -> 80% / 20% split
+    assert isclose(source_totals["Node.Main.0.S"], 600 * 0.8, rel_tol=1e-6)
+    assert isclose(source_totals["Node.Main.200.N"], 600 * 0.2, rel_tol=1e-6)
 
     entries = build_vehicle_flow_entries(
         od_flows,
@@ -156,19 +154,85 @@ def test_canonicalize_vehicle_endpoint_accepts_template_ids() -> None:
 
     assert canonicalize_vehicle_endpoint(
         "VehEnd_Main_W_end", network=network, prefer_departing_half=True
-    ) == "Node.Main.0.N"
-    assert canonicalize_vehicle_endpoint(
-        "VehEnd_Main_W_end", network=network, prefer_departing_half=False
     ) == "Node.Main.0.S"
     assert canonicalize_vehicle_endpoint(
+        "VehEnd_Main_W_end", network=network, prefer_departing_half=False
+    ) == "Node.Main.0.N"
+    assert canonicalize_vehicle_endpoint(
         "VehEnd_Main_E_end", network=network, prefer_departing_half=True
-    ) == "Node.Main.100.S"
+    ) == "Node.Main.100.N"
     assert canonicalize_vehicle_endpoint(
         "VehEnd_Main_E_end", network=network, prefer_departing_half=False
-    ) == "Node.Main.100.N"
+    ) == "Node.Main.100.S"
     assert canonicalize_vehicle_endpoint(
         "VehEnd_Minor_100_N_end", network=network, prefer_departing_half=True
     ) == "Node.Minor.100.N_end"
     assert canonicalize_vehicle_endpoint(
         "VehEnd_Minor_100_S_end", network=network, prefer_departing_half=True
     ) == "Node.Minor.100.S_end"
+
+
+def test_vehicle_no_main_u_turn_pairs() -> None:
+    breakpoints = [0, 100, 200]
+    clusters = [_make_cluster(100)]
+    network = build_vehicle_network(breakpoints, clusters)
+    turn_weights: Dict[str, JunctionTurnWeights] = {
+        "Cluster.100": JunctionTurnWeights(
+            junction_id="Cluster.100",
+            main={
+                TurnMovement.LEFT: 1.0,
+                TurnMovement.THROUGH: 1.0,
+                TurnMovement.RIGHT: 1.0,
+            },
+            minor={
+                TurnMovement.LEFT: 1.0,
+                TurnMovement.THROUGH: 0.0,
+                TurnMovement.RIGHT: 1.0,
+            },
+        )
+    }
+
+    rows = [
+        EndpointDemandRow(endpoint_id="VehEnd_Minor_100_N_end", flow_per_hour=500.0),
+        EndpointDemandRow(endpoint_id="VehEnd_Minor_100_S_end", flow_per_hour=-200.0),
+    ]
+    od_flows = compute_vehicle_od_flows(rows, network=network, turn_weights=turn_weights)
+    for origin, dest, _, _ in od_flows:
+        if origin.startswith("Node.Main") and dest.startswith("Node.Main"):
+            o_parts = origin.split(".")
+            d_parts = dest.split(".")
+            if len(o_parts) == 4 and len(d_parts) == 4 and o_parts[2] == d_parts[2] and o_parts[3] != d_parts[3]:
+                raise AssertionError(f"vehicle U-turn flow detected: {origin} -> {dest}")
+
+
+def test_vehicle_no_main_u_turn_pairs() -> None:
+    breakpoints = [0, 1500]
+    clusters = [_make_cluster(1500)]
+    network = build_vehicle_network(breakpoints, clusters)
+    turn_weights: Dict[str, JunctionTurnWeights] = {
+        "Cluster.1500": JunctionTurnWeights(
+            junction_id="Cluster.1500",
+            main={
+                TurnMovement.LEFT: 1.0,
+                TurnMovement.THROUGH: 1.0,
+                TurnMovement.RIGHT: 1.0,
+            },
+            minor={
+                TurnMovement.LEFT: 1.0,
+                TurnMovement.THROUGH: 0.0,
+                TurnMovement.RIGHT: 1.0,
+            },
+        )
+    }
+
+    rows = [
+        EndpointDemandRow(endpoint_id="VehEnd_Main_E_end", flow_per_hour=100.0),
+        EndpointDemandRow(endpoint_id="VehEnd_Main_W_end", flow_per_hour=-50.0),
+    ]
+    od_flows = compute_vehicle_od_flows(rows, network=network, turn_weights=turn_weights)
+    for origin, dest, _, _ in od_flows:
+        if origin.startswith("Node.Main") and dest.startswith("Node.Main"):
+            o_parts = origin.split(".")
+            d_parts = dest.split(".")
+            if len(o_parts) == 4 and len(d_parts) == 4 and o_parts[2] == d_parts[2] and o_parts[3] != d_parts[3]:
+                raise AssertionError(f"vehicle U-turn flow detected: {origin} -> {dest}")

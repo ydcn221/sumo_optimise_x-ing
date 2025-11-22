@@ -1,17 +1,9 @@
 """Helpers for constructing demand endpoint catalogues."""
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from ..builder.ids import (
-    cluster_id,
-    crossing_id_main,
-    crossing_id_main_split,
-    crossing_id_midblock,
-    crossing_id_midblock_split,
-    main_edge_id,
-    minor_edge_id,
-)
+from ..builder.ids import cluster_id, crossing_id_main, crossing_id_main_split, main_edge_id, minor_edge_id
 from ..domain.models import (
     Cluster,
     Defaults,
@@ -26,7 +18,6 @@ from ..domain.models import (
     SnapRule,
     VehicleEndpoint,
 )
-from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.lanes import find_neighbor_segments, pick_lanes_for_segment
 from ..utils.logging import get_logger
 from .person_flow.identifier import minor_endpoint_id
@@ -106,8 +97,6 @@ def build_endpoint_catalog(
 
     vehicle_endpoints: List[VehicleEndpoint] = []
     pedestrian_endpoints: List[PedestrianEndpoint] = []
-
-    absorbed_midblock_positions: Set[int] = set()
 
     def add_vehicle_endpoint(
         *,
@@ -237,24 +226,9 @@ def build_endpoint_catalog(
                 tl_id=tl_id,
             )
 
-        place_west = False
-        place_east = False
-        split_main = False
-        for ev in junction_events:
-            if ev.main_ped_crossing_placement:
-                place_west = place_west or bool(ev.main_ped_crossing_placement.get("west"))
-                place_east = place_east or bool(ev.main_ped_crossing_placement.get("east"))
-            split_main = split_main or bool(ev.refuge_island_on_main)
-
-        mid_events = [ev for ev in cluster.events if ev.type == EventKind.XWALK_MIDBLOCK]
-        if mid_events:
-            absorbed_midblock_positions.add(pos)
-            for mid_event in mid_events:
-                side = decide_midblock_side_for_collision(mid_event.pos_m_raw, pos, snap_rule.tie_break)
-                if side == "west":
-                    place_west = True
-                else:
-                    place_east = True
+        place_west = True
+        place_east = True
+        split_main = any(ev.refuge_island_on_main for ev in junction_events)
 
         node = cluster_id(pos)
         tl_id_crossing = tl_id
@@ -361,77 +335,6 @@ def build_endpoint_catalog(
                             tl_id=tl_id_crossing,
                         )
                     )
-
-    for cluster in clusters:
-        pos = cluster.pos_m
-        if pos in absorbed_midblock_positions:
-            continue
-        mid_events = [ev for ev in cluster.events if ev.type == EventKind.XWALK_MIDBLOCK]
-        if not mid_events:
-            continue
-
-        node = cluster_id(pos)
-        tl_id = _cluster_tl_id(cluster)
-
-        upstream_pos, downstream_pos = find_neighbor_segments(breakpoints, pos)
-        if upstream_pos is None or downstream_pos is None:
-            LOG.warning("midblock at %s lacks adjacent main edges; skipping demand endpoint", pos)
-            continue
-
-        eb_in_edge = main_edge_id("EB", upstream_pos, pos)
-        eb_out_edge = main_edge_id("EB", pos, downstream_pos)
-        wb_in_edge = main_edge_id("WB", downstream_pos, pos)
-        wb_out_edge = main_edge_id("WB", pos, upstream_pos)
-
-        if snap_rule.tie_break == "toward_west":
-            eb_edge, wb_edge = eb_in_edge, wb_out_edge
-            if not (eb_edge and wb_edge):
-                eb_edge, wb_edge = eb_out_edge, wb_in_edge
-        else:
-            eb_edge, wb_edge = eb_out_edge, wb_in_edge
-            if not (eb_edge and wb_edge):
-                eb_edge, wb_edge = eb_in_edge, wb_out_edge
-
-        if not (eb_edge and wb_edge):
-            LOG.warning("midblock at %s missing edge pairing for crossing", pos)
-            continue
-
-        split_midblock = any(bool(ev.refuge_island_on_main) for ev in mid_events)
-        if split_midblock:
-            pedestrian_endpoints.append(
-                PedestrianEndpoint(
-                    id=crossing_id_midblock_split(pos, "north"),
-                    pos=pos,
-                    movement="ped_mid_north",
-                    node_id=node,
-                    edges=(eb_edge,),
-                    width=defaults.ped_crossing_width_m,
-                    tl_id=tl_id,
-                )
-            )
-            pedestrian_endpoints.append(
-                PedestrianEndpoint(
-                    id=crossing_id_midblock_split(pos, "south"),
-                    pos=pos,
-                    movement="ped_mid_south",
-                    node_id=node,
-                    edges=(wb_edge,),
-                    width=defaults.ped_crossing_width_m,
-                    tl_id=tl_id,
-                )
-            )
-        else:
-            pedestrian_endpoints.append(
-                PedestrianEndpoint(
-                    id=crossing_id_midblock(pos),
-                    pos=pos,
-                    movement="ped_mid",
-                    node_id=node,
-                    edges=(eb_edge, wb_edge),
-                    width=defaults.ped_crossing_width_m,
-                    tl_id=tl_id,
-                )
-            )
 
     vehicle_endpoints.sort(
         key=lambda ep: (

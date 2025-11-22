@@ -82,6 +82,12 @@ class Movement(str, Enum):
     PEDESTRIAN = "PED"
 
 
+class TurnMovement(str, Enum):
+    LEFT = "L"
+    THROUGH = "T"
+    RIGHT = "R"
+
+
 class CardinalDirection(str, Enum):
     NORTH = "North"
     SOUTH = "South"
@@ -354,13 +360,18 @@ class EndpointDemandRow:
 
 @dataclass(frozen=True)
 class JunctionTurnWeights:
-    """Turn weights for distributing pedestrian flows at a junction."""
+    """Turn weights for distributing flows at a junction by approach (main/minor)."""
 
     junction_id: str
-    weights: Dict[Tuple[CardinalDirection, PedestrianSide], float]
+    main: Dict[TurnMovement, float]
+    minor: Dict[TurnMovement, float]
 
-    def weight(self, direction: CardinalDirection, side: PedestrianSide) -> float:
-        return self.weights.get((direction, side), 0.0)
+    def weight(self, approach: str, movement: TurnMovement) -> float:
+        if approach == "main":
+            return self.main.get(movement, 0.0)
+        if approach == "minor":
+            return self.minor.get(movement, 0.0)
+        return 0.0
 
 
 @dataclass(frozen=True)

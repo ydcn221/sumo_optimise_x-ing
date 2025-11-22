@@ -51,7 +51,7 @@ def test_write_demand_templates(tmp_path: Path) -> None:
 
     with veh_junction_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = list(csv.reader(stream))
-    assert reader[0] == ["JunctionID", "ToNorth", "ToWest", "ToSouth", "ToEast"]
+    assert reader[0] == ["JunctionID", "Main_L", "Main_T", "Main_R", "Minor_L", "Minor_T", "Minor_R"]
     assert reader[1][0] == "Cluster.100"
     assert all(value == "" for value in reader[1][1:])
 

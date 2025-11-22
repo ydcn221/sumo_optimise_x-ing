@@ -137,9 +137,9 @@ def _canonicalize_vehicle_template_alias(
 
 def _main_half_for_alias(alias: str, prefer_departing_half: bool) -> str:
     if alias.startswith("E"):
-        return "S" if prefer_departing_half else "N"
-    if alias.startswith("W"):
         return "N" if prefer_departing_half else "S"
+    if alias.startswith("W"):
+        return "S" if prefer_departing_half else "N"
     raise DemandValidationError(f"unknown main endpoint alias: {alias}")
 
 

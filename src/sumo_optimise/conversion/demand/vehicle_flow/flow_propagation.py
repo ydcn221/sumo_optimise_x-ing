@@ -5,12 +5,11 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Deque, Dict, Iterable, List, Tuple
 
-from ...domain.models import CardinalDirection, EndpointDemandRow
+from ...domain.models import CardinalDirection, EndpointDemandRow, JunctionTurnWeights, TurnMovement
 from ...utils.errors import DemandValidationError
-from .demand_input import VehicleTurnWeights
 from .topology import VehicleNetwork, canonicalize_vehicle_endpoint, vehicle_cluster_id
 
-VehicleTurnMap = Dict[str, VehicleTurnWeights]
+VehicleTurnMap = Dict[str, JunctionTurnWeights]
 
 
 @dataclass(frozen=True)
@@ -46,10 +45,14 @@ def compute_vehicle_od_flows(
             for destination, value in od_map.items():
                 if value <= 0.0 or destination == canonical_id:
                     continue
+                if _is_main_u_turn(canonical_id, destination):
+                    continue
                 results.append((canonical_id, destination, value, row))
         else:
             for origin, value in od_map.items():
                 if value <= 0.0 or origin == canonical_id:
+                    continue
+                if _is_main_u_turn(origin, canonical_id):
                     continue
                 results.append((origin, canonical_id, value, row))
     return results
@@ -68,14 +71,12 @@ def _initial_states(endpoint_id: str, network: VehicleNetwork) -> List[VehicleSt
     if tokens[0] == "Node" and tokens[1] == "Main":
         pos = int(tokens[2])
         half = tokens[3]
-        if pos == network.min_pos and half == "N":
-            return [VehicleState(pos=pos, incoming=CardinalDirection.WEST)]
-        if pos == network.min_pos and half == "S":
-            return [VehicleState(pos=pos, incoming=CardinalDirection.WEST)]
-        if pos == network.max_pos and half == "N":
+        if pos not in {network.min_pos, network.max_pos}:
+            raise DemandValidationError("main endpoints must lie at the corridor ends")
+        if half == "N":
             return [VehicleState(pos=pos, incoming=CardinalDirection.EAST)]
-        if pos == network.max_pos and half == "S":
-            return [VehicleState(pos=pos, incoming=CardinalDirection.EAST)]
+        if half == "S":
+            return [VehicleState(pos=pos, incoming=CardinalDirection.WEST)]
         raise DemandValidationError("main endpoints must lie at the corridor ends")
     return []
 
@@ -121,24 +122,125 @@ def _compute_shares(
     turn_weights: VehicleTurnMap,
 ) -> Dict[CardinalDirection, float]:
     available = _available_directions(state.pos, network)
-    available[state.incoming] = False  # block U-turns
+    # Prevent immediate U-turns while keeping the forward direction available.
+    # The incoming direction captures the travel heading used to enter the cluster,
+    # so the true U-turn would send vehicles toward the opposite heading.
+    available[_opposite(state.incoming)] = False
+    approach = _approach_for(state.incoming)
+    movement_weights = _movement_weights(
+        approach=approach,
+        turn_weights=turn_weights.get(vehicle_cluster_id(state.pos)),
+    )
 
-    weights = turn_weights.get(vehicle_cluster_id(state.pos))
-    raw: Dict[CardinalDirection, float] = {}
-    if weights:
-        for direction, weight in weights.weights.items():
-            if available.get(direction, False):
-                raw[direction] = weight
+    direction_weights: Dict[CardinalDirection, float] = defaultdict(float)
+    through_bonus = 0.0
+    movement_targets: Dict[TurnMovement, Tuple[CardinalDirection, float]] = {}
+    for movement, weight in movement_weights.items():
+        direction = _movement_direction(state.incoming, movement)
+        if not available.get(direction, False):
+            if approach == "main" and movement in (TurnMovement.LEFT, TurnMovement.RIGHT):
+                through_bonus += weight
+            weight = 0.0
+        if approach == "main" and movement is TurnMovement.THROUGH and not available.get(direction, False):
+            weight = 0.0
+        movement_targets[movement] = (direction, weight)
+
+    for movement, (direction, weight) in movement_targets.items():
+        if movement is TurnMovement.THROUGH and approach == "main":
+            weight += through_bonus
+        direction_weights[direction] += weight
+
+    total = sum(value for value in direction_weights.values() if value > 0.0)
+    if total <= 0.0:
+        return _default_direction_shares(available, approach, incoming=state.incoming)
+
+    return {direction: value / total for direction, value in direction_weights.items() if value > 0.0}
+
+
+def _movement_weights(
+    *,
+    approach: str,
+    turn_weights: JunctionTurnWeights | None,
+) -> Dict[TurnMovement, float]:
+    if turn_weights:
+        base = turn_weights.main if approach == "main" else turn_weights.minor
     else:
-        for direction, is_available in available.items():
-            if is_available:
-                raw[direction] = 1.0
+        base = {
+            TurnMovement.LEFT: 1.0,
+            TurnMovement.THROUGH: 1.0 if approach == "main" else 0.0,
+            TurnMovement.RIGHT: 1.0,
+        }
+    weights = dict(base)
+    if approach == "minor":
+        weights[TurnMovement.THROUGH] = 0.0
+    return weights
 
-    total = sum(value for value in raw.values() if value > 0.0)
+
+def _movement_direction(incoming: CardinalDirection, movement: TurnMovement) -> CardinalDirection:
+    mapping = {
+        CardinalDirection.EAST: {
+            TurnMovement.LEFT: CardinalDirection.NORTH,
+            TurnMovement.THROUGH: CardinalDirection.EAST,
+            TurnMovement.RIGHT: CardinalDirection.SOUTH,
+        },
+        CardinalDirection.WEST: {
+            TurnMovement.LEFT: CardinalDirection.SOUTH,
+            TurnMovement.THROUGH: CardinalDirection.WEST,
+            TurnMovement.RIGHT: CardinalDirection.NORTH,
+        },
+        CardinalDirection.NORTH: {
+            TurnMovement.LEFT: CardinalDirection.WEST,
+            TurnMovement.THROUGH: CardinalDirection.NORTH,
+            TurnMovement.RIGHT: CardinalDirection.EAST,
+        },
+        CardinalDirection.SOUTH: {
+            TurnMovement.LEFT: CardinalDirection.EAST,
+            TurnMovement.THROUGH: CardinalDirection.SOUTH,
+            TurnMovement.RIGHT: CardinalDirection.WEST,
+        },
+    }
+    try:
+        return mapping[incoming][movement]
+    except KeyError as exc:
+        raise DemandValidationError(f"unsupported movement mapping for incoming={incoming}, movement={movement}") from exc
+
+
+def _approach_for(incoming: CardinalDirection) -> str:
+    return "main" if incoming in {CardinalDirection.EAST, CardinalDirection.WEST} else "minor"
+
+
+def _default_direction_shares(
+    available: Dict[CardinalDirection, bool],
+    approach: str,
+    *,
+    incoming: CardinalDirection,
+) -> Dict[CardinalDirection, float]:
+    movement_weights = _movement_weights(approach=approach, turn_weights=None)
+    direction_weights: Dict[CardinalDirection, float] = defaultdict(float)
+    through_bonus = 0.0
+    movement_targets: Dict[TurnMovement, Tuple[CardinalDirection, float]] = {}
+
+    for movement, weight in movement_weights.items():
+        direction = _movement_direction(incoming, movement)
+        if not available.get(direction, False):
+            if approach == "main" and movement in (TurnMovement.LEFT, TurnMovement.RIGHT):
+                through_bonus += weight
+            weight = 0.0
+        if approach == "main" and movement is TurnMovement.THROUGH and not available.get(direction, False):
+            weight = 0.0
+        movement_targets[movement] = (direction, weight)
+
+    for movement, (direction, weight) in movement_targets.items():
+        if movement is TurnMovement.THROUGH and approach == "main":
+            weight += through_bonus
+        if weight <= 0.0:
+            continue
+        direction_weights[direction] += weight
+
+    total = sum(value for value in direction_weights.values() if value > 0.0)
     if total <= 0.0:
         return {}
-
-    return {direction: value / total for direction, value in raw.items() if value > 0.0}
+    return {direction: value / total for direction, value in direction_weights.items() if value > 0.0}
 
 
 def _available_directions(pos: int, network: VehicleNetwork) -> Dict[CardinalDirection, bool]:
@@ -169,7 +271,7 @@ def _advance_state(state: VehicleState, direction: CardinalDirection, network: V
     next_pos = network.next_position(state.pos, direction)
     if next_pos is None:
         return None
-    return VehicleState(pos=next_pos, incoming=_opposite(direction))
+    return VehicleState(pos=next_pos, incoming=direction)
 
 
 def _opposite(direction: CardinalDirection) -> CardinalDirection:
@@ -180,6 +282,14 @@ def _opposite(direction: CardinalDirection) -> CardinalDirection:
         CardinalDirection.WEST: CardinalDirection.EAST,
     }
     return mapping[direction]
+
+
+def _is_main_u_turn(origin: str, destination: str) -> bool:
+    o = origin.split(".")
+    d = destination.split(".")
+    if len(o) == 4 and len(d) == 4 and o[0] == "Node" and d[0] == "Node" and o[1] == "Main" and d[1] == "Main":
+        return o[2] == d[2] and o[3] != d[3]
+    return False
 
 
 __all__ = ["compute_vehicle_od_flows"]

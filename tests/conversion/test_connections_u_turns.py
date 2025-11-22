@@ -101,7 +101,14 @@ def test_render_connections_suppresses_u_turn_when_median_continuous():
     wb_back = main_edge_id("WB", 100, 0)
     wb_in = main_edge_id("WB", 200, 100)
     eb_back = main_edge_id("EB", 100, 200)
+    sb_edge = "Edge.Minor.S_arm.SB.100"
+    nb_edge = "Edge.Minor.N_arm.NB.100"
 
     assert f'from="{eb_in}" to="{wb_back}"' not in xml
     assert f'from="{wb_in}" to="{eb_back}"' not in xml
+    # Main right turns are blocked by continuous median.
+    assert f'from="{eb_in}" to="{sb_edge}"' not in xml
+    assert f'from="{wb_in}" to="{nb_edge}"' not in xml
     assert not any(link.movement.endswith("_U") for link in result.links)
+    assert not any("main_EB_R" == link.movement for link in result.links)
+    assert not any("main_WB_R" == link.movement for link in result.links)
