@@ -73,6 +73,8 @@ def run_two_step_netconvert(
     step2 = [
         exe,
         "--lefthand",
+        "--no-turnarounds.fringe",
+        "true",
         "--node-files",
         _cli_path(plain_node, outdir),
         "--edge-files",
