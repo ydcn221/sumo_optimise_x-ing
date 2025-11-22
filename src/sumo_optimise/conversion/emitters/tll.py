@@ -423,13 +423,18 @@ def _expand_phase_tokens(
             produced = _expand_ped_tokens(token, catalog)
         recognized = recognized_vehicle
         if not produced and token and not recognized:
-            LOG.warning(
-                "[TLS] unsupported allow_movement token '%s' (profile=%s phase_index=%s tl_id=%s)",
-                token,
-                profile_id,
-                phase_index,
-                tl_id,
-            )
+            propagate = LOG.propagate
+            LOG.propagate = True
+            try:
+                LOG.warning(
+                    "[TLS] unsupported allow_movement token '%s' (profile=%s phase_index=%s tl_id=%s)",
+                    token,
+                    profile_id,
+                    phase_index,
+                    tl_id,
+                )
+            finally:
+                LOG.propagate = propagate
         phase_tokens.extend(produced)
     return phase_tokens
 

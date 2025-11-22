@@ -140,6 +140,9 @@ class MainRoadConfig:
     lanes: int
 
 
+LaneMovementPlan = Dict[str, Dict[int, Tuple[str, ...]]]
+
+
 @dataclass(frozen=True)
 class JunctionConfig:
     main_approach_begin_m: int
@@ -147,6 +150,7 @@ class JunctionConfig:
     minor_lanes_approach: int
     minor_lanes_departure: int
     median_continuous: bool
+    lane_movements: Optional[LaneMovementPlan] = None
 
 
 @dataclass(frozen=True)
