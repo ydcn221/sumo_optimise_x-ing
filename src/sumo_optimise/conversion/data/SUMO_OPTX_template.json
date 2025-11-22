@@ -11,7 +11,6 @@
         "cycle_s": 90,
         "ped_early_cutoff_s": 6,
         "yellow_duration_s": 3,
-        "pedestrian_conflicts": {"left": true, "right": false},
         "phases": [
           { "duration_s": 24, "allow_movements": ["EB_LTR", "WB_LTR", "PedX"] },
           { "duration_s": 19, "allow_movements": ["EB_R",   "WB_R",   "PedX"] },

@@ -6,27 +6,24 @@
   "signal_profiles": {
     "tee": [
       {
-        "id": "tee_urban_90_3phase",
-        "cycle_s": 90,
-        "ped_early_cutoff_s": 6,
-        "yellow_duration_s": 4,
-        "pedestrian_conflicts": {"left": false, "right": false},
+        "id": "tee_urban_120_3phase",
+        "cycle_s": 120,
+        "ped_early_cutoff_s": 12,
+        "yellow_duration_s": 3,
         "phases": [
-          { "duration_s": 28, "allow_movements": ["EB_T_pg", "WB_T_pg", "PedX_NESW"                        ] },
-          { "duration_s": 14, "allow_movements": ["EB_R_pg", "WB_R_pg", "NB_L_pg",   "SB_L_pg", "PedX_NESW"] },
-          { "duration_s": 48, "allow_movements": ["EB_L_pg", "WB_L_pg", "NB_R_pg",   "SB_R_pg", "PedX_NESW"] }
+          { "duration_s": 45, "allow_movements": ["EB_LRTU_pr", "WB_LTRU_pr"                      ] },
+          { "duration_s": 30, "allow_movements": ["PedX"                                          ] },
+          { "duration_s": 45, "allow_movements": ["NB_LR_pr",   "SB_LR_pr",   "EB_L_pr", "WB_L_pr"] }
         ]
       },
       {
-        "id": "tee_split_minor_100_4phase",
-        "cycle_s": 100,
+        "id": "tee_blocked",
+        "cycle_s": 60,
         "ped_early_cutoff_s": 6,
         "yellow_duration_s": 4,
-        "pedestrian_conflicts": {"left": true, "right": true},
         "phases": [
-          { "duration_s": 40, "allow_movements": ["EB_LTR_pg", "WB_LTR_pg", "PedX_NESW"                        ] },
-          { "duration_s": 20, "allow_movements": ["PedX_NESW"                                                  ] },
-          { "duration_s": 40, "allow_movements": ["NB_LR_pg",  "SB_LR_pg",  "EB_L_pg",   "WB_L_pg", "PedX_NESW"] }
+          { "duration_s": 40, "allow_movements": ["EB_LT_pg", "WB_LT_pg", "PedX_NESW"] },
+          { "duration_s": 20, "allow_movements": ["NB_L_pg",  "SB_L_pg",  "PedX_NESW"] }
         ]
       }
     ],
@@ -34,29 +31,27 @@
       {
         "id": "cross_urban_100_4phase",
         "cycle_s": 100,
-        "ped_early_cutoff_s": 6,
+        "ped_early_cutoff_s": 12,
         "yellow_duration_s": 4,
-        "pedestrian_conflicts": {"left": false, "right": true},
         "phases": [
-          { "duration_s": 30, "allow_movements": ["EB_LT_pg",  "WB_LT_pg",  "PedX_NESW"] },
-          { "duration_s": 16, "allow_movements": ["EB_R_pg",   "WB_R_pg",   "PedX_NESW"] },
-          { "duration_s": 36, "allow_movements": ["NB_LTR_pg", "SB_LTR_pg"             ] },
+          { "duration_s": 30, "allow_movements": ["EB_LTR_pg", "WB_LTR_pg", "PedX_NESW"] },
+          { "duration_s": 16, "allow_movements": ["EB_RU_pr",  "WB_RU_pr",  "PedX_NESW"] },
+          { "duration_s": 36, "allow_movements": ["NB_LTR_pg", "SB_LTR_pg", "PedX_NESW"] },
           { "duration_s": 18, "allow_movements": ["NB_R_pg",   "SB_R_pg",   "PedX_NESW"] }
         ]
       },
       {
         "id": "cross_protL_120_6phase",
         "cycle_s": 120,
-        "ped_early_cutoff_s": 7,
+        "ped_early_cutoff_s": 10,
         "yellow_duration_s": 4,
-        "pedestrian_conflicts": {"left": true, "right": false},
         "phases": [
-          { "duration_s": 10, "allow_movements": ["EB_LTR_pg", "WB_LT_pg", "PedX"] },
-          { "duration_s": 28, "allow_movements": ["EB_LTR_pg", "PedX"            ] },
-          { "duration_s": 14, "allow_movements": ["PedX"                         ] },
-          { "duration_s": 28, "allow_movements": ["NB_LT_pg",  "SB_LT_pg", "PedX"] },
-          { "duration_s": 30, "allow_movements": ["NB_R_pg",   "SB_R_pg",  "PedX"] },
-          { "duration_s": 10, "allow_movements": ["PedX"                         ] }
+          { "duration_s": 28, "allow_movements": ["EB_LTRU_pg", "WB_LRU_pg", "WB_L_pr", "PedX"] },
+          { "duration_s": 10, "allow_movements": ["WB_LTRU_pr", "PedX"                        ] },
+          { "duration_s": 14, "allow_movements": ["PedX"                                      ] },
+          { "duration_s": 28, "allow_movements": ["NB_LT_pg",   "SB_LT_pg",  "PedX"           ] },
+          { "duration_s": 30, "allow_movements": ["NB_R_pg",    "SB_R_pg",   "PedX"           ] },
+          { "duration_s": 10, "allow_movements": ["PedX"                                      ] }
         ]
       }
     ],
@@ -102,7 +97,8 @@
       "minor_lanes_departure": 1,
       "median_continuous": true,
       "main_u_turn_allowed": false,
-      "signalized": false,
+      "signalized": true,
+      "signal": {"profile_id": "tee_blocked", "offset_s": 12},
       "main_ped_crossing_placement": {"west": true, "east": false},
       "refuge_island_on_main": false
     },
@@ -132,23 +128,23 @@
       "median_continuous": false,
       "main_u_turn_allowed": true,
       "signalized": true,
-      "main_ped_crossing_placement": {"west": false, "east": true},
+      "main_ped_crossing_placement": {"west": true, "east": true},
       "refuge_island_on_main": true,
       "two_stage_tll_control": true,
-      "signal": {"profile_id": "tee_urban_90_3phase", "offset_s": 12}
+      "signal": {"profile_id": "tee_urban_120_3phase", "offset_s": 12}
     },
-    {"type": "xwalk_midblock", "pos_m": 1050, "refuge_island_on_main": false, "signalized": false},
+    {"type": "xwalk_midblock", "pos_m": 1050, "refuge_island_on_main": true, "signalized": false},
     {
       "type": "cross",
       "pos_m": 1000,
-      "main_approach_begin_m": 80,
-      "main_approach_lanes": 4,
+      "main_approach_begin_m": 120,
+      "main_approach_lanes": 5,
       "minor_lanes_approach": 2,
       "minor_lanes_departure": 2,
       "median_continuous": true,
       "main_u_turn_allowed": true,
       "signalized": true,
-      "main_ped_crossing_placement": {"west": false, "east": true},
+      "main_ped_crossing_placement": {"west": true, "east": false},
       "refuge_island_on_main": false,
       "signal": {"profile_id": "cross_protL_120_6phase", "offset_s": 35}
     }

@@ -14,7 +14,6 @@ from sumo_optimise.conversion.domain.models import (
     LaneOverride,
     LayoutEvent,
     MainRoadConfig,
-    PedestrianConflictConfig,
     ControlledConnection,
     SignalLink,
     SignalPhaseDef,
@@ -103,7 +102,6 @@ def test_vehicle_yellow_and_ped_cutoff_applied():
             SignalPhaseDef(duration_s=4, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
@@ -142,7 +140,6 @@ def test_main_right_phase_enables_u_turn_when_available():
             SignalPhaseDef(duration_s=4, allow_movements=["EB_R_pg", "EB_U_pg"]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     cluster = _cluster_with_signal(pos=100, profile_id="profile", kind=EventKind.CROSS)
@@ -183,7 +180,6 @@ def test_two_stage_ped_split_distinguishes_halves():
             SignalPhaseDef(duration_s=2, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=False),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     cluster = _cluster_with_signal(
@@ -245,7 +241,6 @@ def test_half_tokens_require_pairs_without_two_stage():
             SignalPhaseDef(duration_s=3, allow_movements=["PedX_W_S-half"]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"half_profile": profile}}
     cluster = _cluster_with_signal(
@@ -289,7 +284,6 @@ def test_partial_orientation_tokens_hold_minor_crossings_red():
         yellow_duration_s=0,
         phases=[SignalPhaseDef(duration_s=6, allow_movements=allow)],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"multi_half": profile}}
     cluster = _cluster_with_signal(
@@ -367,7 +361,6 @@ def test_ped_cutoff_preserves_ped_only_half_phase():
             SignalPhaseDef(duration_s=2, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"ped_only": profile}}
     cluster = _cluster_with_signal(
@@ -414,7 +407,6 @@ def test_movement_stays_green_across_phases():
             SignalPhaseDef(duration_s=2, allow_movements=[]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     cluster = _cluster_with_signal(pos=150, profile_id="profile", kind=EventKind.CROSS)
@@ -446,7 +438,6 @@ def test_eastbound_flow_blocks_west_crosswalk_via_aggregate_conflict():
             SignalPhaseDef(duration_s=3, allow_movements=["PedX_W"]),
         ],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     cluster = _cluster_with_signal(
@@ -505,7 +496,6 @@ def test_controlled_connections_emitted():
         yellow_duration_s=0,
         phases=[SignalPhaseDef(duration_s=6, allow_movements=["EB_T_pg", "WB_T_pg"])],
         kind=EventKind.CROSS,
-        pedestrian_conflicts=PedestrianConflictConfig(left=True, right=True),
     )
     profiles = {EventKind.CROSS.value: {"profile": profile}}
     tl_id = cluster_id(150)
@@ -591,7 +581,6 @@ def test_midblock_single_side_without_two_stage_forces_red():
         yellow_duration_s=0,
         phases=[SignalPhaseDef(duration_s=4, allow_movements=["PedX_N"])],
         kind=EventKind.XWALK_MIDBLOCK,
-        pedestrian_conflicts=PedestrianConflictConfig(left=False, right=False),
     )
     profiles = {EventKind.XWALK_MIDBLOCK.value: {"mid_profile": profile}}
     cluster = _cluster_with_signal(
@@ -617,7 +606,6 @@ def test_midblock_flow_blocks_corresponding_crosswalk():
             SignalPhaseDef(duration_s=2, allow_movements=["PedX"]),
         ],
         kind=EventKind.XWALK_MIDBLOCK,
-        pedestrian_conflicts=PedestrianConflictConfig(left=False, right=False),
     )
     profiles = {EventKind.XWALK_MIDBLOCK.value: {"mid_profile": profile}}
     cluster = _cluster_with_signal(

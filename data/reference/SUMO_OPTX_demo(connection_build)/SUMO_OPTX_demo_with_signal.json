@@ -22,10 +22,6 @@
         "cycle_s": 90,
         "ped_early_cutoff_s": 6,
         "yellow_duration_s": 3,
-        "pedestrian_conflicts": {
-          "left": true,
-          "right": true
-        },
         "phases": [
           {
             "duration_s": 35,
@@ -71,10 +67,6 @@
         "cycle_s": 90,
         "ped_early_cutoff_s": 5,
         "yellow_duration_s": 3,
-        "pedestrian_conflicts": {
-          "left": true,
-          "right": false
-        },
         "phases": [
           {
             "duration_s": 27,

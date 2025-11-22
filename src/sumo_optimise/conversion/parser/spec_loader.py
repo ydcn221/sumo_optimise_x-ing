@@ -18,7 +18,6 @@ from ..domain.models import (
     JunctionConfig,
     LayoutEvent,
     MainRoadConfig,
-    PedestrianConflictConfig,
     SideMinor,
     SignalPhaseDef,
     SignalProfileDef,
@@ -191,43 +190,6 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
         phases_data = p.get("phases", [])
         phases: List[SignalPhaseDef] = []
         sum_dur = 0
-        conflicts_raw = p.get("pedestrian_conflicts")
-        conflicts = PedestrianConflictConfig(left=False, right=False)
-        conflicts_required = kind in (EventKind.TEE.value, EventKind.CROSS.value)
-        if conflicts_required and conflicts_raw is None:
-            errors.append(
-                f"[VAL] E304 pedestrian_conflicts must be provided for intersections: profile={pid} kind={kind}"
-            )
-        if not conflicts_required and conflicts_raw is not None:
-            errors.append(
-                f"[VAL] E304 pedestrian_conflicts is not allowed for midblock crossings: profile={pid} kind={kind}"
-            )
-        if conflicts_raw is not None:
-            if not isinstance(conflicts_raw, dict):
-                errors.append(
-                    f"[VAL] E304 pedestrian_conflicts must be object: profile={pid} kind={kind} value={conflicts_raw!r}"
-                )
-            else:
-                missing = [key for key in ("left", "right") if key not in conflicts_raw]
-                if missing:
-                    errors.append(
-                        f"[VAL] E304 pedestrian_conflicts missing keys={missing}: profile={pid} kind={kind}"
-                    )
-                left_raw = conflicts_raw.get("left")
-                right_raw = conflicts_raw.get("right")
-                type_errors = [
-                    name
-                    for name, val in (("left", left_raw), ("right", right_raw))
-                    if name not in missing and not isinstance(val, bool)
-                ]
-                if type_errors:
-                    errors.append(
-                        f"[VAL] E304 pedestrian_conflicts keys must be boolean: profile={pid} kind={kind} keys={type_errors}"
-                    )
-                conflicts = PedestrianConflictConfig(
-                    left=left_raw if isinstance(left_raw, bool) else False,
-                    right=right_raw if isinstance(right_raw, bool) else False,
-                )
         for ph in phases_data:
             dur = int(ph["duration_s"])
             amv_list = list(ph.get("allow_movements", []))
@@ -275,7 +237,6 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
             yellow_duration_s=yellow_duration,
             phases=phases,
             kind=EventKind(kind),
-            pedestrian_conflicts=conflicts,
         )
         if pid in profiles_by_kind[kind]:
             errors.append(f"[VAL] E303 duplicate signal_profile id within kind: id={pid} kind={kind}")

@@ -156,12 +156,6 @@ class SignalPhaseDef:
 
 
 @dataclass(frozen=True)
-class PedestrianConflictConfig:
-    left: bool
-    right: bool
-
-
-@dataclass(frozen=True)
 class SignalProfileDef:
     id: str
     cycle_s: int
@@ -169,7 +163,6 @@ class SignalProfileDef:
     yellow_duration_s: int
     phases: List[SignalPhaseDef]
     kind: EventKind
-    pedestrian_conflicts: PedestrianConflictConfig
 
 
 @dataclass(frozen=True)

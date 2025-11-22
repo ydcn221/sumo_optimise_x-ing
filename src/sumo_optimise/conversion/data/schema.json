@@ -184,16 +184,6 @@
           "minimum": 1,
           "description": "車両現示が赤に変わる直前、連続した青現示の末尾と入れ替える黄現示時間[秒]。複数フェーズにまたがって青が継続する場合は赤に切り替わるまでの青時間を合算し、その末尾 yellow_duration_s 秒を黄色にする。"
         },
-        "pedestrian_conflicts": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "left": { "type": "boolean", "description": "主道路を渡る歩行者が左側(南)の車両と競合するか" },
-            "right": { "type": "boolean", "description": "主道路を渡る歩行者が右側(北)の車両と競合するか" }
-          },
-          "required": ["left", "right"],
-          "description": "歩行者相と左右車両の競合有無。midblock 用プロファイルでは設定不可。"
-        },
         "phases": {
           "type": "array",
           "minItems": 1,
@@ -208,7 +198,7 @@
     "signalProfile": {
       "allOf": [
         { "$ref": "#/definitions/signalProfileBase" },
-        { "required": ["ped_early_cutoff_s", "pedestrian_conflicts"] }
+        { "required": ["ped_early_cutoff_s"] }
       ]
     },
 
@@ -237,8 +227,7 @@
             }
           },
           "required": ["id", "cycle_s", "ped_early_cutoff_s", "yellow_duration_s", "phases"]
-        },
-        { "not": { "required": ["pedestrian_conflicts"] } }
+        }
       ],
       "description": "単路部横断用信号プロファイル。歩行者競合は設定不可。"
     },

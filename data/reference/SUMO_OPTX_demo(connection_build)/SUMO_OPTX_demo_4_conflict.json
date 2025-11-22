@@ -23,10 +23,6 @@
         "cycle_s": 60,
         "ped_early_cutoff_s": 3,
         "yellow_duration_s": 3,
-        "pedestrian_conflicts": {
-          "left": true,
-          "right": true
-        },
         "phases": [
           {
             "duration_s": 10,

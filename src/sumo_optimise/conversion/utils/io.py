@@ -286,6 +286,15 @@ def write_sumocfg(artifacts: BuildArtifacts, *, net_path: Path, routes_path: Pat
         f'        <route-files value="{route_value}"/>\n'
         '        <junction-taz value="true"/>\n'
         "    </input>\n"
+        "    <!-- <time>\n"
+        '         <step-length value="0.01"/>\n'
+        "    </time> -->\n"
+        "    <!-- <output>\n"
+        '         <summary-output value="summary.xml"/>\n'
+        '         <person-summary-output value="personSummary.xml"/>\n'
+        '         <fcd-output value="fcd.xml"/>\n'
+        '         <tripinfo-output value="tripinfo.xml"/>\n'
+        "    </output> -->\n"
         "</configuration>\n"
     )
     _write_text(artifacts.sumocfg_path, content)

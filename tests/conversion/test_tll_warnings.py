@@ -27,7 +27,6 @@ def test_unsupported_allow_movement_logs_context(caplog):
         cycle_s=10,
         ped_early_cutoff_s=0,
         yellow_duration_s=3,
-        pedestrian_conflicts={"left": False, "right": False},
         phases=[SignalPhaseDef(duration_s=10, allow_movements=["BAD_TOKEN"])],
         kind=EventKind.CROSS,
     )
@@ -39,16 +38,16 @@ def test_unsupported_allow_movement_logs_context(caplog):
                 type=EventKind.CROSS,
                 pos_m_raw=50.0,
                 pos_m=50,
-        junction=JunctionConfig(
-            main_approach_begin_m=0,
-            main_approach_lanes=0,
-            minor_lanes_approach=1,
-            minor_lanes_departure=1,
-            median_continuous=True,
-        ),
-        signalized=True,
-        signal=SignalRef(profile_id=profile.id, offset_s=0),
-    )
+                junction=JunctionConfig(
+                    main_approach_begin_m=0,
+                    main_approach_lanes=0,
+                    minor_lanes_approach=1,
+                    minor_lanes_departure=1,
+                    median_continuous=True,
+                ),
+                signalized=True,
+                signal=SignalRef(profile_id=profile.id, offset_s=0),
+            )
         ],
     )
 
@@ -93,7 +92,6 @@ def test_valid_but_absent_vehicle_token_is_silently_ignored(caplog):
         cycle_s=10,
         ped_early_cutoff_s=0,
         yellow_duration_s=3,
-        pedestrian_conflicts={"left": False, "right": False},
         phases=[SignalPhaseDef(duration_s=10, allow_movements=["NB_R_pg"])],
         kind=EventKind.CROSS,
     )
