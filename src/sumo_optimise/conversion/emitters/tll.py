@@ -342,15 +342,19 @@ def _normalize_vehicle_token(token: str) -> List[Tuple[str, str]]:
 def _expand_vehicle_tokens(
     token: str,
     catalog: MovementCatalog,
-) -> List[PhaseToken]:
+) -> tuple[List[PhaseToken], bool]:
+    """Return (phase_tokens, recognized) where recognized signals a valid vehicle pattern."""
+
     normalized = _normalize_vehicle_token(token)
     phase_tokens: List[PhaseToken] = []
+    recognized = False
     for canonical, base in normalized:
+        recognized = True
         movements = catalog.vehicle_tokens.get(base, [])
         if not movements:
             continue
         phase_tokens.append(PhaseToken(canonical=canonical, movements=movements, raw_token=token))
-    return phase_tokens
+    return phase_tokens, recognized
 
 
 def _expand_ped_tokens(token: str, catalog: MovementCatalog) -> List[PhaseToken]:
@@ -404,14 +408,28 @@ def _expand_ped_tokens(token: str, catalog: MovementCatalog) -> List[PhaseToken]
     return phase_tokens
 
 
-def _expand_phase_tokens(tokens: Iterable[str], catalog: MovementCatalog) -> List[PhaseToken]:
+def _expand_phase_tokens(
+    tokens: Iterable[str],
+    catalog: MovementCatalog,
+    *,
+    profile_id: str | None = None,
+    phase_index: int | None = None,
+    tl_id: str | None = None,
+) -> List[PhaseToken]:
     phase_tokens: List[PhaseToken] = []
     for token in tokens:
-        produced = _expand_vehicle_tokens(token, catalog)
+        produced, recognized_vehicle = _expand_vehicle_tokens(token, catalog)
         if not produced:
             produced = _expand_ped_tokens(token, catalog)
-        if not produced and token:
-            LOG.warning("[TLS] unsupported allow_movement token '%s'", token)
+        recognized = recognized_vehicle
+        if not produced and token and not recognized:
+            LOG.warning(
+                "[TLS] unsupported allow_movement token '%s' (profile=%s phase_index=%s tl_id=%s)",
+                token,
+                profile_id,
+                phase_index,
+                tl_id,
+            )
         phase_tokens.extend(produced)
     return phase_tokens
 
@@ -631,8 +649,14 @@ def _build_timelines(
     available_movements = list(movements)
     time_cursor = 0
 
-    for phase in profile.phases:
-        phase_tokens = _expand_phase_tokens(phase.allow_movements, catalog)
+    for idx, phase in enumerate(profile.phases):
+        phase_tokens = _expand_phase_tokens(
+            phase.allow_movements,
+            catalog,
+            profile_id=getattr(profile, "id", None),
+            phase_index=idx,
+            tl_id=program.tl_id,
+        )
         midblock_ped_allow = (
             _midblock_ped_allowances(phase.allow_movements) if program.is_midblock else set()
         )
