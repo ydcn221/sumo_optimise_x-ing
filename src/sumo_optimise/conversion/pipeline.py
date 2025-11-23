@@ -284,6 +284,9 @@ def build_and_persist(
         sidewalk_width = None
         if result.defaults and result.defaults.sidewalk_width_m is not None:
             sidewalk_width = float(result.defaults.sidewalk_width_m)
+        junction_radius = None
+        if result.defaults and result.defaults.junction_radius_m is not None:
+            junction_radius = float(result.defaults.junction_radius_m)
         run_two_step_netconvert(
             artifacts.outdir,
             artifacts.nodes_path,
@@ -293,6 +296,7 @@ def build_and_persist(
             plain_prefix=artifacts.netconvert_prefix,
             network_output=artifacts.network_path,
             sidewalk_width=sidewalk_width,
+            junction_radius=junction_radius,
         )
 
     if options.run_netedit:

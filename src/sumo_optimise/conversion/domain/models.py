@@ -131,6 +131,7 @@ class Defaults:
     speed_kmh: int
     ped_endpoint_offset_m: float = 0.10
     sidewalk_width_m: Optional[float] = None
+    junction_radius_m: float = 4.0
 
 
 @dataclass(frozen=True)

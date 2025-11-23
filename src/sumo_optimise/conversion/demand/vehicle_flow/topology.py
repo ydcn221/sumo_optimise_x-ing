@@ -137,9 +137,11 @@ def _canonicalize_vehicle_template_alias(
 
 def _main_half_for_alias(alias: str, prefer_departing_half: bool) -> str:
     if alias.startswith("E"):
-        return "N" if prefer_departing_half else "S"
-    if alias.startswith("W"):
+        # East terminus: departures leave via the south/mainline westbound half, arrivals end on the north/eastbound half.
         return "S" if prefer_departing_half else "N"
+    if alias.startswith("W"):
+        # West terminus: departures leave via the north/eastbound half, arrivals end on the south/westbound half.
+        return "N" if prefer_departing_half else "S"
     raise DemandValidationError(f"unknown main endpoint alias: {alias}")
 
 

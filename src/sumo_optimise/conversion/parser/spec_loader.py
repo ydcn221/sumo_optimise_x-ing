@@ -138,6 +138,7 @@ def parse_defaults(spec_json: Dict) -> Defaults:
         speed_kmh=int(d["speed_kmh"]),
         ped_endpoint_offset_m=float(d.get("ped_endpoint_offset_m", 0.10)),
         sidewalk_width_m=float(d["sidewalk_width_m"]) if "sidewalk_width_m" in d else None,
+        junction_radius_m=float(d.get("junction_radius_m", 4.0)),
     )
 
 

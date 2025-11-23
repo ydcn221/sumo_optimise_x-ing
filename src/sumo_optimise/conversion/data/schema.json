@@ -38,7 +38,13 @@
           "default": 0.1
         },
         "sidewalk_width_m": { "type": "number", "minimum": 0, "description": "道路脇の歩道の幅[m]" },
-        "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" }
+        "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" },
+        "junction_radius_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "交差点の半径[m]",
+          "default": 4
+        }
       },
       "required": ["minor_road_length_m", "ped_crossing_width_m", "speed_kmh"]
     },
