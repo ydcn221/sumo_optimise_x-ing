@@ -27,7 +27,7 @@ def build_vehicle_flow_entries(
         entry = (
             f'  <flow id="{flow_id}" begin="0.00" end="{simulation_end_time:.2f}" '
             f'fromJunction="{origin}" toJunction="{destination}" '
-            f'departLane="best_prob" departSpeed="desired" {attr}/>'
+            f'departLane="best_prob" departSpeed="max" {attr}/>'
         )
         entries.append(entry)
     return entries

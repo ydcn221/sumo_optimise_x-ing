@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import csv
 import json
+import math
+import multiprocessing
 import os
+import re
+import shutil
 import subprocess
+import threading
+import time
+from datetime import datetime
+import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from queue import Empty
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence
 
@@ -33,8 +42,10 @@ from .models import (
     TripinfoMetrics,
     WaitingMetrics,
     WaitingThresholds,
+    WorkerPhase,
+    WorkerStatus,
 )
-from .parsers import parse_queue_output, parse_summary, parse_tripinfo
+from .parsers import parse_summary, parse_tripinfo, parse_waiting_ratio
 
 
 RESULT_COLUMNS = [
@@ -62,12 +73,193 @@ RESULT_COLUMNS = [
     "queue_max_length",
     "queue_is_durable",
     "scale_probe_enabled",
-    "scale_probe_min_failure_scale",
+    "scale_probe_max_durable_scale",
     "scale_probe_attempts",
     "fcd_note",
     "error_note",
 ]
 
+
+def _debug_log(log_path: Path | None, message: str) -> None:
+    """Append a debug line to the per-scenario SUMO log."""
+    if log_path is None:
+        return
+    timestamp = datetime.now().isoformat(timespec="milliseconds")
+    try:
+        with log_path.open("a", encoding="utf-8") as fp:
+            fp.write(f"[batchrun] {timestamp} {message}\\n")
+    except OSError:
+        # Best-effort logging; skip if the log cannot be written.
+        return
+
+
+def _send_status(
+    queue,
+    *,
+    worker_id: int,
+    scenario_id: str = "",
+    seed: int = 0,
+    scale: float | None = None,
+    phase: WorkerPhase = WorkerPhase.IDLE,
+    step: float | None = None,
+    label: str = "",
+    error: str | None = None,
+    probe_scale: float | None = None,
+    done: bool = False,
+    completed: bool = False,
+) -> None:
+    if queue is None:
+        return
+    queue.put(
+        {
+            "worker_id": worker_id,
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "scale": scale,
+            "phase": phase.value if isinstance(phase, WorkerPhase) else str(phase),
+            "step": step,
+            "label": label,
+            "error": error,
+            "probe_scale": probe_scale,
+            "done": done,
+            "completed": completed,
+            "timestamp": time.time(),
+        }
+    )
+
+
+def _colorize(text: str, phase: WorkerPhase) -> str:
+    colors = {
+        WorkerPhase.IDLE: "37",
+        WorkerPhase.BUILD: "33",
+        WorkerPhase.SUMO: "34",
+        WorkerPhase.PROBE: "35",
+        WorkerPhase.PARSE: "36",
+        WorkerPhase.DONE: "32",
+        WorkerPhase.ERROR: "31",
+    }
+    code = colors.get(phase)
+    if not code:
+        return text
+    return f"\x1b[{code}m{text}\x1b[0m"
+
+
+def _format_bytes(num: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    n = float(num)
+    for unit in units:
+        if n < 1024 or unit == units[-1]:
+            return f"{n:.1f}{unit}"
+        n /= 1024
+    return f"{n:.1f}B"
+
+
+def _dir_size_bytes(path: Path) -> int:
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += (Path(root) / name).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def _render_grid(
+    statuses: Dict[int, WorkerStatus],
+    *,
+    total: int,
+    completed: int,
+    size_display: str | None = None,
+) -> None:
+    term_width = shutil.get_terminal_size((160, 24)).columns
+    cols = max(1, term_width // 40)
+    rows: List[str] = []
+    ordered = [statuses[k] for k in sorted(statuses.keys())]
+    for idx, status in enumerate(ordered):
+        scenario = status.scenario_id or "-"
+        phase = status.phase
+        scale_str = f"{status.probe_scale or status.scale or 0:.1f}"
+        label_text = status.label
+        if not label_text and status.step is not None:
+            label_text = f"sumo#{int(status.step)}"
+        label = (label_text or phase.value)[:10]
+        cell = f"[{status.worker_id:02d}] {label:<10} {scenario:<12} (s {scale_str:>4})"
+        cell = cell[:40].ljust(40)
+        rows.append(_colorize(cell, phase))
+        if (idx + 1) % cols == 0:
+            rows.append("\n")
+    error_count = sum(1 for s in statuses.values() if s.phase == WorkerPhase.ERROR)
+    size_part = f" | out {size_display}" if size_display else ""
+    summary = f"completed {completed}/{total} | errors {error_count}{size_part}"
+    print("\x1b[H\x1b[2J", end="")
+    print("".join(rows))
+    print(summary)
+
+
+def _render_loop(
+    status_queue,
+    stop_event: threading.Event,
+    total: int,
+    worker_count: int,
+    output_root: Path,
+) -> None:
+    statuses: Dict[int, WorkerStatus] = {
+        idx: WorkerStatus(worker_id=idx) for idx in range(worker_count)
+    }
+    last_render = 0.0
+    completed = 0
+    last_size_time = 0.0
+    size_display: str | None = None
+    while not stop_event.is_set() or not status_queue.empty():
+        try:
+            evt = status_queue.get(timeout=0.1)
+        except Empty:
+            evt = None
+        if evt is not None:
+            worker_id = int(evt.get("worker_id", -1))
+            status = statuses.get(worker_id, WorkerStatus(worker_id=worker_id))
+            status.scenario_id = evt.get("scenario_id", status.scenario_id)
+            status.seed = evt.get("seed", status.seed)
+            status.scale = evt.get("scale", status.scale)
+            try:
+                status.phase = WorkerPhase(evt.get("phase", status.phase))
+            except ValueError:
+                status.phase = WorkerPhase.IDLE
+            status.step = evt.get("step", status.step)
+            status.label = evt.get("label", status.label)
+            status.error = evt.get("error")
+            status.done = evt.get("done", status.done)
+            status.probe_scale = evt.get("probe_scale", status.probe_scale)
+            status.last_update = evt.get("timestamp", time.time())
+            statuses[worker_id] = status
+            if evt.get("completed"):
+                completed += 1
+        now = time.time()
+        if now - last_size_time >= 2.0:
+            try:
+                size_bytes = _dir_size_bytes(output_root)
+                size_display = _format_bytes(size_bytes)
+            except OSError:
+                size_display = None
+            last_size_time = now
+        if now - last_render >= 0.5:
+            _render_grid(
+                statuses,
+                total=total,
+                completed=completed,
+                size_display=size_display,
+            )
+            last_render = now
+    try:
+        _render_grid(
+            statuses,
+            total=total,
+            completed=completed,
+            size_display=size_display,
+        )
+    except (EOFError, BrokenPipeError):
+        return
 
 def load_manifest(path: Path) -> List[ScenarioConfig]:
     manifest_path = Path(path)
@@ -162,7 +354,7 @@ def _build_options_for_scenario(
 
     return BuildOptions(
         schema_path=SCHEMA_JSON_PATH,
-        run_netconvert=False,
+        run_netconvert=True,
         run_netedit=False,
         run_sumo_gui=False,
         console_log=False,
@@ -188,6 +380,7 @@ def _collect_artifacts(result) -> RunArtifacts:
         person_summary=outdir / "summary.person.xml",
         detector=outdir / "detector.xml",
         queue=outdir / "queue.xml",
+        sumo_log=outdir / "sumo.log",
     )
 
 
@@ -205,6 +398,7 @@ def _artifacts_for_label(base: RunArtifacts, label: str | None) -> RunArtifacts:
         person_summary=outdir / base.person_summary.name,
         detector=outdir / base.detector.name,
         queue=outdir / base.queue.name,
+        sumo_log=outdir / base.sumo_log.name,
     )
 
 
@@ -226,8 +420,6 @@ def _sumo_command(
         str(artifacts.summary),
         "--person-summary-output",
         str(artifacts.person_summary),
-        "--queue-output",
-        str(artifacts.queue),
         "--device.fcd.begin",
         str(scenario.begin_filter),
         "--end",
@@ -238,6 +430,253 @@ def _sumo_command(
         str(scale),
     ]
     return cmd
+
+
+def _run_sumo_streaming(
+    cmd: List[str],
+    *,
+    affinity_cpu: int | None,
+    status_queue,
+    worker_id: int | None,
+    scenario_id: str,
+    seed: int,
+    phase: WorkerPhase,
+    scale: float,
+    use_pty: bool,
+    log_file=None,
+    summary_path: Path | None = None,
+    waiting_config: QueueDurabilityConfig | None = None,
+    enable_waiting_abort: bool = False,
+) -> tuple[bool, QueueDurabilityMetrics | None]:
+    log_path: Path | None = Path(log_file.name) if log_file else None
+    step_pattern = re.compile(r"Step #([0-9]+(?:\\.\\d+)?)")
+    last_step: float | None = None
+    last_label = "sumo"
+
+    aborted = False
+    abort_event = threading.Event()
+    live_waiting_metrics: QueueDurabilityMetrics | None = None
+    waiting_state = {"streak": 0, "max_ratio": 0.0, "first_failure": None}
+
+    def debug(message: str) -> None:
+        _debug_log(log_path, message)
+
+    def _monitor_summary_ratio() -> None:
+        nonlocal aborted, live_waiting_metrics
+        if (
+            not enable_waiting_abort
+            or summary_path is None
+            or waiting_config is None
+            or waiting_config.length_threshold <= 0
+        ):
+            return
+        debug(
+            f"[waiting-monitor] start threshold_ratio={waiting_config.length_threshold} "
+            f"step_window={waiting_config.step_window} path={summary_path}"
+        )
+        buffer = ""
+        pos = 0
+        streak = 0
+        max_ratio = 0.0
+        first_failure_time: float | None = None
+        try:
+            while not abort_event.is_set():
+                if not summary_path.exists():
+                    time.sleep(0.05)
+                    continue
+                with summary_path.open("r", encoding="utf-8", errors="ignore") as fp:
+                    fp.seek(pos)
+                    new = fp.read()
+                    pos = fp.tell()
+                    if not new:
+                        time.sleep(0.05)
+                        continue
+                    buffer += new
+                    while True:
+                        start = buffer.find("<step")
+                        if start == -1:
+                            break
+                        end = buffer.find("/>", start)
+                        if end == -1:
+                            break
+                        block = buffer[start : end + len("/>")]
+                        buffer = buffer[end + len("/>") :]
+                        try:
+                            elem = ET.fromstring(block)
+                        except ET.ParseError:
+                            continue
+                        try:
+                            waiting = float(elem.attrib.get("waiting") or 0.0)
+                        except (TypeError, ValueError):
+                            waiting = 0.0
+                        try:
+                            running = float(elem.attrib.get("running") or 0.0)
+                        except (TypeError, ValueError):
+                            running = 0.0
+                        time_attr = elem.attrib.get("time") or elem.attrib.get("timestep")
+                        try:
+                            time_value = float(time_attr) if time_attr is not None else None
+                        except (TypeError, ValueError):
+                            time_value = None
+                        total = waiting + running
+                        ratio = (waiting / total) if total > 0 else 0.0
+                        max_ratio = max(max_ratio, ratio)
+                        if ratio >= waiting_config.length_threshold:
+                            streak += 1
+                            if first_failure_time is None and streak >= waiting_config.step_window:
+                                first_failure_time = time_value
+                                abort_event.set()
+                                aborted = True
+                                debug(
+                                    f"[waiting-monitor] abort at t={time_value} "
+                                    f"streak={streak}/{waiting_config.step_window} "
+                                    f"ratio={ratio:.3f}"
+                                )
+                                break
+                        else:
+                            streak = 0
+        except Exception:
+            # best-effort
+            pass
+        finally:
+            waiting_state["streak"] = streak
+            waiting_state["max_ratio"] = max_ratio
+            waiting_state["first_failure"] = first_failure_time
+            if first_failure_time is not None:
+                live_waiting_metrics = QueueDurabilityMetrics(
+                    first_failure_time=first_failure_time,
+                    max_queue_length=max_ratio,
+                    threshold_steps=waiting_config.step_window if waiting_config else 0,
+                    threshold_length=waiting_config.length_threshold if waiting_config else 0.0,
+                )
+            if streak or first_failure_time is not None:
+                debug(
+                    f"[waiting-monitor] exit streak={streak} "
+                    f"max_ratio={max_ratio:.3f} first_failure={first_failure_time} "
+                    f"aborted={aborted} event_set={abort_event.is_set()}"
+                )
+
+    def handle_line(line: str, redraw: bool) -> None:
+        nonlocal last_step, last_label
+        step_value: float | None = None
+        match = step_pattern.search(line)
+        if match:
+            try:
+                step_value = float(match.group(1))
+            except ValueError:
+                step_value = None
+        if step_value is not None:
+            last_step = step_value
+            last_label = f"sumo#{int(step_value)}"
+        label_text = last_label
+        if log_file:
+            log_file.write(line + "\n")
+            log_file.flush()
+        _send_status(
+            status_queue,
+            worker_id=worker_id or 0,
+            scenario_id=scenario_id,
+            seed=seed,
+            scale=scale,
+            phase=phase,
+            step=step_value if step_value is not None else last_step,
+            label=label_text,
+        )
+
+    monitor_thread = None
+    if enable_waiting_abort and summary_path is not None and waiting_config is not None:
+        monitor_thread = threading.Thread(target=_monitor_summary_ratio, daemon=True)
+        monitor_thread.start()
+
+    if use_pty and os.name == "nt":
+        from winpty import PtyProcess
+
+        proc = PtyProcess.spawn(cmd)
+        buffer = ""
+        try:
+            while proc.isalive():
+                try:
+                    chunk = proc.read(1024)
+                except EOFError:
+                    break
+                if not chunk:
+                    if abort_event.is_set():
+                        proc.close(True)
+                        break
+                    time.sleep(0.01)
+                    continue
+                text = chunk.decode(errors="replace") if isinstance(chunk, bytes) else chunk
+                buffer += text
+                while True:
+                    nl = buffer.find("\n")
+                    cr = buffer.find("\r")
+                    if nl == -1 and cr == -1:
+                        break
+                    if cr != -1 and (nl == -1 or cr < nl):
+                        line = buffer[:cr]
+                        buffer = buffer[cr + 1 :]
+                        handle_line(line, True)
+                        continue
+                if nl != -1:
+                    line = buffer[:nl]
+                    buffer = buffer[nl + 1 :]
+                    handle_line(line, False)
+                    continue
+        finally:
+            rc = proc.exitstatus or 0
+            if proc.isalive():
+                proc.close(True)
+        if buffer:
+            handle_line(buffer, False)
+        if monitor_thread:
+            abort_event.set()
+            monitor_thread.join(timeout=0.2)
+        debug(f"[sumo-stream] winpty exit rc={rc} aborted={aborted} last_step={last_step}")
+        if rc != 0:
+            raise subprocess.CalledProcessError(rc, cmd)
+        return aborted, live_waiting_metrics
+
+    with subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=False,
+        bufsize=0,
+        preexec_fn=_set_affinity_preexec(affinity_cpu),
+    ) as proc:
+        buffer = ""
+        for chunk in iter(lambda: proc.stdout.read(1024), b""):  # type: ignore[attr-defined]
+            text = chunk.decode(errors="replace")
+            buffer += text
+            while True:
+                nl = buffer.find("\n")
+                cr = buffer.find("\r")
+                if nl == -1 and cr == -1:
+                    break
+                if cr != -1 and (nl == -1 or cr < nl):
+                    line = buffer[:cr]
+                    buffer = buffer[cr + 1 :]
+                    handle_line(line, True)
+                    continue
+                if nl != -1:
+                    line = buffer[:nl]
+                    buffer = buffer[nl + 1 :]
+                    handle_line(line, False)
+                    continue
+            if abort_event.is_set():
+                debug(f"[sumo-stream] abort_event set; terminating SUMO (last_step={last_step})")
+                proc.terminate()
+                break
+        if buffer:
+            handle_line(buffer, False)
+        proc.wait()
+        if monitor_thread:
+            abort_event.set()
+            monitor_thread.join(timeout=0.2)
+        debug(f"[sumo-stream] exit rc={proc.returncode} aborted={aborted} last_step={last_step}")
+        if proc.returncode:
+            raise subprocess.CalledProcessError(proc.returncode, cmd)
+    return aborted, live_waiting_metrics
 
 
 def _normalize_scale(scale: float, resolution: float) -> float:
@@ -263,18 +702,44 @@ def _run_for_scale(
     affinity_cpu: int | None,
     collect_tripinfo: bool,
     collect_waiting: bool,
+    status_queue=None,
+    worker_id: int | None = None,
+    phase: WorkerPhase = WorkerPhase.SUMO,
+    use_pty: bool = False,
+    enable_waiting_abort: bool = False,
 ) -> tuple[TripinfoMetrics, WaitingMetrics, QueueDurabilityMetrics]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.queue.parent.mkdir(parents=True, exist_ok=True)
+    artifacts.sumo_log.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = _sumo_command(artifacts, scenario, scale=scale)
-    subprocess.run(
-        cmd,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        preexec_fn=_set_affinity_preexec(affinity_cpu),
+    with artifacts.sumo_log.open("a", encoding="utf-8") as log_fp:
+        log_fp.write(" ".join(cmd) + "\n")
+        log_fp.flush()
+        aborted, live_waiting_metrics = _run_sumo_streaming(
+            cmd,
+            affinity_cpu=affinity_cpu,
+            status_queue=status_queue,
+            worker_id=worker_id,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            phase=phase,
+            scale=scale,
+            use_pty=use_pty,
+            log_file=log_fp,
+            summary_path=artifacts.summary,
+            waiting_config=queue_config,
+            enable_waiting_abort=enable_waiting_abort,
+        )
+
+    _send_status(
+        status_queue,
+        worker_id=worker_id or 0,
+        scenario_id=scenario.scenario_id,
+        seed=scenario.seed,
+        scale=scale,
+        phase=WorkerPhase.PARSE,
+        label="metrics",
     )
 
     tripinfo_metrics = (
@@ -289,7 +754,17 @@ def _run_for_scale(
         person_waiting = parse_summary(artifacts.person_summary, thresholds=thresholds)
         waiting_metrics = _merge_waiting(waiting_metrics, person_waiting)
 
-    queue_metrics = parse_queue_output(artifacts.queue, config=queue_config)
+    queue_metrics = live_waiting_metrics or parse_waiting_ratio(artifacts.summary, config=queue_config)
+    phase_label = phase.name if hasattr(phase, "name") else str(phase)
+    _debug_log(
+        artifacts.sumo_log,
+        (
+            f"[scale-run] phase={phase_label} scale={scale:.2f} "
+            f"aborted={aborted} queue_durable={queue_metrics.is_durable} "
+            f"first_failure_time={queue_metrics.first_failure_time} "
+            f"max_ratio={queue_metrics.max_queue_length}"
+        ),
+    )
     return tripinfo_metrics, waiting_metrics, queue_metrics
 
 
@@ -303,15 +778,39 @@ def _probe_scale_durability(
     affinity_cpu: int | None,
     queue_cache: Dict[float, QueueDurabilityMetrics],
     attempts: int,
+    status_queue=None,
+    worker_id: int | None = None,
+    use_pty: bool = False,
 ) -> ScaleProbeResult:
     resolution = scale_probe.resolution if scale_probe.resolution > 0 else 0.1
-    start_scale = _normalize_scale(scale_probe.start, resolution)
+    coarse_step = scale_probe.coarse_step if scale_probe.coarse_step > 0 else resolution
+    coarse_step = max(coarse_step, resolution)
+    start_scale = _normalize_scale(max(scale_probe.start, resolution), resolution)
     ceiling = max(scale_probe.ceiling, start_scale)
+    probe_tag = f"[scale-probe scenario={scenario.scenario_id} seed={scenario.seed}]"
+    log_path = base_artifacts.sumo_log
+    _debug_log(
+        log_path,
+        (
+            f"{probe_tag} start={start_scale:.2f} "
+            f"ceiling={ceiling:.2f} resolution={resolution:.3f} "
+            f"coarse_step={coarse_step:.3f}"
+        ),
+    )
 
     def run_scale(raw_scale: float) -> QueueDurabilityMetrics:
         nonlocal attempts
         scale_value = _normalize_scale(raw_scale, resolution)
         if scale_value in queue_cache:
+            _debug_log(
+                log_path,
+                (
+                    f"{probe_tag} reuse scale={scale_value:.2f} "
+                    f"durable={queue_cache[scale_value].is_durable} "
+                    f"first_failure_time={queue_cache[scale_value].first_failure_time} "
+                    f"max_queue_length={queue_cache[scale_value].max_queue_length}"
+                ),
+            )
             return queue_cache[scale_value]
 
         artifacts = _artifacts_for_label(base_artifacts, _format_scale_label(scale_value))
@@ -324,9 +823,24 @@ def _probe_scale_durability(
             affinity_cpu=affinity_cpu,
             collect_tripinfo=False,
             collect_waiting=False,
+            status_queue=status_queue,
+            worker_id=worker_id,
+            phase=WorkerPhase.PROBE,
+            use_pty=use_pty,
+            enable_waiting_abort=scale_probe.abort_on_waiting,
         )
         queue_cache[scale_value] = queue_metrics
-        attempts += 1
+        attempt_no = attempts + 1
+        attempts = attempt_no
+        _debug_log(
+            log_path,
+            (
+                f"{probe_tag} run#{attempt_no} scale={scale_value:.2f} "
+                f"durable={queue_metrics.is_durable} "
+                f"first_failure_time={queue_metrics.first_failure_time} "
+                f"max_queue_length={queue_metrics.max_queue_length}"
+            ),
+        )
         return queue_metrics
 
     last_durable: float | None = None
@@ -335,23 +849,51 @@ def _probe_scale_durability(
     current = start_scale
     while current <= ceiling:
         metrics = run_scale(current)
+        _debug_log(
+            log_path,
+            (
+                f"{probe_tag} coarse scale={current:.2f} "
+                f"durable={metrics.is_durable} "
+                f"first_failure_time={metrics.first_failure_time} "
+                f"max_queue_length={metrics.max_queue_length}"
+            ),
+        )
         if not metrics.is_durable:
             failure_scale = current
+            _debug_log(
+                log_path,
+                (
+                    f"{probe_tag} first failure at scale={current:.2f} "
+                    f"(last durable={last_durable})"
+                ),
+            )
             break
         last_durable = current
-        current = _normalize_scale(current + 1.0, resolution)
+        next_coarse = (math.floor(current / coarse_step) + 1) * coarse_step
+        current = _normalize_scale(next_coarse, resolution)
 
     if failure_scale is None:
+        _debug_log(
+            log_path,
+            (
+                f"{probe_tag} no failure up to ceiling={ceiling:.2f}; "
+                f"max durable={last_durable if last_durable is not None else ceiling}"
+            ),
+        )
         return ScaleProbeResult(
             enabled=True,
-            min_failure_scale=None,
+            max_durable_scale=last_durable if last_durable is not None else ceiling,
             attempts=attempts,
         )
 
     if last_durable is None:
+        _debug_log(
+            log_path,
+            f"{probe_tag} failed at start scale={failure_scale:.2f}",
+        )
         return ScaleProbeResult(
             enabled=True,
-            min_failure_scale=failure_scale,
+            max_durable_scale=None,
             attempts=attempts,
         )
 
@@ -364,16 +906,30 @@ def _probe_scale_durability(
             break
 
         metrics = run_scale(mid)
+        _debug_log(
+            log_path,
+            (
+                f"{probe_tag} binary mid={mid:.2f} "
+                f"durable={metrics.is_durable} "
+                f"first_failure_time={metrics.first_failure_time} "
+                f"max_queue_length={metrics.max_queue_length}"
+            ),
+        )
         if metrics.is_durable:
             low = mid
         else:
             high = mid
 
-    return ScaleProbeResult(
+    result = ScaleProbeResult(
         enabled=True,
-        min_failure_scale=high,
+        max_durable_scale=low,
         attempts=attempts,
     )
+    _debug_log(
+        log_path,
+        f"{probe_tag} result max_durable_scale={result.max_durable_scale} attempts={result.attempts}",
+    )
+    return result
 
 
 def _set_affinity_preexec(cpu: int | None):
@@ -397,6 +953,9 @@ def run_scenario(
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
     affinity_cpu: int | None,
+    worker_id: int,
+    status_queue,
+    use_pty: bool,
 ) -> ScenarioResult | None:
     base_queue_metrics = QueueDurabilityMetrics(
         threshold_steps=queue_config.step_window,
@@ -404,11 +963,20 @@ def run_scenario(
     )
     probe_result = ScaleProbeResult(
         enabled=scale_probe.enabled,
-        min_failure_scale=None,
+        max_durable_scale=None,
         attempts=0,
     )
 
     try:
+        _send_status(
+            status_queue,
+            worker_id=worker_id,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scenario.scale,
+            phase=WorkerPhase.BUILD,
+            label="build",
+        )
         options = _build_options_for_scenario(scenario, output_root=output_root)
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
         artifacts = _collect_artifacts(build_result)
@@ -430,6 +998,15 @@ def run_scenario(
         )
 
     try:
+        _send_status(
+            status_queue,
+            worker_id=worker_id,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scenario.scale,
+            phase=WorkerPhase.SUMO,
+            label="sumo",
+        )
         tripinfo_metrics, waiting_metrics, queue_metrics = _run_for_scale(
             artifacts,
             scenario,
@@ -439,6 +1016,10 @@ def run_scenario(
             affinity_cpu=affinity_cpu,
             collect_tripinfo=True,
             collect_waiting=True,
+            status_queue=status_queue,
+            worker_id=worker_id,
+            phase=WorkerPhase.SUMO,
+            use_pty=use_pty,
         )
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return ScenarioResult(
@@ -452,9 +1033,9 @@ def run_scenario(
             waiting=WaitingMetrics(),
             waiting_thresholds=thresholds,
             queue=base_queue_metrics,
-            scale_probe=ScaleProbeResult(
-                enabled=scale_probe.enabled,
-                min_failure_scale=None,
+           scale_probe=ScaleProbeResult(
+               enabled=scale_probe.enabled,
+                max_durable_scale=None,
                 attempts=1,
             ),
             fcd_note="sumo failed",
@@ -466,7 +1047,7 @@ def run_scenario(
     queue_cache: Dict[float, QueueDurabilityMetrics] = {base_scale_key: queue_metrics}
     probe_result = ScaleProbeResult(
         enabled=scale_probe.enabled,
-        min_failure_scale=None,
+        max_durable_scale=None,
         attempts=1,
     )
     if scale_probe.enabled:
@@ -479,9 +1060,12 @@ def run_scenario(
             affinity_cpu=affinity_cpu,
             queue_cache=queue_cache,
             attempts=1,
+            status_queue=status_queue,
+            worker_id=worker_id,
+            use_pty=use_pty,
         )
 
-    return ScenarioResult(
+    result = ScenarioResult(
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         scale=scenario.scale,
@@ -496,19 +1080,22 @@ def run_scenario(
         fcd_note="n/a",
         error=None,
     )
+    _send_status(
+        status_queue,
+        worker_id=worker_id,
+        scenario_id=scenario.scenario_id,
+        seed=scenario.seed,
+        scale=scenario.scale,
+        phase=WorkerPhase.DONE,
+        label="done",
+        done=True,
+        completed=True,
+    )
+    return result
 
 
 def _affinity_plan(count: int) -> List[int | None]:
-    try:
-        cpus = sorted(os.sched_getaffinity(0))
-    except AttributeError:
-        return [None] * count
-    if not cpus:
-        return [None] * count
-    planned: List[int | None] = []
-    for idx in range(count):
-        planned.append(cpus[idx % len(cpus)])
-    return planned
+    return [None] * count
 
 
 def run_batch(
@@ -520,29 +1107,59 @@ def run_batch(
     scale_probe: ScaleProbeConfig,
     results_csv: Path,
     max_workers: int = DEFAULT_MAX_WORKERS,
+    use_pty: bool | None = None,
 ) -> None:
     scenario_list = list(scenarios)
     if not scenario_list:
         return
 
+    if use_pty is None:
+        use_pty = bool(os.environ.get("SUMO_BATCH_USE_PTY", "").strip())
     workers = min(max_workers, len(scenario_list))
     affinity = _affinity_plan(workers)
     results: List[ScenarioResult] = []
+    manager = multiprocessing.Manager()
+    status_queue = manager.Queue()
+    stop_event = threading.Event()
+
+    for idx, scenario in enumerate(scenario_list):
+        _send_status(
+            status_queue,
+            worker_id=idx % workers,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scenario.scale,
+            phase=WorkerPhase.IDLE,
+            label="queued",
+        )
+
+    render_thread = threading.Thread(
+        target=_render_loop,
+        args=(status_queue, stop_event, len(scenario_list), workers, output_root),
+        daemon=True,
+    )
+    render_thread.start()
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(
+        futures = {}
+        for idx, scenario in enumerate(scenario_list):
+            worker_slot = idx % workers
+            fut = pool.submit(
                 run_scenario,
                 scenario,
                 output_root=output_root,
                 thresholds=thresholds,
                 queue_config=queue_config,
                 scale_probe=scale_probe,
-                affinity_cpu=affinity[idx % len(affinity)],
-            ): scenario
-            for idx, scenario in enumerate(scenario_list)
-        }
+                affinity_cpu=affinity[worker_slot],
+                worker_id=worker_slot,
+                status_queue=status_queue,
+                use_pty=use_pty,
+            )
+            futures[fut] = worker_slot
+
         for future in as_completed(futures):
+            worker_slot = futures[future]
             result = future.result()
             if result is None:
                 continue
@@ -550,11 +1167,26 @@ def run_batch(
                 print(
                     f"[skip] scenario={result.scenario_id} seed={result.seed} error={result.error}"
                 )
+                _send_status(
+                    status_queue,
+                    worker_id=worker_slot,
+                    scenario_id=result.scenario_id,
+                    seed=result.seed,
+                    scale=result.scale,
+                    phase=WorkerPhase.ERROR,
+                    label="error",
+                    error=result.error,
+                    done=True,
+                    completed=True,
+                )
                 continue
             results.append(result)
 
     if results:
         _append_results(results_csv, results)
+    stop_event.set()
+    render_thread.join(timeout=1.0)
+    manager.shutdown()
 
 
 def _merge_waiting(primary: WaitingMetrics, secondary: WaitingMetrics) -> WaitingMetrics:
@@ -631,7 +1263,7 @@ def _result_to_row(result: ScenarioResult) -> dict:
         "queue_max_length": _fmt(result.queue.max_queue_length),
         "queue_is_durable": str(result.queue.is_durable),
         "scale_probe_enabled": str(result.scale_probe.enabled),
-        "scale_probe_min_failure_scale": _fmt(result.scale_probe.min_failure_scale),
+        "scale_probe_max_durable_scale": _fmt(result.scale_probe.max_durable_scale),
         "scale_probe_attempts": result.scale_probe.attempts,
         "fcd_note": result.fcd_note,
         "error_note": result.error or "",

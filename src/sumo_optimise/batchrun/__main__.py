@@ -10,6 +10,7 @@ from .models import (
     DEFAULT_QUEUE_THRESHOLD_LENGTH,
     DEFAULT_QUEUE_THRESHOLD_STEPS,
     DEFAULT_SCALE_PROBE_CEILING,
+    DEFAULT_SCALE_PROBE_COARSE_STEP,
     DEFAULT_SCALE_PROBE_RESOLUTION,
     DEFAULT_SCALE_PROBE_START,
     WAITING_THRESHOLD_FIXED,
@@ -54,16 +55,20 @@ def parse_args() -> argparse.Namespace:
         help="Relative waiting threshold expressed as a fraction of running (default: 0.10)",
     )
     parser.add_argument(
+        "--waiting-ratio-steps",
         "--queue-threshold-steps",
+        dest="waiting_ratio_steps",
         type=int,
         default=DEFAULT_QUEUE_THRESHOLD_STEPS,
-        help="Consecutive timesteps required above queueing_length threshold to mark as non-durable (default: 10)",
+        help="Consecutive timesteps required above waiting ratio threshold to mark as non-durable (default: 10)",
     )
     parser.add_argument(
+        "--waiting-ratio-threshold",
         "--queue-threshold-length",
+        dest="waiting_ratio_threshold",
         type=float,
         default=DEFAULT_QUEUE_THRESHOLD_LENGTH,
-        help="Queueing_length threshold in meters for durability check (default: 200)",
+        help="Waiting ratio threshold (waiting/(waiting+running)) for durability check (default: 0.25)",
     )
     parser.add_argument(
         "--enable-scale-probe",
@@ -74,19 +79,30 @@ def parse_args() -> argparse.Namespace:
         "--scale-probe-start",
         type=float,
         default=DEFAULT_SCALE_PROBE_START,
-        help="Starting scale for durability probing (default: 1.0)",
+        help="Starting scale for durability probing (default: 0.1)",
     )
     parser.add_argument(
         "--scale-probe-ceiling",
         type=float,
         default=DEFAULT_SCALE_PROBE_CEILING,
-        help="Maximum scale tested before giving up (default: 10.0)",
+        help="Maximum scale tested before giving up (default: 5.0)",
     )
     parser.add_argument(
         "--scale-probe-resolution",
         type=float,
         default=DEFAULT_SCALE_PROBE_RESOLUTION,
         help="Resolution for binary search when probing scales (default: 0.1)",
+    )
+    parser.add_argument(
+        "--scale-probe-coarse-step",
+        type=float,
+        default=DEFAULT_SCALE_PROBE_COARSE_STEP,
+        help="Step size for coarse scanning before binary search (default: 0.1)",
+    )
+    parser.add_argument(
+        "--abort-on-waiting-ratio",
+        action="store_true",
+        help="Abort SUMO during probe when waiting ratio condition is hit, then switch to fine search",
     )
     return parser.parse_args()
 
@@ -100,14 +116,16 @@ def main() -> None:
         pct_of_running=args.waiting_threshold_pct,
     )
     queue_config = QueueDurabilityConfig(
-        step_window=args.queue_threshold_steps,
-        length_threshold=args.queue_threshold_length,
+        step_window=args.waiting_ratio_steps,
+        length_threshold=args.waiting_ratio_threshold,
     )
     scale_probe_config = ScaleProbeConfig(
         enabled=args.enable_scale_probe,
         start=args.scale_probe_start,
         ceiling=args.scale_probe_ceiling,
         resolution=args.scale_probe_resolution,
+        coarse_step=args.scale_probe_coarse_step,
+        abort_on_waiting=args.abort_on_waiting_ratio,
     )
     scenarios = load_manifest(args.manifest)
     run_batch(

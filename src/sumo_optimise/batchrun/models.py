@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from enum import Enum
 
 DEFAULT_BEGIN_FILTER = 1200.0
 DEFAULT_END_TIME = 2400.0
@@ -10,10 +11,11 @@ DEFAULT_MAX_WORKERS = 32
 WAITING_THRESHOLD_FIXED = 1.0
 WAITING_THRESHOLD_PCT = 0.10
 DEFAULT_QUEUE_THRESHOLD_STEPS = 10
-DEFAULT_QUEUE_THRESHOLD_LENGTH = 200.0
-DEFAULT_SCALE_PROBE_START = 1.0
-DEFAULT_SCALE_PROBE_CEILING = 10.0
+DEFAULT_QUEUE_THRESHOLD_LENGTH = 0.25  # ratio threshold (waiting/(waiting+running))
+DEFAULT_SCALE_PROBE_START = 0.1
+DEFAULT_SCALE_PROBE_CEILING = 5.0
 DEFAULT_SCALE_PROBE_RESOLUTION = 0.1
+DEFAULT_SCALE_PROBE_COARSE_STEP = DEFAULT_SCALE_PROBE_RESOLUTION
 
 
 @dataclass(frozen=True)
@@ -86,9 +88,9 @@ class WaitingMetrics:
 @dataclass
 class QueueDurabilityMetrics:
     first_failure_time: Optional[float] = None
-    max_queue_length: float = 0.0
+    max_queue_length: float = 0.0  # when using summary-based ratio, this stores max ratio
     threshold_steps: int = DEFAULT_QUEUE_THRESHOLD_STEPS
-    threshold_length: float = DEFAULT_QUEUE_THRESHOLD_LENGTH
+    threshold_length: float = DEFAULT_QUEUE_THRESHOLD_LENGTH  # ratio threshold
 
     @property
     def is_durable(self) -> bool:
@@ -105,6 +107,7 @@ class RunArtifacts:
     person_summary: Path
     detector: Path
     queue: Path
+    sumo_log: Path
 
 
 @dataclass(frozen=True)
@@ -113,13 +116,40 @@ class ScaleProbeConfig:
     start: float = DEFAULT_SCALE_PROBE_START
     ceiling: float = DEFAULT_SCALE_PROBE_CEILING
     resolution: float = DEFAULT_SCALE_PROBE_RESOLUTION
+    coarse_step: float = DEFAULT_SCALE_PROBE_COARSE_STEP
+    abort_on_waiting: bool = False
 
 
 @dataclass
 class ScaleProbeResult:
     enabled: bool = False
-    min_failure_scale: Optional[float] = None
+    max_durable_scale: Optional[float] = None
     attempts: int = 0
+
+
+class WorkerPhase(str, Enum):
+    IDLE = "idle"
+    BUILD = "build"
+    SUMO = "sumo"
+    PROBE = "probe"
+    PARSE = "parse"
+    DONE = "done"
+    ERROR = "error"
+
+
+@dataclass
+class WorkerStatus:
+    worker_id: int
+    scenario_id: str = ""
+    seed: int = 0
+    scale: float = 0.0
+    phase: WorkerPhase = WorkerPhase.IDLE
+    step: Optional[float] = None
+    label: str = ""
+    last_update: float = 0.0
+    done: bool = False
+    error: Optional[str] = None
+    probe_scale: Optional[float] = None
 
 
 @dataclass

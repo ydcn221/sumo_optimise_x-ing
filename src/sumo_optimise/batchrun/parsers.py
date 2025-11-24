@@ -92,6 +92,49 @@ def parse_summary(path: Path, *, thresholds: WaitingThresholds) -> WaitingMetric
     return metrics
 
 
+def parse_waiting_ratio(path: Path, *, config: QueueDurabilityConfig) -> QueueDurabilityMetrics:
+    """
+    Determine durability from summary.xml using waiting/(waiting+running) ratio.
+    Ratio is treated as queue_max_length; threshold_length is the ratio threshold.
+    """
+    metrics = QueueDurabilityMetrics(
+        threshold_steps=config.step_window,
+        threshold_length=config.length_threshold,
+    )
+    if not path.exists():
+        return metrics
+
+    streak = 0
+    for _, elem in ET.iterparse(path, events=("end",)):
+        tag = elem.tag.split("}")[-1]
+        if tag != "step":
+            elem.clear()
+            continue
+
+        waiting = _as_float(elem.attrib.get("waiting")) or 0.0
+        running = _as_float(elem.attrib.get("running")) or 0.0
+        time_value = (
+            _as_float(elem.attrib.get("time"))
+            or _as_float(elem.attrib.get("timestep"))
+            or 0.0
+        )
+
+        total = waiting + running
+        ratio = (waiting / total) if total > 0 else 0.0
+        metrics.max_queue_length = max(metrics.max_queue_length, ratio)
+
+        if ratio >= config.length_threshold:
+            streak += 1
+            if metrics.first_failure_time is None and streak >= config.step_window:
+                metrics.first_failure_time = time_value
+        else:
+            streak = 0
+
+        elem.clear()
+
+    return metrics
+
+
 def parse_queue_output(
     path: Path, *, config: QueueDurabilityConfig
 ) -> QueueDurabilityMetrics:
@@ -102,35 +145,40 @@ def parse_queue_output(
     if not path.exists():
         return metrics
 
-    consecutive = 0
+    hits = 0
 
-    for _, elem in ET.iterparse(path, events=("end",)):
-        tag = elem.tag.split("}")[-1]
-        if tag != "data":
+    try:
+        for _, elem in ET.iterparse(path, events=("end",)):
+            tag = elem.tag.split("}")[-1]
+            if tag != "data":
+                elem.clear()
+                continue
+
+            time_value = (
+                _as_float(elem.attrib.get("timestep"))
+                or _as_float(elem.attrib.get("time_step"))
+                or _as_float(elem.attrib.get("time"))
+                or 0.0
+            )
+
+            step_max = 0.0
+            for lane in elem.iterfind(".//lane"):
+                lane_length = _as_float(lane.attrib.get("queueing_length")) or 0.0
+                step_max = max(step_max, lane_length)
+
+            metrics.max_queue_length = max(metrics.max_queue_length, step_max)
+
+            if step_max > config.length_threshold:
+                hits += 1
+                if metrics.first_failure_time is None and hits >= config.step_window:
+                    metrics.first_failure_time = time_value
+
             elem.clear()
-            continue
-
-        time_value = (
-            _as_float(elem.attrib.get("timestep"))
-            or _as_float(elem.attrib.get("time_step"))
-            or _as_float(elem.attrib.get("time"))
-            or 0.0
-        )
-
-        step_max = 0.0
-        for lane in elem.iterfind(".//lane"):
-            lane_length = _as_float(lane.attrib.get("queueing_length")) or 0.0
-            step_max = max(step_max, lane_length)
-
-        metrics.max_queue_length = max(metrics.max_queue_length, step_max)
-
-        if step_max > config.length_threshold:
-            consecutive += 1
-            if metrics.first_failure_time is None and consecutive >= config.step_window:
-                metrics.first_failure_time = time_value
-        else:
-            consecutive = 0
-
-        elem.clear()
+    except ET.ParseError:
+        # File may be truncated when probe aborts early; treat as non-durable if any hits so far.
+        if hits > 0 and metrics.first_failure_time is None:
+            metrics.first_failure_time = 0.0
+            metrics.max_queue_length = max(metrics.max_queue_length, config.length_threshold + 1)
+        return metrics
 
     return metrics
