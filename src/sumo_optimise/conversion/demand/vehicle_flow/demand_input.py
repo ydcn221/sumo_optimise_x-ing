@@ -166,6 +166,9 @@ def load_vehicle_turn_weights(source: TurnWeightSource) -> Dict[str, JunctionTur
                 except ValueError:
                     problems.append(f"{column} must be numeric (got {token!r})")
                     continue
+                if weight < 0:
+                    problems.append(f"{column} must be non-negative (got {token!r})")
+                    weight = 0.0
                 if column in _MAIN_TURN_COLUMNS:
                     main_weights[movement] = weight
                 else:

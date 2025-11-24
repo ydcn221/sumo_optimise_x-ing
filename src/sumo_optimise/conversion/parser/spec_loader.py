@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from jsonschema import Draft7Validator  # type: ignore
 
@@ -18,6 +18,7 @@ from ..domain.models import (
     JunctionConfig,
     LayoutEvent,
     MainRoadConfig,
+    LaneMovementPlan,
     SideMinor,
     SignalPhaseDef,
     SignalProfileDef,
@@ -33,6 +34,7 @@ from ..utils.errors import (
     SpecFileNotFound,
     UnsupportedVersionError,
 )
+from ..utils.movements import canonical_lane_label
 from ..utils.logging import get_logger
 
 LOG = get_logger()
@@ -136,6 +138,7 @@ def parse_defaults(spec_json: Dict) -> Defaults:
         speed_kmh=int(d["speed_kmh"]),
         ped_endpoint_offset_m=float(d.get("ped_endpoint_offset_m", 0.10)),
         sidewalk_width_m=float(d["sidewalk_width_m"]) if "sidewalk_width_m" in d else None,
+        junction_radius_m=float(d.get("junction_radius_m", 4.0)),
     )
 
 
@@ -263,6 +266,22 @@ def parse_signal_profiles(spec_json: Dict) -> Dict[str, Dict[str, SignalProfileD
     return profiles_by_kind
 
 
+def _parse_lane_movements(event: Dict) -> Optional[LaneMovementPlan]:
+    raw = event.get("lane_movements")
+    if not raw:
+        return None
+
+    plans: LaneMovementPlan = {}
+    for approach, templates in raw.items():
+        variants: Dict[int, Tuple[str, ...]] = {}
+        for template in templates or []:
+            labels = tuple(canonical_lane_label(label) for label in template or [])
+            variants[len(labels)] = labels
+        if variants:
+            plans[approach] = variants
+    return plans or None
+
+
 def _parse_junction_config(event: Dict) -> JunctionConfig:
     try:
         return JunctionConfig(
@@ -271,6 +290,7 @@ def _parse_junction_config(event: Dict) -> JunctionConfig:
             minor_lanes_approach=int(event["minor_lanes_approach"]),
             minor_lanes_departure=int(event["minor_lanes_departure"]),
             median_continuous=bool(event["median_continuous"]),
+            lane_movements=_parse_lane_movements(event),
         )
     except KeyError as exc:  # pragma: no cover - enforced by schema
         raise SemanticValidationError(f"missing junction geometry field: {exc}") from exc

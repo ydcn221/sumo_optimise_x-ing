@@ -45,6 +45,12 @@
       "minor_lanes_approach": 3,
       "minor_lanes_departure": 2,
       "median_continuous": false,
+      "lane_movements": {
+        "main": [
+          ["LT", "T", "RU"],
+          ["L", "T", "T", "RU"]
+        ]
+      },
       "main_u_turn_allowed": true,
       "signalized": true,
       "main_ped_crossing_placement": {"west": true, "east": true},

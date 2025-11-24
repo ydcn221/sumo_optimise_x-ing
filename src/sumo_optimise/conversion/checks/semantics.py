@@ -7,6 +7,7 @@ from ..domain.models import MainRoadConfig, SignalProfileDef, SnapRule
 from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.snap import grid_upper_bound, round_position
 from ..utils.errors import SemanticValidationError
+from ..utils.movements import ALLOWED_LANE_SYMBOLS
 from ..utils.logging import get_logger
 
 LOG = get_logger()
@@ -25,6 +26,54 @@ def validate_semantics(
     grid_max = grid_upper_bound(length, snap_rule.step_m)
     errors: List[str] = []
     warnings: List[str] = []
+
+    def _validate_lane_movements(idx: int, etype: str, lane_movements) -> None:
+        allowed_keys = {"main", "EB", "WB", "minor", "NB", "SB"}
+
+        if not isinstance(lane_movements, dict):
+            errors.append(f"[VAL] E109 lane_movements must be an object: index={idx} type={etype}")
+            return
+
+        keys = set(lane_movements.keys())
+        invalid_keys = keys - allowed_keys
+        if invalid_keys:
+            errors.append(
+                f"[VAL] E109 invalid lane_movements keys: index={idx} type={etype} keys={','.join(sorted(invalid_keys))}"
+            )
+
+        if "main" in keys and ({"EB", "WB"} & keys):
+            errors.append(f"[VAL] E112 lane_movements main conflicts with EB/WB: index={idx} type={etype}")
+        if "minor" in keys and ({"NB", "SB"} & keys):
+            errors.append(f"[VAL] E112 lane_movements minor conflicts with NB/SB: index={idx} type={etype}")
+
+        for approach, templates in lane_movements.items():
+            if approach not in allowed_keys:
+                continue
+            if not isinstance(templates, list) or len(templates) == 0:
+                errors.append(
+                    f"[VAL] E109 lane_movements[{approach}] must be a non-empty array: index={idx} type={etype}"
+                )
+                continue
+            seen_counts = set()
+            for template in templates:
+                if not isinstance(template, list) or len(template) == 0:
+                    errors.append(
+                        f"[VAL] E110 lane_movements[{approach}] entry must be a non-empty array: index={idx} type={etype}"
+                    )
+                    continue
+                lane_count = len(template)
+                if lane_count in seen_counts:
+                    errors.append(
+                        f"[VAL] E111 duplicate lane_movements for lane_count={lane_count}: index={idx} type={etype} key={approach}"
+                    )
+                seen_counts.add(lane_count)
+                for label in template:
+                    label_str = str(label)
+                    upper = label_str.upper()
+                    if not upper or any(ch not in ALLOWED_LANE_SYMBOLS for ch in upper):
+                        errors.append(
+                            f"[VAL] E110 invalid lane label in lane_movements[{approach}]: index={idx} label={label_str}"
+                        )
 
     layout = spec_json.get("layout", []) or []
     seen: Dict[Tuple[str, int], int] = {}
@@ -104,6 +153,9 @@ def validate_semantics(
                         f"[VAL] E107 unknown signal profile or kind mismatch: index={idx} type={etype} profile_id={pid} "
                         f"expected_kind={kind}"
                     )
+
+            if "lane_movements" in e:
+                _validate_lane_movements(idx, etype, e.get("lane_movements"))
 
             pos_to_junction[pos_snap] = {
                 "index": idx,

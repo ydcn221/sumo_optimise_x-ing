@@ -38,7 +38,13 @@
           "default": 0.1
         },
         "sidewalk_width_m": { "type": "number", "minimum": 0, "description": "道路脇の歩道の幅[m]" },
-        "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" }
+        "speed_kmh": { "type": "integer", "exclusiveMinimum": 0, "description": "制限速度[km/h]" },
+        "junction_radius_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "交差点の半径[m]",
+          "default": 4
+        }
       },
       "required": ["minor_road_length_m", "ped_crossing_width_m", "speed_kmh"]
     },
@@ -168,6 +174,37 @@
       "description": "交差点における主道路横断歩道の設置有無（東西）。"
     },
 
+    "laneMovementLabel": {
+      "type": "string",
+      "pattern": "^[LTRU]+$",
+      "description": "レーンに許可する動作（L/T/R/Uの組み合わせ、順不同）"
+    },
+    "laneMovementTemplate": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/laneMovementLabel" },
+      "description": "左端→右端の順に並べたレーン指定。配列の長さが対象レーン数。"
+    },
+    "laneMovementProfiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/laneMovementTemplate" },
+      "description": "レーン数ごとに複数のテンプレートを並べる。"
+    },
+    "laneMovements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main": { "$ref": "#/definitions/laneMovementProfiles", "description": "主道路（EB/WB共通）の流入レーン指定" },
+        "EB": { "$ref": "#/definitions/laneMovementProfiles", "description": "主道路 EB の流入レーン指定" },
+        "WB": { "$ref": "#/definitions/laneMovementProfiles", "description": "主道路 WB の流入レーン指定" },
+        "minor": { "$ref": "#/definitions/laneMovementProfiles", "description": "従道路（北南共通）の流入レーン指定" },
+        "NB": { "$ref": "#/definitions/laneMovementProfiles", "description": "従道路 NB の流入レーン指定" },
+        "SB": { "$ref": "#/definitions/laneMovementProfiles", "description": "従道路 SB の流入レーン指定" }
+      },
+      "description": "交差点流入レーンの進行方向を手動指定するための設定。レーン数に応じて一致するテンプレートが適用され、見つからない場合は従来の自動割当を使用する。"
+    },
+
     "signalProfileBase": {
       "type": "object",
       "additionalProperties": false,
@@ -255,6 +292,10 @@
           "type": "boolean",
           "description": "中央帯(median)が交差点内まで連続しているか（右折/Uターン制限を伴う）"
         },
+        "lane_movements": {
+          "$ref": "#/definitions/laneMovements",
+          "description": "流入レーンの進行方向を手動で指定する（main/EB/WB/minor/NB/SB のいずれかを使用）。"
+        },
         "main_u_turn_allowed": {
           "type": "boolean",
           "description": "主道路のUターンを許可するか（true=許可、false=禁止）"
@@ -324,6 +365,10 @@
         "median_continuous": {
           "type": "boolean",
           "description": "中央帯(median)が交差点内まで連続しているか（右折/Uターン制限を伴う）"
+        },
+        "lane_movements": {
+          "$ref": "#/definitions/laneMovements",
+          "description": "流入レーンの進行方向を手動で指定する（main/EB/WB/minor/NB/SB のいずれかを使用）。"
         },
         "main_u_turn_allowed": {
           "type": "boolean",
