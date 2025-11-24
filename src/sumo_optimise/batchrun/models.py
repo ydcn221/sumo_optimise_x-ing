@@ -9,6 +9,11 @@ DEFAULT_END_TIME = 2400.0
 DEFAULT_MAX_WORKERS = 32
 WAITING_THRESHOLD_FIXED = 1.0
 WAITING_THRESHOLD_PCT = 0.10
+DEFAULT_QUEUE_THRESHOLD_STEPS = 10
+DEFAULT_QUEUE_THRESHOLD_LENGTH = 200.0
+DEFAULT_SCALE_PROBE_START = 1.0
+DEFAULT_SCALE_PROBE_CEILING = 10.0
+DEFAULT_SCALE_PROBE_RESOLUTION = 0.1
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,12 @@ class ScenarioConfig:
 class WaitingThresholds:
     fixed: float = WAITING_THRESHOLD_FIXED
     pct_of_running: float = WAITING_THRESHOLD_PCT
+
+
+@dataclass(frozen=True)
+class QueueDurabilityConfig:
+    step_window: int = DEFAULT_QUEUE_THRESHOLD_STEPS
+    length_threshold: float = DEFAULT_QUEUE_THRESHOLD_LENGTH
 
 
 @dataclass
@@ -73,6 +84,18 @@ class WaitingMetrics:
 
 
 @dataclass
+class QueueDurabilityMetrics:
+    first_failure_time: Optional[float] = None
+    max_queue_length: float = 0.0
+    threshold_steps: int = DEFAULT_QUEUE_THRESHOLD_STEPS
+    threshold_length: float = DEFAULT_QUEUE_THRESHOLD_LENGTH
+
+    @property
+    def is_durable(self) -> bool:
+        return self.first_failure_time is None
+
+
+@dataclass
 class RunArtifacts:
     outdir: Path
     sumocfg: Path
@@ -81,6 +104,22 @@ class RunArtifacts:
     summary: Path
     person_summary: Path
     detector: Path
+    queue: Path
+
+
+@dataclass(frozen=True)
+class ScaleProbeConfig:
+    enabled: bool = False
+    start: float = DEFAULT_SCALE_PROBE_START
+    ceiling: float = DEFAULT_SCALE_PROBE_CEILING
+    resolution: float = DEFAULT_SCALE_PROBE_RESOLUTION
+
+
+@dataclass
+class ScaleProbeResult:
+    enabled: bool = False
+    min_failure_scale: Optional[float] = None
+    attempts: int = 0
 
 
 @dataclass
@@ -94,5 +133,7 @@ class ScenarioResult:
     tripinfo: TripinfoMetrics
     waiting: WaitingMetrics
     waiting_thresholds: WaitingThresholds
+    queue: QueueDurabilityMetrics
+    scale_probe: ScaleProbeResult
     fcd_note: str = ""
     error: Optional[str] = None

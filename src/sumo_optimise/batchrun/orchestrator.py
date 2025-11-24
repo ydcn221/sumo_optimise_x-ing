@@ -6,7 +6,7 @@ import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence
 
 from sumo_optimise.conversion.domain.models import (
     BuildOptions,
@@ -23,14 +23,18 @@ from .models import (
     DEFAULT_END_TIME,
     DEFAULT_MAX_WORKERS,
     DemandFiles,
+    QueueDurabilityConfig,
+    QueueDurabilityMetrics,
     RunArtifacts,
+    ScaleProbeConfig,
+    ScaleProbeResult,
     ScenarioConfig,
     ScenarioResult,
     TripinfoMetrics,
     WaitingMetrics,
     WaitingThresholds,
 )
-from .parsers import parse_summary, parse_tripinfo
+from .parsers import parse_queue_output, parse_summary, parse_tripinfo
 
 
 RESULT_COLUMNS = [
@@ -52,6 +56,14 @@ RESULT_COLUMNS = [
     "waiting_first_exceed_time_pct",
     "waiting_first_exceed_value_pct",
     "waiting_max_value",
+    "queue_threshold_steps",
+    "queue_threshold_length",
+    "queue_first_non_durable_time",
+    "queue_max_length",
+    "queue_is_durable",
+    "scale_probe_enabled",
+    "scale_probe_min_failure_scale",
+    "scale_probe_attempts",
     "fcd_note",
     "error_note",
 ]
@@ -175,12 +187,32 @@ def _collect_artifacts(result) -> RunArtifacts:
         summary=outdir / "summary.xml",
         person_summary=outdir / "summary.person.xml",
         detector=outdir / "detector.xml",
+        queue=outdir / "queue.xml",
+    )
+
+
+def _artifacts_for_label(base: RunArtifacts, label: str | None) -> RunArtifacts:
+    if not label:
+        return base
+
+    outdir = base.outdir / label
+    return RunArtifacts(
+        outdir=outdir,
+        sumocfg=base.sumocfg,
+        tripinfo=outdir / base.tripinfo.name,
+        fcd=outdir / base.fcd.name,
+        summary=outdir / base.summary.name,
+        person_summary=outdir / base.person_summary.name,
+        detector=outdir / base.detector.name,
+        queue=outdir / base.queue.name,
     )
 
 
 def _sumo_command(
     artifacts: RunArtifacts,
     scenario: ScenarioConfig,
+    *,
+    scale: float,
 ) -> List[str]:
     cmd = [
         "sumo",
@@ -194,6 +226,8 @@ def _sumo_command(
         str(artifacts.summary),
         "--person-summary-output",
         str(artifacts.person_summary),
+        "--queue-output",
+        str(artifacts.queue),
         "--device.fcd.begin",
         str(scenario.begin_filter),
         "--end",
@@ -201,9 +235,145 @@ def _sumo_command(
         "--seed",
         str(scenario.seed),
         "--scale",
-        str(scenario.scale),
+        str(scale),
     ]
     return cmd
+
+
+def _normalize_scale(scale: float, resolution: float) -> float:
+    if resolution <= 0:
+        return scale
+    step = round(scale / resolution)
+    return round(step * resolution, 10)
+
+
+def _format_scale_label(scale: float) -> str:
+    normalized = f"{scale:.3f}".rstrip("0").rstrip(".")
+    safe = normalized.replace("-", "neg").replace(".", "p") or "0"
+    return f"scale_{safe}"
+
+
+def _run_for_scale(
+    artifacts: RunArtifacts,
+    scenario: ScenarioConfig,
+    *,
+    thresholds: WaitingThresholds,
+    queue_config: QueueDurabilityConfig,
+    scale: float,
+    affinity_cpu: int | None,
+    collect_tripinfo: bool,
+    collect_waiting: bool,
+) -> tuple[TripinfoMetrics, WaitingMetrics, QueueDurabilityMetrics]:
+    artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
+    artifacts.queue.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = _sumo_command(artifacts, scenario, scale=scale)
+    subprocess.run(
+        cmd,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        preexec_fn=_set_affinity_preexec(affinity_cpu),
+    )
+
+    tripinfo_metrics = (
+        parse_tripinfo(artifacts.tripinfo, begin_filter=scenario.begin_filter)
+        if collect_tripinfo
+        else TripinfoMetrics()
+    )
+
+    waiting_metrics = WaitingMetrics()
+    if collect_waiting:
+        waiting_metrics = parse_summary(artifacts.summary, thresholds=thresholds)
+        person_waiting = parse_summary(artifacts.person_summary, thresholds=thresholds)
+        waiting_metrics = _merge_waiting(waiting_metrics, person_waiting)
+
+    queue_metrics = parse_queue_output(artifacts.queue, config=queue_config)
+    return tripinfo_metrics, waiting_metrics, queue_metrics
+
+
+def _probe_scale_durability(
+    base_artifacts: RunArtifacts,
+    scenario: ScenarioConfig,
+    *,
+    thresholds: WaitingThresholds,
+    queue_config: QueueDurabilityConfig,
+    scale_probe: ScaleProbeConfig,
+    affinity_cpu: int | None,
+    queue_cache: Dict[float, QueueDurabilityMetrics],
+    attempts: int,
+) -> ScaleProbeResult:
+    resolution = scale_probe.resolution if scale_probe.resolution > 0 else 0.1
+    start_scale = _normalize_scale(scale_probe.start, resolution)
+    ceiling = max(scale_probe.ceiling, start_scale)
+
+    def run_scale(raw_scale: float) -> QueueDurabilityMetrics:
+        nonlocal attempts
+        scale_value = _normalize_scale(raw_scale, resolution)
+        if scale_value in queue_cache:
+            return queue_cache[scale_value]
+
+        artifacts = _artifacts_for_label(base_artifacts, _format_scale_label(scale_value))
+        _, _, queue_metrics = _run_for_scale(
+            artifacts,
+            scenario,
+            thresholds=thresholds,
+            queue_config=queue_config,
+            scale=scale_value,
+            affinity_cpu=affinity_cpu,
+            collect_tripinfo=False,
+            collect_waiting=False,
+        )
+        queue_cache[scale_value] = queue_metrics
+        attempts += 1
+        return queue_metrics
+
+    last_durable: float | None = None
+    failure_scale: float | None = None
+
+    current = start_scale
+    while current <= ceiling:
+        metrics = run_scale(current)
+        if not metrics.is_durable:
+            failure_scale = current
+            break
+        last_durable = current
+        current = _normalize_scale(current + 1.0, resolution)
+
+    if failure_scale is None:
+        return ScaleProbeResult(
+            enabled=True,
+            min_failure_scale=None,
+            attempts=attempts,
+        )
+
+    if last_durable is None:
+        return ScaleProbeResult(
+            enabled=True,
+            min_failure_scale=failure_scale,
+            attempts=attempts,
+        )
+
+    low = last_durable
+    high = failure_scale
+
+    while high - low > resolution:
+        mid = _normalize_scale((low + high) / 2, resolution)
+        if mid in {low, high}:
+            break
+
+        metrics = run_scale(mid)
+        if metrics.is_durable:
+            low = mid
+        else:
+            high = mid
+
+    return ScaleProbeResult(
+        enabled=True,
+        min_failure_scale=high,
+        attempts=attempts,
+    )
 
 
 def _set_affinity_preexec(cpu: int | None):
@@ -224,8 +394,20 @@ def run_scenario(
     *,
     output_root: Path,
     thresholds: WaitingThresholds,
+    queue_config: QueueDurabilityConfig,
+    scale_probe: ScaleProbeConfig,
     affinity_cpu: int | None,
 ) -> ScenarioResult | None:
+    base_queue_metrics = QueueDurabilityMetrics(
+        threshold_steps=queue_config.step_window,
+        threshold_length=queue_config.length_threshold,
+    )
+    probe_result = ScaleProbeResult(
+        enabled=scale_probe.enabled,
+        min_failure_scale=None,
+        attempts=0,
+    )
+
     try:
         options = _build_options_for_scenario(scenario, output_root=output_root)
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
@@ -241,21 +423,22 @@ def run_scenario(
             tripinfo=TripinfoMetrics(),
             waiting=WaitingMetrics(),
             waiting_thresholds=thresholds,
+            queue=base_queue_metrics,
+            scale_probe=probe_result,
             fcd_note="build failed",
             error=str(exc),
         )
 
-    artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
-
-    cmd = _sumo_command(artifacts, scenario)
     try:
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=_set_affinity_preexec(affinity_cpu),
+        tripinfo_metrics, waiting_metrics, queue_metrics = _run_for_scale(
+            artifacts,
+            scenario,
+            thresholds=thresholds,
+            queue_config=queue_config,
+            scale=scenario.scale,
+            affinity_cpu=affinity_cpu,
+            collect_tripinfo=True,
+            collect_waiting=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return ScenarioResult(
@@ -268,14 +451,35 @@ def run_scenario(
             tripinfo=TripinfoMetrics(),
             waiting=WaitingMetrics(),
             waiting_thresholds=thresholds,
+            queue=base_queue_metrics,
+            scale_probe=ScaleProbeResult(
+                enabled=scale_probe.enabled,
+                min_failure_scale=None,
+                attempts=1,
+            ),
             fcd_note="sumo failed",
             error=getattr(exc, "stderr", None) or str(exc),
         )
 
-    tripinfo_metrics = parse_tripinfo(artifacts.tripinfo, begin_filter=scenario.begin_filter)
-    waiting_metrics = parse_summary(artifacts.summary, thresholds=thresholds)
-    person_waiting = parse_summary(artifacts.person_summary, thresholds=thresholds)
-    waiting_metrics = _merge_waiting(waiting_metrics, person_waiting)
+    resolution = scale_probe.resolution if scale_probe.resolution > 0 else 0.1
+    base_scale_key = _normalize_scale(scenario.scale, resolution)
+    queue_cache: Dict[float, QueueDurabilityMetrics] = {base_scale_key: queue_metrics}
+    probe_result = ScaleProbeResult(
+        enabled=scale_probe.enabled,
+        min_failure_scale=None,
+        attempts=1,
+    )
+    if scale_probe.enabled:
+        probe_result = _probe_scale_durability(
+            artifacts,
+            scenario,
+            thresholds=thresholds,
+            queue_config=queue_config,
+            scale_probe=scale_probe,
+            affinity_cpu=affinity_cpu,
+            queue_cache=queue_cache,
+            attempts=1,
+        )
 
     return ScenarioResult(
         scenario_id=scenario.scenario_id,
@@ -287,6 +491,8 @@ def run_scenario(
         tripinfo=tripinfo_metrics,
         waiting=waiting_metrics,
         waiting_thresholds=thresholds,
+        queue=queue_metrics,
+        scale_probe=probe_result,
         fcd_note="n/a",
         error=None,
     )
@@ -310,6 +516,8 @@ def run_batch(
     *,
     output_root: Path,
     thresholds: WaitingThresholds,
+    queue_config: QueueDurabilityConfig,
+    scale_probe: ScaleProbeConfig,
     results_csv: Path,
     max_workers: int = DEFAULT_MAX_WORKERS,
 ) -> None:
@@ -328,6 +536,8 @@ def run_batch(
                 scenario,
                 output_root=output_root,
                 thresholds=thresholds,
+                queue_config=queue_config,
+                scale_probe=scale_probe,
                 affinity_cpu=affinity[idx % len(affinity)],
             ): scenario
             for idx, scenario in enumerate(scenario_list)
@@ -415,6 +625,14 @@ def _result_to_row(result: ScenarioResult) -> dict:
         "waiting_first_exceed_time_pct": _fmt(result.waiting.first_pct_time),
         "waiting_first_exceed_value_pct": _fmt(result.waiting.first_pct_value),
         "waiting_max_value": _fmt(result.waiting.max_waiting),
+        "queue_threshold_steps": result.queue.threshold_steps,
+        "queue_threshold_length": _fmt(result.queue.threshold_length),
+        "queue_first_non_durable_time": _fmt(result.queue.first_failure_time),
+        "queue_max_length": _fmt(result.queue.max_queue_length),
+        "queue_is_durable": str(result.queue.is_durable),
+        "scale_probe_enabled": str(result.scale_probe.enabled),
+        "scale_probe_min_failure_scale": _fmt(result.scale_probe.min_failure_scale),
+        "scale_probe_attempts": result.scale_probe.attempts,
         "fcd_note": result.fcd_note,
         "error_note": result.error or "",
     }
