@@ -40,6 +40,7 @@ from .models import (
     ScenarioConfig,
     ScenarioResult,
     TripinfoMetrics,
+    CompressionConfig,
     WorkerPhase,
     WorkerStatus,
 )
@@ -204,6 +205,7 @@ def _render_loop(
     total: int,
     worker_count: int,
     output_root: Path,
+    diag_log_path: Path | None = None,
 ) -> None:
     statuses: Dict[int, WorkerStatus] = {
         idx: WorkerStatus(worker_id=idx) for idx in range(worker_count)
@@ -236,6 +238,18 @@ def _render_loop(
             statuses[worker_id] = status
             if evt.get("completed"):
                 completed += 1
+            if diag_log_path is not None:
+                try:
+                    with diag_log_path.open("a", encoding="utf-8") as fp:
+                        ts = datetime.now().isoformat(timespec="milliseconds")
+                        fp.write(
+                            f"{ts} worker={worker_id} scenario={status.scenario_id} "
+                            f"phase={status.phase.value} label={status.label} "
+                            f"step={status.step} scale={status.scale} probe_scale={status.probe_scale} "
+                            f"done={status.done} error={status.error or ''}\n"
+                        )
+                except OSError:
+                    pass
         now = time.time()
         if now - last_size_time >= 2.0:
             try:
@@ -697,11 +711,11 @@ def _run_sumo_streaming(
     return aborted, live_waiting_metrics
 
 
-def _normalize_scale(scale: float, resolution: float) -> float:
-    if resolution <= 0:
+def _normalize_scale(scale: float, fine_step: float) -> float:
+    if fine_step <= 0:
         return scale
-    step = round(scale / resolution)
-    return round(step * resolution, 10)
+    step = round(scale / fine_step)
+    return round(step * fine_step, 10)
 
 
 def _format_scale_label(scale: float) -> str:
@@ -723,6 +737,7 @@ def _run_for_scale(
     phase: WorkerPhase = WorkerPhase.SUMO,
     use_pty: bool = False,
     enable_waiting_abort: bool = False,
+    metrics_trace: bool = False,
 ) -> tuple[TripinfoMetrics, QueueDurabilityMetrics]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.personinfo.parent.mkdir(parents=True, exist_ok=True)
@@ -759,17 +774,56 @@ def _run_for_scale(
         label="metrics",
     )
 
-    tripinfo_metrics = (
-        parse_tripinfo(
+    tripinfo_metrics = TripinfoMetrics()
+    if collect_tripinfo:
+        trip_start = time.time()
+        last_trip_progress = {"count": 0, "logged_at": trip_start}
+
+        def _trip_progress(count: int, elapsed: float) -> None:
+            last_trip_progress["count"] = count
+            now = time.time()
+            if now - last_trip_progress["logged_at"] >= 1.0:
+                last_trip_progress["logged_at"] = now
+                _debug_log(
+                    artifacts.sumo_log,
+                    f"[metrics-trace] tripinfo count={count} elapsed={elapsed:.1f}s rate={count/max(elapsed, 1e-9):.0f}/s",
+                )
+
+        tripinfo_metrics = parse_tripinfo(
             artifacts.tripinfo,
             begin_filter=scenario.begin_filter,
             personinfo=artifacts.personinfo,
+            progress_cb=_trip_progress if metrics_trace else None,
         )
-        if collect_tripinfo
-        else TripinfoMetrics()
-    )
+        if metrics_trace:
+            trip_elapsed = time.time() - trip_start
+            _debug_log(
+                artifacts.sumo_log,
+                (
+                    f"[metrics-trace] tripinfo done count={last_trip_progress['count']} "
+                    f"elapsed={trip_elapsed:.2f}s size_bytes={artifacts.tripinfo.stat().st_size if artifacts.tripinfo.exists() else 0}"
+                ),
+            )
 
-    queue_metrics = live_waiting_metrics or parse_waiting_ratio(artifacts.summary, config=queue_config)
+    queue_start = time.time()
+    queue_metrics = live_waiting_metrics or parse_waiting_ratio(
+        artifacts.summary,
+        config=queue_config,
+        progress_cb=(
+            (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
+        ),
+    )
+    if metrics_trace:
+        queue_elapsed = time.time() - queue_start
+        _debug_log(
+            artifacts.sumo_log,
+            (
+                f"[metrics-trace] waiting_ratio done elapsed={queue_elapsed:.2f}s "
+                f"first_over_saturation_time={queue_metrics.first_failure_time} "
+                f"max_ratio={queue_metrics.max_queue_length} "
+                f"size_bytes={artifacts.summary.stat().st_size if artifacts.summary.exists() else 0}"
+            ),
+        )
     phase_label = phase.name if hasattr(phase, "name") else str(phase)
     queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
     queue_reason = ""
@@ -803,29 +857,36 @@ def _probe_scale_durability(
     status_queue=None,
     worker_id: int | None = None,
     use_pty: bool = False,
+    metrics_trace: bool = False,
 ) -> ScaleProbeResult:
-    resolution = scale_probe.resolution if scale_probe.resolution > 0 else 0.1
-    coarse_step = scale_probe.coarse_step if scale_probe.coarse_step > 0 else resolution
-    coarse_step = max(coarse_step, resolution)
-    start_scale = _normalize_scale(max(scale_probe.start, resolution), resolution)
+    fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
+    coarse_step = scale_probe.coarse_step if scale_probe.coarse_step > 0 else fine_step
+    coarse_step = max(coarse_step, fine_step)
+    start_scale = _normalize_scale(max(scale_probe.start, coarse_step), fine_step)
     ceiling = max(scale_probe.ceiling, start_scale)
     probe_tag = f"[scale-probe scenario={scenario.scenario_id} seed={scenario.seed}]"
     log_path = base_artifacts.sumo_log
     over_saturation_reason_text = _format_over_saturation_reason(
         queue_config.length_threshold, queue_config.step_window
     )
+    # Probe progression is now tied to an integer step grid to avoid float drift stalls.
+    step_resolution = fine_step if fine_step > 0 else 0.1
+    coarse_step = max(coarse_step, step_resolution)
+    coarse_step_ticks = max(1, int(round(coarse_step / step_resolution)))
+    current_tick = int(round(start_scale / step_resolution))
+    ceiling_tick = int(round(ceiling / step_resolution))
     _debug_log(
         log_path,
         (
             f"{probe_tag} start={start_scale:.2f} "
-            f"ceiling={ceiling:.2f} resolution={resolution:.3f} "
+            f"ceiling={ceiling:.2f} fine_step={fine_step:.3f} "
             f"coarse_step={coarse_step:.3f}"
         ),
     )
 
     def run_scale(raw_scale: float) -> QueueDurabilityMetrics:
         nonlocal attempts
-        scale_value = _normalize_scale(raw_scale, resolution)
+        scale_value = _normalize_scale(raw_scale, fine_step)
         if scale_value in queue_cache:
             cached_metrics = queue_cache[scale_value]
             cached_status = (
@@ -861,6 +922,7 @@ def _probe_scale_durability(
             phase=WorkerPhase.PROBE,
             use_pty=use_pty,
             enable_waiting_abort=scale_probe.abort_on_waiting,
+            metrics_trace=metrics_trace,
         )
         queue_cache[scale_value] = queue_metrics
         attempt_no = attempts + 1
@@ -884,10 +946,8 @@ def _probe_scale_durability(
         return queue_metrics
 
     last_durable: float | None = None
-    over_saturation_scale: float | None = None
-
-    current = start_scale
-    while current <= ceiling:
+    while current_tick <= ceiling_tick:
+        current = _normalize_scale(current_tick * step_resolution, step_resolution)
         metrics = run_scale(current)
         coarse_status = (
             "over_saturation_detected" if not metrics.is_durable else "durable"
@@ -907,87 +967,71 @@ def _probe_scale_durability(
                 f"{coarse_reason}"
             ),
         )
-        if not metrics.is_durable:
-            over_saturation_scale = current
+        if metrics.is_durable:
+            last_durable = current
+            current_tick += coarse_step_ticks
+            continue
+
+        # Enter fine scan between last_durable (or start) and current (first coarse over-saturation).
+        fine_start_base = _normalize_scale(max(scale_probe.start, fine_step), fine_step)
+        fine_start = (
+            _normalize_scale(last_durable + fine_step, fine_step)
+            if last_durable is not None
+            else fine_start_base
+        )
+        fine_current = fine_start
+        last_fine_durable = last_durable
+        while fine_current <= current:
+            fine_metrics = run_scale(fine_current)
+            fine_status = (
+                "over_saturation_detected" if not fine_metrics.is_durable else "durable"
+            )
+            fine_reason = (
+                f"; over saturation detected because {over_saturation_reason_text}"
+                if not fine_metrics.is_durable
+                else ""
+            )
             _debug_log(
                 log_path,
                 (
-                    f"{probe_tag} over saturation detected at scale={current:.2f} "
-                    f"(last durable={last_durable}); {over_saturation_reason_text}"
+                    f"{probe_tag} fine scale={fine_current:.2f} "
+                    f"status={fine_status} "
+                    f"first_over_saturation_time={fine_metrics.first_failure_time} "
+                    f"max_queue_length={fine_metrics.max_queue_length}"
+                    f"{fine_reason}"
                 ),
             )
-            break
-        last_durable = current
-        next_coarse = (math.floor(current / coarse_step) + 1) * coarse_step
-        current = _normalize_scale(next_coarse, resolution)
+            if fine_metrics.is_durable:
+                last_fine_durable = fine_current
+                fine_current = _normalize_scale(fine_current + fine_step, fine_step)
+                continue
 
-    if over_saturation_scale is None:
-        _debug_log(
-            log_path,
-            (
-                f"{probe_tag} no over saturation detected up to ceiling={ceiling:.2f}; "
-                f"max durable={last_durable if last_durable is not None else ceiling}"
-            ),
-        )
+            # First fine over-saturation hit: return with previous durable scale.
+            return ScaleProbeResult(
+                enabled=True,
+                max_durable_scale=last_fine_durable,
+                attempts=attempts,
+            )
+
+        # Fine scan never hit over-saturation; treat current coarse as over-saturation bound.
         return ScaleProbeResult(
             enabled=True,
-            max_durable_scale=last_durable if last_durable is not None else ceiling,
+            max_durable_scale=last_fine_durable,
             attempts=attempts,
         )
 
-    if last_durable is None:
-        _debug_log(
-            log_path,
-            f"{probe_tag} over saturation present at start scale={over_saturation_scale:.2f}; {over_saturation_reason_text}",
-        )
-        return ScaleProbeResult(
-            enabled=True,
-            max_durable_scale=None,
-            attempts=attempts,
-        )
-
-    low = last_durable
-    high = over_saturation_scale
-
-    while high - low > resolution:
-        mid = _normalize_scale((low + high) / 2, resolution)
-        if mid in {low, high}:
-            break
-
-        metrics = run_scale(mid)
-        binary_status = (
-            "over_saturation_detected" if not metrics.is_durable else "durable"
-        )
-        binary_reason = (
-            f"; over saturation detected because {over_saturation_reason_text}"
-            if not metrics.is_durable
-            else ""
-        )
-        _debug_log(
-            log_path,
-            (
-                f"{probe_tag} binary mid={mid:.2f} "
-                f"status={binary_status} "
-                f"first_over_saturation_time={metrics.first_failure_time} "
-                f"max_queue_length={metrics.max_queue_length}"
-                f"{binary_reason}"
-            ),
-        )
-        if metrics.is_durable:
-            low = mid
-        else:
-            high = mid
-
-    result = ScaleProbeResult(
-        enabled=True,
-        max_durable_scale=low,
-        attempts=attempts,
-    )
     _debug_log(
         log_path,
-        f"{probe_tag} result max_durable_scale={result.max_durable_scale} attempts={result.attempts}",
+        (
+            f"{probe_tag} no over saturation detected up to ceiling={ceiling:.2f}; "
+            f"max durable={last_durable if last_durable is not None else ceiling}"
+        ),
     )
-    return result
+    return ScaleProbeResult(
+        enabled=True,
+        max_durable_scale=last_durable if last_durable is not None else ceiling,
+        attempts=attempts,
+    )
 
 
 def _set_affinity_preexec(cpu: int | None):
@@ -1009,10 +1053,12 @@ def run_scenario(
     output_root: Path,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
+    compression: CompressionConfig,
     affinity_cpu: int | None,
     worker_id: int,
     status_queue,
     use_pty: bool,
+    metrics_trace: bool = False,
 ) -> ScenarioResult | None:
     base_queue_metrics = QueueDurabilityMetrics(
         threshold_steps=queue_config.step_window,
@@ -1073,6 +1119,7 @@ def run_scenario(
             worker_id=worker_id,
             phase=WorkerPhase.SUMO,
             use_pty=use_pty,
+            metrics_trace=metrics_trace,
         )
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return ScenarioResult(
@@ -1093,8 +1140,8 @@ def run_scenario(
             error=getattr(exc, "stderr", None) or str(exc),
         )
 
-    resolution = scale_probe.resolution if scale_probe.resolution > 0 else 0.1
-    base_scale_key = _normalize_scale(scenario.scale, resolution)
+    fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
+    base_scale_key = _normalize_scale(scenario.scale, fine_step)
     queue_cache: Dict[float, QueueDurabilityMetrics] = {base_scale_key: queue_metrics}
     probe_result = ScaleProbeResult(
         enabled=scale_probe.enabled,
@@ -1113,6 +1160,23 @@ def run_scenario(
             status_queue=status_queue,
             worker_id=worker_id,
             use_pty=use_pty,
+            metrics_trace=metrics_trace,
+        )
+
+    if compression.enabled:
+        _send_status(
+            status_queue,
+            worker_id=worker_id,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scenario.scale,
+            phase=WorkerPhase.PARSE,
+            label="compressing",
+        )
+        _compress_artifacts(
+            artifacts,
+            level=compression.zstd_level,
+            log_path=artifacts.sumo_log,
         )
 
     result = ScenarioResult(
@@ -1155,8 +1219,18 @@ def run_batch(
     results_csv: Path,
     max_workers: int = DEFAULT_MAX_WORKERS,
     use_pty: bool | None = None,
+    metrics_trace: bool = False,
+    compress_zstd_level: int | None = None,
 ) -> None:
     scenario_list = list(scenarios)
+    compression_level = 10
+    if compress_zstd_level is not None:
+        compression_level = max(1, min(22, compress_zstd_level))
+    compression = CompressionConfig(
+        enabled=compress_zstd_level is not None,
+        zstd_level=compression_level,
+    )
+    scenario_order = {sc.scenario_id: idx for idx, sc in enumerate(scenario_list)}
     if not scenario_list:
         return
 
@@ -1182,7 +1256,14 @@ def run_batch(
 
     render_thread = threading.Thread(
         target=_render_loop,
-        args=(status_queue, stop_event, len(scenario_list), workers, output_root),
+        args=(
+            status_queue,
+            stop_event,
+            len(scenario_list),
+            workers,
+            output_root,
+            (output_root / "batchrun.log") if metrics_trace else None,
+        ),
         daemon=True,
     )
     render_thread.start()
@@ -1197,10 +1278,12 @@ def run_batch(
                 output_root=output_root,
                 queue_config=queue_config,
                 scale_probe=scale_probe,
+                compression=compression,
                 affinity_cpu=affinity[worker_slot],
                 worker_id=worker_slot,
                 status_queue=status_queue,
                 use_pty=use_pty,
+                metrics_trace=metrics_trace,
             )
             futures[fut] = worker_slot
 
@@ -1229,7 +1312,11 @@ def run_batch(
             results.append(result)
 
     if results:
-        _append_results(results_csv, results)
+        results_sorted = sorted(
+            results,
+            key=lambda r: scenario_order.get(r.scenario_id, len(scenario_order)),
+        )
+        _append_results(results_csv, results_sorted)
     stop_event.set()
     render_thread.join(timeout=1.0)
     manager.shutdown()
@@ -1244,6 +1331,40 @@ def _append_results(path: Path, results: Sequence[ScenarioResult]) -> None:
             writer.writeheader()
         for result in results:
             writer.writerow(_result_to_row(result))
+
+
+def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path | None) -> None:
+    try:
+        import zstandard as zstd
+    except ImportError:
+        _debug_log(log_path, "[compress] zstandard not installed; skipping compression")
+        return
+
+    targets = [
+        artifacts.tripinfo,
+        artifacts.personinfo,
+        artifacts.summary,
+        artifacts.person_summary,
+        artifacts.detector,
+        artifacts.queue,
+        artifacts.fcd,
+    ]
+    cctx = zstd.ZstdCompressor(level=level, threads=1)
+
+    for src in targets:
+        if not src.exists():
+            continue
+        dst = src.with_suffix(src.suffix + ".zst")
+        try:
+            with src.open("rb") as rfp, dst.open("wb") as wfp:
+                wfp.write(cctx.compress(rfp.read()))
+            src.unlink(missing_ok=True)
+            _debug_log(
+                log_path,
+                f"[compress] {src.name} -> {dst.name} level={level} bytes={dst.stat().st_size}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            _debug_log(log_path, f"[compress] failed {src.name}: {exc}")
 
 
 def _result_to_row(result: ScenarioResult) -> dict:

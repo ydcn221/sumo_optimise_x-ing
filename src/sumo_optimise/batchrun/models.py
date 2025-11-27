@@ -12,8 +12,8 @@ DEFAULT_QUEUE_THRESHOLD_STEPS = 10
 DEFAULT_QUEUE_THRESHOLD_LENGTH = 0.25  # ratio threshold (waiting/running)
 DEFAULT_SCALE_PROBE_START = 0.1
 DEFAULT_SCALE_PROBE_CEILING = 5.0
-DEFAULT_SCALE_PROBE_RESOLUTION = 0.1
-DEFAULT_SCALE_PROBE_COARSE_STEP = DEFAULT_SCALE_PROBE_RESOLUTION
+DEFAULT_SCALE_PROBE_FINE_STEP = 0.1
+DEFAULT_SCALE_PROBE_COARSE_STEP = 1.0
 
 
 @dataclass(frozen=True)
@@ -99,9 +99,15 @@ class ScaleProbeConfig:
     enabled: bool = False
     start: float = DEFAULT_SCALE_PROBE_START
     ceiling: float = DEFAULT_SCALE_PROBE_CEILING
-    resolution: float = DEFAULT_SCALE_PROBE_RESOLUTION
+    fine_step: float = DEFAULT_SCALE_PROBE_FINE_STEP
     coarse_step: float = DEFAULT_SCALE_PROBE_COARSE_STEP
     abort_on_waiting: bool = False
+
+
+@dataclass(frozen=True)
+class CompressionConfig:
+    enabled: bool = False
+    zstd_level: int = 10  # single-threaded zstd
 
 
 @dataclass

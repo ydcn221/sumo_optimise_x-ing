@@ -11,7 +11,7 @@ from .models import (
     DEFAULT_QUEUE_THRESHOLD_STEPS,
     DEFAULT_SCALE_PROBE_CEILING,
     DEFAULT_SCALE_PROBE_COARSE_STEP,
-    DEFAULT_SCALE_PROBE_RESOLUTION,
+    DEFAULT_SCALE_PROBE_FINE_STEP,
     DEFAULT_SCALE_PROBE_START,
     QueueDurabilityConfig,
     ScaleProbeConfig,
@@ -76,25 +76,31 @@ def parse_args() -> argparse.Namespace:
         "--scale-probe-fine-step",
         dest="scale_probe_fine_step",
         type=float,
-        default=DEFAULT_SCALE_PROBE_RESOLUTION,
-        help="Fine step (binary search increment) when probing scales (default: 0.1)",
-    )
-    parser.add_argument(
-        "--scale-probe-resolution",
-        dest="scale_probe_fine_step",
-        type=float,
-        help=argparse.SUPPRESS,
+        default=DEFAULT_SCALE_PROBE_FINE_STEP,
+        help="Fine step (binary search increment) when probing scales",
     )
     parser.add_argument(
         "--scale-probe-coarse-step",
         type=float,
         default=DEFAULT_SCALE_PROBE_COARSE_STEP,
-        help="Coarse step for initial scanning before fine search (default: 0.1)",
+        help="Coarse step for initial scanning before fine search (default: 1.0)",
     )
     parser.add_argument(
         "--abort-on-waiting-ratio",
         action="store_true",
         help="Abort SUMO during probe when waiting ratio condition is hit, then switch to fine search",
+    )
+    parser.add_argument(
+        "--compress-zstd",
+        nargs="?",
+        const=10,
+        type=int,
+        help="Compress generated XML files with zstd at given level (1-22, default: 10); single-threaded",
+    )
+    parser.add_argument(
+        "--metrics-trace",
+        action="store_true",
+        help="Temporarily log metrics parsing progress (debug; may be removed later)",
     )
     return parser.parse_args()
 
@@ -111,7 +117,7 @@ def main() -> None:
         enabled=args.enable_scale_probe,
         start=args.scale_probe_start,
         ceiling=args.scale_probe_ceiling,
-        resolution=args.scale_probe_fine_step,
+        fine_step=args.scale_probe_fine_step,
         coarse_step=args.scale_probe_coarse_step,
         abort_on_waiting=args.abort_on_waiting_ratio,
     )
@@ -123,6 +129,8 @@ def main() -> None:
         scale_probe=scale_probe_config,
         results_csv=results_path,
         max_workers=args.workers,
+        metrics_trace=args.metrics_trace,
+        compress_zstd_level=args.compress_zstd,
     )
 
 

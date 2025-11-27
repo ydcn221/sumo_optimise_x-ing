@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ET
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .models import (
     QueueDurabilityConfig,
@@ -21,12 +22,21 @@ def _as_float(value: Optional[str]) -> Optional[float]:
             return None
 
 
-def parse_tripinfo(path: Path, *, begin_filter: float, personinfo: Path | None = None) -> TripinfoMetrics:
+def parse_tripinfo(
+    path: Path,
+    *,
+    begin_filter: float,
+    personinfo: Path | None = None,
+    progress_cb: Callable[[int, float], None] | None = None,
+) -> TripinfoMetrics:
     metrics = TripinfoMetrics()
     paths = [p for p in (path, personinfo) if p is not None]
     if not paths:
         return metrics
 
+    start_time = time.time()
+    processed = 0
+    total_processed = 0
     for current_path in paths:
         if not current_path.exists():
             continue
@@ -96,11 +106,24 @@ def parse_tripinfo(path: Path, *, begin_filter: float, personinfo: Path | None =
                 metrics.person_count += 1
 
             elem.clear()
+            processed += 1
+            total_processed += 1
+            if progress_cb:
+                elapsed = time.time() - start_time
+                if elapsed > 0.5:  # throttle logs to ~2 Hz
+                    progress_cb(total_processed, elapsed)
+                    start_time = time.time()
+                    processed = 0
 
     return metrics
 
 
-def parse_waiting_ratio(path: Path, *, config: QueueDurabilityConfig) -> QueueDurabilityMetrics:
+def parse_waiting_ratio(
+    path: Path,
+    *,
+    config: QueueDurabilityConfig,
+    progress_cb: Callable[[str], None] | None = None,
+) -> QueueDurabilityMetrics:
     """Determine durability from summary.xml using waiting/running ratio."""
     metrics = QueueDurabilityMetrics(
         threshold_steps=config.step_window,
@@ -110,6 +133,9 @@ def parse_waiting_ratio(path: Path, *, config: QueueDurabilityConfig) -> QueueDu
         return metrics
 
     streak = 0
+    processed = 0
+    total_processed = 0
+    start_time = time.time()
     for _, elem in ET.iterparse(path, events=("end",)):
         tag = elem.tag.split("}")[-1]
         if tag != "step":
@@ -136,6 +162,16 @@ def parse_waiting_ratio(path: Path, *, config: QueueDurabilityConfig) -> QueueDu
             streak = 0
 
         elem.clear()
+        processed += 1
+        total_processed += 1
+        if progress_cb:
+            elapsed = time.time() - start_time
+            if elapsed > 0.5:
+                progress_cb(
+                    f"[metrics-trace] waiting_ratio steps={total_processed} elapsed={elapsed:.1f}s file={path}"
+                )
+                start_time = time.time()
+                processed = 0
 
     return metrics
 
