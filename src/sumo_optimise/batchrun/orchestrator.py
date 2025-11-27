@@ -40,12 +40,13 @@ from .models import (
     ScenarioConfig,
     ScenarioResult,
     TripinfoMetrics,
-    WaitingMetrics,
-    WaitingThresholds,
     WorkerPhase,
     WorkerStatus,
 )
-from .parsers import parse_summary, parse_tripinfo, parse_waiting_ratio
+# CSV output layout (grouped by scenario inputs → trip stats → queue durability → probe metadata → notes).
+# queue_first_over_saturation_time: first timestep where waiting/running ratio stayed above
+# queue_threshold_length for at least queue_threshold_steps consecutive seconds; blank means durable.
+from .parsers import parse_tripinfo, parse_waiting_ratio
 
 
 RESULT_COLUMNS = [
@@ -55,22 +56,14 @@ RESULT_COLUMNS = [
     "begin_filter",
     "end_time",
     "demand_dir",
-    "vehicle_mean_timeLoss",
     "vehicle_count",
-    "person_mean_timeLoss",
     "person_count",
+    "vehicle_mean_timeLoss",
+    "person_mean_timeLoss",
     "person_mean_routeLength",
-    "waiting_threshold_fixed",
-    "waiting_threshold_pct",
-    "waiting_first_exceed_time_fixed",
-    "waiting_first_exceed_value_fixed",
-    "waiting_first_exceed_time_pct",
-    "waiting_first_exceed_value_pct",
-    "waiting_max_value",
     "queue_threshold_steps",
     "queue_threshold_length",
-    "queue_first_non_durable_time",
-    "queue_max_length",
+    "queue_first_over_saturation_time",
     "queue_is_durable",
     "scale_probe_enabled",
     "scale_probe_max_durable_scale",
@@ -91,6 +84,14 @@ def _debug_log(log_path: Path | None, message: str) -> None:
     except OSError:
         # Best-effort logging; skip if the log cannot be written.
         return
+
+
+def _format_over_saturation_reason(length_threshold: float, step_window: int) -> str:
+    """Describe why queue over-saturation was flagged."""
+    return (
+        f"waiting/running ratio >= {length_threshold:.3f} was detected for at least "
+        f"{step_window} consecutive seconds"
+    )
 
 
 def _send_status(
@@ -375,6 +376,7 @@ def _collect_artifacts(result) -> RunArtifacts:
         outdir=outdir,
         sumocfg=sumocfg,
         tripinfo=outdir / "tripinfo.xml",
+        personinfo=outdir / "personinfo.xml",
         fcd=outdir / "fcd.xml",
         summary=outdir / "summary.xml",
         person_summary=outdir / "summary.person.xml",
@@ -393,6 +395,7 @@ def _artifacts_for_label(base: RunArtifacts, label: str | None) -> RunArtifacts:
         outdir=outdir,
         sumocfg=base.sumocfg,
         tripinfo=outdir / base.tripinfo.name,
+        personinfo=outdir / base.personinfo.name,
         fcd=outdir / base.fcd.name,
         summary=outdir / base.summary.name,
         person_summary=outdir / base.person_summary.name,
@@ -414,6 +417,8 @@ def _sumo_command(
         str(artifacts.sumocfg),
         "--tripinfo-output",
         str(artifacts.tripinfo),
+        "--personinfo-output",
+        str(artifacts.personinfo),
         "--fcd-output",
         str(artifacts.fcd),
         "--summary-output",
@@ -456,7 +461,7 @@ def _run_sumo_streaming(
     aborted = False
     abort_event = threading.Event()
     live_waiting_metrics: QueueDurabilityMetrics | None = None
-    waiting_state = {"streak": 0, "max_ratio": 0.0, "first_failure": None}
+    waiting_state = {"streak": 0, "max_ratio": 0.0, "first_over_saturation": None}
 
     def debug(message: str) -> None:
         _debug_log(log_path, message)
@@ -478,7 +483,7 @@ def _run_sumo_streaming(
         pos = 0
         streak = 0
         max_ratio = 0.0
-        first_failure_time: float | None = None
+        first_over_saturation_time: float | None = None
         try:
             while not abort_event.is_set():
                 if not summary_path.exists():
@@ -518,18 +523,25 @@ def _run_sumo_streaming(
                             time_value = float(time_attr) if time_attr is not None else None
                         except (TypeError, ValueError):
                             time_value = None
-                        total = waiting + running
+                        total = running
                         ratio = (waiting / total) if total > 0 else 0.0
                         max_ratio = max(max_ratio, ratio)
                         if ratio >= waiting_config.length_threshold:
                             streak += 1
-                            if first_failure_time is None and streak >= waiting_config.step_window:
-                                first_failure_time = time_value
+                            if (
+                                first_over_saturation_time is None
+                                and streak >= waiting_config.step_window
+                            ):
+                                first_over_saturation_time = time_value
                                 abort_event.set()
                                 aborted = True
+                                reason = _format_over_saturation_reason(
+                                    waiting_config.length_threshold,
+                                    waiting_config.step_window,
+                                )
                                 debug(
-                                    f"[waiting-monitor] abort at t={time_value} "
-                                    f"streak={streak}/{waiting_config.step_window} "
+                                    f"[waiting-monitor] over saturation detected at t={time_value} "
+                                    f"({reason}); streak={streak}/{waiting_config.step_window} "
                                     f"ratio={ratio:.3f}"
                                 )
                                 break
@@ -541,19 +553,25 @@ def _run_sumo_streaming(
         finally:
             waiting_state["streak"] = streak
             waiting_state["max_ratio"] = max_ratio
-            waiting_state["first_failure"] = first_failure_time
-            if first_failure_time is not None:
+            waiting_state["first_over_saturation"] = first_over_saturation_time
+            if first_over_saturation_time is not None:
                 live_waiting_metrics = QueueDurabilityMetrics(
-                    first_failure_time=first_failure_time,
+                    first_failure_time=first_over_saturation_time,
                     max_queue_length=max_ratio,
                     threshold_steps=waiting_config.step_window if waiting_config else 0,
                     threshold_length=waiting_config.length_threshold if waiting_config else 0.0,
                 )
-            if streak or first_failure_time is not None:
+            if streak or first_over_saturation_time is not None:
+                reason = ""
+                if first_over_saturation_time is not None and waiting_config is not None:
+                    reason = (
+                        f" over saturation detected because "
+                        f"{_format_over_saturation_reason(waiting_config.length_threshold, waiting_config.step_window)}"
+                    )
                 debug(
                     f"[waiting-monitor] exit streak={streak} "
-                    f"max_ratio={max_ratio:.3f} first_failure={first_failure_time} "
-                    f"aborted={aborted} event_set={abort_event.is_set()}"
+                    f"max_ratio={max_ratio:.3f} first_over_saturation_time={first_over_saturation_time} "
+                    f"aborted={aborted} event_set={abort_event.is_set()}{reason}"
                 )
 
     def handle_line(line: str, redraw: bool) -> None:
@@ -696,19 +714,18 @@ def _run_for_scale(
     artifacts: RunArtifacts,
     scenario: ScenarioConfig,
     *,
-    thresholds: WaitingThresholds,
     queue_config: QueueDurabilityConfig,
     scale: float,
     affinity_cpu: int | None,
     collect_tripinfo: bool,
-    collect_waiting: bool,
     status_queue=None,
     worker_id: int | None = None,
     phase: WorkerPhase = WorkerPhase.SUMO,
     use_pty: bool = False,
     enable_waiting_abort: bool = False,
-) -> tuple[TripinfoMetrics, WaitingMetrics, QueueDurabilityMetrics]:
+) -> tuple[TripinfoMetrics, QueueDurabilityMetrics]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
+    artifacts.personinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.queue.parent.mkdir(parents=True, exist_ok=True)
     artifacts.sumo_log.parent.mkdir(parents=True, exist_ok=True)
 
@@ -743,36 +760,41 @@ def _run_for_scale(
     )
 
     tripinfo_metrics = (
-        parse_tripinfo(artifacts.tripinfo, begin_filter=scenario.begin_filter)
+        parse_tripinfo(
+            artifacts.tripinfo,
+            begin_filter=scenario.begin_filter,
+            personinfo=artifacts.personinfo,
+        )
         if collect_tripinfo
         else TripinfoMetrics()
     )
 
-    waiting_metrics = WaitingMetrics()
-    if collect_waiting:
-        waiting_metrics = parse_summary(artifacts.summary, thresholds=thresholds)
-        person_waiting = parse_summary(artifacts.person_summary, thresholds=thresholds)
-        waiting_metrics = _merge_waiting(waiting_metrics, person_waiting)
-
     queue_metrics = live_waiting_metrics or parse_waiting_ratio(artifacts.summary, config=queue_config)
     phase_label = phase.name if hasattr(phase, "name") else str(phase)
+    queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
+    queue_reason = ""
+    if not queue_metrics.is_durable:
+        queue_reason = (
+            "; over saturation detected because "
+            f"{_format_over_saturation_reason(queue_metrics.threshold_length, queue_metrics.threshold_steps)}"
+        )
     _debug_log(
         artifacts.sumo_log,
         (
             f"[scale-run] phase={phase_label} scale={scale:.2f} "
-            f"aborted={aborted} queue_durable={queue_metrics.is_durable} "
-            f"first_failure_time={queue_metrics.first_failure_time} "
+            f"aborted={aborted} queue_status={queue_status} "
+            f"first_over_saturation_time={queue_metrics.first_failure_time} "
             f"max_ratio={queue_metrics.max_queue_length}"
+            f"{queue_reason}"
         ),
     )
-    return tripinfo_metrics, waiting_metrics, queue_metrics
+    return tripinfo_metrics, queue_metrics
 
 
 def _probe_scale_durability(
     base_artifacts: RunArtifacts,
     scenario: ScenarioConfig,
     *,
-    thresholds: WaitingThresholds,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
     affinity_cpu: int | None,
@@ -789,6 +811,9 @@ def _probe_scale_durability(
     ceiling = max(scale_probe.ceiling, start_scale)
     probe_tag = f"[scale-probe scenario={scenario.scenario_id} seed={scenario.seed}]"
     log_path = base_artifacts.sumo_log
+    over_saturation_reason_text = _format_over_saturation_reason(
+        queue_config.length_threshold, queue_config.step_window
+    )
     _debug_log(
         log_path,
         (
@@ -802,27 +827,35 @@ def _probe_scale_durability(
         nonlocal attempts
         scale_value = _normalize_scale(raw_scale, resolution)
         if scale_value in queue_cache:
+            cached_metrics = queue_cache[scale_value]
+            cached_status = (
+                "over_saturation_detected" if not cached_metrics.is_durable else "durable"
+            )
+            cached_reason = (
+                f"; over saturation detected because {over_saturation_reason_text}"
+                if not cached_metrics.is_durable
+                else ""
+            )
             _debug_log(
                 log_path,
                 (
                     f"{probe_tag} reuse scale={scale_value:.2f} "
-                    f"durable={queue_cache[scale_value].is_durable} "
-                    f"first_failure_time={queue_cache[scale_value].first_failure_time} "
-                    f"max_queue_length={queue_cache[scale_value].max_queue_length}"
+                    f"status={cached_status} "
+                    f"first_over_saturation_time={cached_metrics.first_failure_time} "
+                    f"max_queue_length={cached_metrics.max_queue_length}"
+                    f"{cached_reason}"
                 ),
             )
             return queue_cache[scale_value]
 
         artifacts = _artifacts_for_label(base_artifacts, _format_scale_label(scale_value))
-        _, _, queue_metrics = _run_for_scale(
+        _, queue_metrics = _run_for_scale(
             artifacts,
             scenario,
-            thresholds=thresholds,
             queue_config=queue_config,
             scale=scale_value,
             affinity_cpu=affinity_cpu,
             collect_tripinfo=False,
-            collect_waiting=False,
             status_queue=status_queue,
             worker_id=worker_id,
             phase=WorkerPhase.PROBE,
@@ -832,39 +865,55 @@ def _probe_scale_durability(
         queue_cache[scale_value] = queue_metrics
         attempt_no = attempts + 1
         attempts = attempt_no
+        run_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
+        run_reason = (
+            f"; over saturation detected because {over_saturation_reason_text}"
+            if not queue_metrics.is_durable
+            else ""
+        )
         _debug_log(
             log_path,
             (
                 f"{probe_tag} run#{attempt_no} scale={scale_value:.2f} "
-                f"durable={queue_metrics.is_durable} "
-                f"first_failure_time={queue_metrics.first_failure_time} "
+                f"status={run_status} "
+                f"first_over_saturation_time={queue_metrics.first_failure_time} "
                 f"max_queue_length={queue_metrics.max_queue_length}"
+                f"{run_reason}"
             ),
         )
         return queue_metrics
 
     last_durable: float | None = None
-    failure_scale: float | None = None
+    over_saturation_scale: float | None = None
 
     current = start_scale
     while current <= ceiling:
         metrics = run_scale(current)
+        coarse_status = (
+            "over_saturation_detected" if not metrics.is_durable else "durable"
+        )
+        coarse_reason = (
+            f"; over saturation detected because {over_saturation_reason_text}"
+            if not metrics.is_durable
+            else ""
+        )
         _debug_log(
             log_path,
             (
                 f"{probe_tag} coarse scale={current:.2f} "
-                f"durable={metrics.is_durable} "
-                f"first_failure_time={metrics.first_failure_time} "
+                f"status={coarse_status} "
+                f"first_over_saturation_time={metrics.first_failure_time} "
                 f"max_queue_length={metrics.max_queue_length}"
+                f"{coarse_reason}"
             ),
         )
         if not metrics.is_durable:
-            failure_scale = current
+            over_saturation_scale = current
             _debug_log(
                 log_path,
                 (
-                    f"{probe_tag} first failure at scale={current:.2f} "
-                    f"(last durable={last_durable})"
+                    f"{probe_tag} over saturation detected at scale={current:.2f} "
+                    f"(last durable={last_durable}); {over_saturation_reason_text}"
                 ),
             )
             break
@@ -872,11 +921,11 @@ def _probe_scale_durability(
         next_coarse = (math.floor(current / coarse_step) + 1) * coarse_step
         current = _normalize_scale(next_coarse, resolution)
 
-    if failure_scale is None:
+    if over_saturation_scale is None:
         _debug_log(
             log_path,
             (
-                f"{probe_tag} no failure up to ceiling={ceiling:.2f}; "
+                f"{probe_tag} no over saturation detected up to ceiling={ceiling:.2f}; "
                 f"max durable={last_durable if last_durable is not None else ceiling}"
             ),
         )
@@ -889,7 +938,7 @@ def _probe_scale_durability(
     if last_durable is None:
         _debug_log(
             log_path,
-            f"{probe_tag} failed at start scale={failure_scale:.2f}",
+            f"{probe_tag} over saturation present at start scale={over_saturation_scale:.2f}; {over_saturation_reason_text}",
         )
         return ScaleProbeResult(
             enabled=True,
@@ -898,7 +947,7 @@ def _probe_scale_durability(
         )
 
     low = last_durable
-    high = failure_scale
+    high = over_saturation_scale
 
     while high - low > resolution:
         mid = _normalize_scale((low + high) / 2, resolution)
@@ -906,13 +955,22 @@ def _probe_scale_durability(
             break
 
         metrics = run_scale(mid)
+        binary_status = (
+            "over_saturation_detected" if not metrics.is_durable else "durable"
+        )
+        binary_reason = (
+            f"; over saturation detected because {over_saturation_reason_text}"
+            if not metrics.is_durable
+            else ""
+        )
         _debug_log(
             log_path,
             (
                 f"{probe_tag} binary mid={mid:.2f} "
-                f"durable={metrics.is_durable} "
-                f"first_failure_time={metrics.first_failure_time} "
+                f"status={binary_status} "
+                f"first_over_saturation_time={metrics.first_failure_time} "
                 f"max_queue_length={metrics.max_queue_length}"
+                f"{binary_reason}"
             ),
         )
         if metrics.is_durable:
@@ -949,7 +1007,6 @@ def run_scenario(
     scenario: ScenarioConfig,
     *,
     output_root: Path,
-    thresholds: WaitingThresholds,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
     affinity_cpu: int | None,
@@ -989,8 +1046,6 @@ def run_scenario(
             end_time=scenario.end_time,
             demand_dir=scenario.demand_dir,
             tripinfo=TripinfoMetrics(),
-            waiting=WaitingMetrics(),
-            waiting_thresholds=thresholds,
             queue=base_queue_metrics,
             scale_probe=probe_result,
             fcd_note="build failed",
@@ -1007,15 +1062,13 @@ def run_scenario(
             phase=WorkerPhase.SUMO,
             label="sumo",
         )
-        tripinfo_metrics, waiting_metrics, queue_metrics = _run_for_scale(
+        tripinfo_metrics, queue_metrics = _run_for_scale(
             artifacts,
             scenario,
-            thresholds=thresholds,
             queue_config=queue_config,
             scale=scenario.scale,
             affinity_cpu=affinity_cpu,
             collect_tripinfo=True,
-            collect_waiting=True,
             status_queue=status_queue,
             worker_id=worker_id,
             phase=WorkerPhase.SUMO,
@@ -1030,11 +1083,9 @@ def run_scenario(
             end_time=scenario.end_time,
             demand_dir=scenario.demand_dir,
             tripinfo=TripinfoMetrics(),
-            waiting=WaitingMetrics(),
-            waiting_thresholds=thresholds,
             queue=base_queue_metrics,
-           scale_probe=ScaleProbeResult(
-               enabled=scale_probe.enabled,
+            scale_probe=ScaleProbeResult(
+                enabled=scale_probe.enabled,
                 max_durable_scale=None,
                 attempts=1,
             ),
@@ -1054,7 +1105,6 @@ def run_scenario(
         probe_result = _probe_scale_durability(
             artifacts,
             scenario,
-            thresholds=thresholds,
             queue_config=queue_config,
             scale_probe=scale_probe,
             affinity_cpu=affinity_cpu,
@@ -1073,8 +1123,6 @@ def run_scenario(
         end_time=scenario.end_time,
         demand_dir=scenario.demand_dir,
         tripinfo=tripinfo_metrics,
-        waiting=waiting_metrics,
-        waiting_thresholds=thresholds,
         queue=queue_metrics,
         scale_probe=probe_result,
         fcd_note="n/a",
@@ -1102,7 +1150,6 @@ def run_batch(
     scenarios: Iterable[ScenarioConfig],
     *,
     output_root: Path,
-    thresholds: WaitingThresholds,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
     results_csv: Path,
@@ -1148,7 +1195,6 @@ def run_batch(
                 run_scenario,
                 scenario,
                 output_root=output_root,
-                thresholds=thresholds,
                 queue_config=queue_config,
                 scale_probe=scale_probe,
                 affinity_cpu=affinity[worker_slot],
@@ -1189,43 +1235,6 @@ def run_batch(
     manager.shutdown()
 
 
-def _merge_waiting(primary: WaitingMetrics, secondary: WaitingMetrics) -> WaitingMetrics:
-    fixed_time, fixed_value = _pick_first(
-        primary.first_fixed_time,
-        primary.first_fixed_value,
-        secondary.first_fixed_time,
-        secondary.first_fixed_value,
-    )
-    pct_time, pct_value = _pick_first(
-        primary.first_pct_time,
-        primary.first_pct_value,
-        secondary.first_pct_time,
-        secondary.first_pct_value,
-    )
-    return WaitingMetrics(
-        first_fixed_time=fixed_time,
-        first_fixed_value=fixed_value,
-        first_pct_time=pct_time,
-        first_pct_value=pct_value,
-        max_waiting=max(primary.max_waiting, secondary.max_waiting),
-    )
-
-
-def _pick_first(
-    t_a: float | None,
-    v_a: float | None,
-    t_b: float | None,
-    v_b: float | None,
-) -> tuple[float | None, float | None]:
-    if t_a is None:
-        return t_b, v_b
-    if t_b is None:
-        return t_a, v_a
-    if t_a <= t_b:
-        return t_a, v_a
-    return t_b, v_b
-
-
 def _append_results(path: Path, results: Sequence[ScenarioResult]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     header_needed = not path.exists()
@@ -1245,23 +1254,15 @@ def _result_to_row(result: ScenarioResult) -> dict:
         "begin_filter": result.begin_filter,
         "end_time": result.end_time,
         "demand_dir": str(result.demand_dir),
-        "vehicle_mean_timeLoss": _fmt(result.tripinfo.vehicle_mean_time_loss),
         "vehicle_count": result.tripinfo.vehicle_count,
-        "person_mean_timeLoss": _fmt(result.tripinfo.person_mean_time_loss),
         "person_count": result.tripinfo.person_count,
+        "vehicle_mean_timeLoss": _fmt(result.tripinfo.vehicle_mean_time_loss),
+        "person_mean_timeLoss": _fmt(result.tripinfo.person_mean_time_loss),
         "person_mean_routeLength": _fmt(result.tripinfo.person_mean_route_length),
-        "waiting_threshold_fixed": result.waiting_thresholds.fixed,
-        "waiting_threshold_pct": result.waiting_thresholds.pct_of_running,
-        "waiting_first_exceed_time_fixed": _fmt(result.waiting.first_fixed_time),
-        "waiting_first_exceed_value_fixed": _fmt(result.waiting.first_fixed_value),
-        "waiting_first_exceed_time_pct": _fmt(result.waiting.first_pct_time),
-        "waiting_first_exceed_value_pct": _fmt(result.waiting.first_pct_value),
-        "waiting_max_value": _fmt(result.waiting.max_waiting),
         "queue_threshold_steps": result.queue.threshold_steps,
         "queue_threshold_length": _fmt(result.queue.threshold_length),
-        "queue_first_non_durable_time": _fmt(result.queue.first_failure_time),
-        "queue_max_length": _fmt(result.queue.max_queue_length),
-        "queue_is_durable": str(result.queue.is_durable),
+        "queue_first_over_saturation_time": _fmt(result.queue.first_failure_time),
+        "queue_is_durable": "True" if result.queue.is_durable else "False",
         "scale_probe_enabled": str(result.scale_probe.enabled),
         "scale_probe_max_durable_scale": _fmt(result.scale_probe.max_durable_scale),
         "scale_probe_attempts": result.scale_probe.attempts,

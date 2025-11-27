@@ -359,7 +359,22 @@ Typical flags (names may vary by release):
 * **Build artifacts**
 
   * `build.log` — structured logs (schema/semantic/IO/netconvert).
-  * `2-cooked.*` PlainXML and `3-assembled.net.xml` — if `netconvert` runs.
+* `2-cooked.*` PlainXML and `3-assembled.net.xml` — if `netconvert` runs.
+
+---
+
+## Batch runner outputs (`results.csv`)
+
+Columns are grouped for readability:
+
+* **Scenario inputs:** `scenario_id`, `seed`, `scale`, `begin_filter`, `end_time`, `demand_dir`.
+* **Trip stats:** `vehicle_count`, `person_count`, `vehicle_mean_timeLoss`, `person_mean_timeLoss`, `person_mean_routeLength`.
+* **Queue durability:** `queue_threshold_steps`, `queue_threshold_length`, `queue_first_over_saturation_time`, `queue_is_durable`.
+  * `queue_first_over_saturation_time` = first timestep where the waiting/running ratio stays at or above `queue_threshold_length` for at least `queue_threshold_steps` consecutive seconds; blank means durable (no over-saturation detected).
+* **Scale probe metadata:** `scale_probe_enabled`, `scale_probe_max_durable_scale`, `scale_probe_attempts`.
+* **Notes:** `fcd_note`, `error_note`.
+
+Only the over-saturation timing is retained for queues; legacy waiting-threshold metrics and max waiting values have been removed.
 
 ---
 

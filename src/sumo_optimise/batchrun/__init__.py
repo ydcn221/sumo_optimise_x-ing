@@ -11,7 +11,6 @@ from .models import (
     QueueDurabilityConfig,
     ScaleProbeConfig,
     ScenarioConfig,
-    WaitingThresholds,
 )
 from .orchestrator import load_manifest, resolve_demand_files, run_batch
 
@@ -28,7 +27,6 @@ __all__ = [
     "QueueDurabilityConfig",
     "ScaleProbeConfig",
     "ScenarioConfig",
-    "WaitingThresholds",
     "load_manifest",
     "resolve_demand_files",
     "run_batch",

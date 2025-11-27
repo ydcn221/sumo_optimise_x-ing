@@ -8,10 +8,8 @@ from enum import Enum
 DEFAULT_BEGIN_FILTER = 1200.0
 DEFAULT_END_TIME = 2400.0
 DEFAULT_MAX_WORKERS = 32
-WAITING_THRESHOLD_FIXED = 1.0
-WAITING_THRESHOLD_PCT = 0.10
 DEFAULT_QUEUE_THRESHOLD_STEPS = 10
-DEFAULT_QUEUE_THRESHOLD_LENGTH = 0.25  # ratio threshold (waiting/(waiting+running))
+DEFAULT_QUEUE_THRESHOLD_LENGTH = 0.25  # ratio threshold (waiting/running)
 DEFAULT_SCALE_PROBE_START = 0.1
 DEFAULT_SCALE_PROBE_CEILING = 5.0
 DEFAULT_SCALE_PROBE_RESOLUTION = 0.1
@@ -35,12 +33,6 @@ class ScenarioConfig:
     scale: float
     begin_filter: float = DEFAULT_BEGIN_FILTER
     end_time: float = DEFAULT_END_TIME
-
-
-@dataclass(frozen=True)
-class WaitingThresholds:
-    fixed: float = WAITING_THRESHOLD_FIXED
-    pct_of_running: float = WAITING_THRESHOLD_PCT
 
 
 @dataclass(frozen=True)
@@ -77,17 +69,8 @@ class TripinfoMetrics:
 
 
 @dataclass
-class WaitingMetrics:
-    first_fixed_time: Optional[float] = None
-    first_fixed_value: Optional[float] = None
-    first_pct_time: Optional[float] = None
-    first_pct_value: Optional[float] = None
-    max_waiting: float = 0.0
-
-
-@dataclass
 class QueueDurabilityMetrics:
-    first_failure_time: Optional[float] = None
+    first_failure_time: Optional[float] = None  # time when over-saturation is first detected; None means durable
     max_queue_length: float = 0.0  # when using summary-based ratio, this stores max ratio
     threshold_steps: int = DEFAULT_QUEUE_THRESHOLD_STEPS
     threshold_length: float = DEFAULT_QUEUE_THRESHOLD_LENGTH  # ratio threshold
@@ -102,6 +85,7 @@ class RunArtifacts:
     outdir: Path
     sumocfg: Path
     tripinfo: Path
+    personinfo: Path
     fcd: Path
     summary: Path
     person_summary: Path
@@ -161,8 +145,6 @@ class ScenarioResult:
     end_time: float
     demand_dir: Path
     tripinfo: TripinfoMetrics
-    waiting: WaitingMetrics
-    waiting_thresholds: WaitingThresholds
     queue: QueueDurabilityMetrics
     scale_probe: ScaleProbeResult
     fcd_note: str = ""

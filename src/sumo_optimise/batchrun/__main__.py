@@ -13,11 +13,8 @@ from .models import (
     DEFAULT_SCALE_PROBE_COARSE_STEP,
     DEFAULT_SCALE_PROBE_RESOLUTION,
     DEFAULT_SCALE_PROBE_START,
-    WAITING_THRESHOLD_FIXED,
-    WAITING_THRESHOLD_PCT,
     QueueDurabilityConfig,
     ScaleProbeConfig,
-    WaitingThresholds,
 )
 from .orchestrator import load_manifest, run_batch
 
@@ -43,18 +40,6 @@ def parse_args() -> argparse.Namespace:
         help="Maximum parallel workers (default: 32)",
     )
     parser.add_argument(
-        "--waiting-threshold-fixed",
-        type=float,
-        default=WAITING_THRESHOLD_FIXED,
-        help="Fixed waiting threshold for summary evaluation (default: 1)",
-    )
-    parser.add_argument(
-        "--waiting-threshold-pct",
-        type=float,
-        default=WAITING_THRESHOLD_PCT,
-        help="Relative waiting threshold expressed as a fraction of running (default: 0.10)",
-    )
-    parser.add_argument(
         "--waiting-ratio-steps",
         "--queue-threshold-steps",
         dest="waiting_ratio_steps",
@@ -68,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         dest="waiting_ratio_threshold",
         type=float,
         default=DEFAULT_QUEUE_THRESHOLD_LENGTH,
-        help="Waiting ratio threshold (waiting/(waiting+running)) for durability check (default: 0.25)",
+        help="Waiting ratio threshold (waiting/running) for durability check (default: 0.25)",
     )
     parser.add_argument(
         "--enable-scale-probe",
@@ -88,16 +73,23 @@ def parse_args() -> argparse.Namespace:
         help="Maximum scale tested before giving up (default: 5.0)",
     )
     parser.add_argument(
-        "--scale-probe-resolution",
+        "--scale-probe-fine-step",
+        dest="scale_probe_fine_step",
         type=float,
         default=DEFAULT_SCALE_PROBE_RESOLUTION,
-        help="Resolution for binary search when probing scales (default: 0.1)",
+        help="Fine step (binary search increment) when probing scales (default: 0.1)",
+    )
+    parser.add_argument(
+        "--scale-probe-resolution",
+        dest="scale_probe_fine_step",
+        type=float,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--scale-probe-coarse-step",
         type=float,
         default=DEFAULT_SCALE_PROBE_COARSE_STEP,
-        help="Step size for coarse scanning before binary search (default: 0.1)",
+        help="Coarse step for initial scanning before fine search (default: 0.1)",
     )
     parser.add_argument(
         "--abort-on-waiting-ratio",
@@ -111,10 +103,6 @@ def main() -> None:
     args = parse_args()
     output_root: Path = args.output_root
     results_path: Path = args.results or output_root / "results.csv"
-    thresholds = WaitingThresholds(
-        fixed=args.waiting_threshold_fixed,
-        pct_of_running=args.waiting_threshold_pct,
-    )
     queue_config = QueueDurabilityConfig(
         step_window=args.waiting_ratio_steps,
         length_threshold=args.waiting_ratio_threshold,
@@ -123,7 +111,7 @@ def main() -> None:
         enabled=args.enable_scale_probe,
         start=args.scale_probe_start,
         ceiling=args.scale_probe_ceiling,
-        resolution=args.scale_probe_resolution,
+        resolution=args.scale_probe_fine_step,
         coarse_step=args.scale_probe_coarse_step,
         abort_on_waiting=args.abort_on_waiting_ratio,
     )
@@ -131,7 +119,6 @@ def main() -> None:
     run_batch(
         scenarios,
         output_root=output_root,
-        thresholds=thresholds,
         queue_config=queue_config,
         scale_probe=scale_probe_config,
         results_csv=results_path,
