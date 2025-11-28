@@ -52,6 +52,7 @@ from .parsers import parse_tripinfo, parse_waiting_ratio
 
 RESULT_COLUMNS = [
     "scenario_id",
+    "scenario_base_id",
     "seed",
     "scale",
     "begin_filter",
@@ -128,6 +129,12 @@ def _send_status(
             "timestamp": time.time(),
         }
     )
+
+
+def _safe_id_for_filename(scenario_id: str) -> str:
+    """Make a scenario identifier safe for file names."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", scenario_id).strip("_")
+    return safe or "scenario"
 
 
 def _colorize(text: str, phase: WorkerPhase) -> str:
@@ -294,7 +301,10 @@ def _load_manifest_json(path: Path) -> List[ScenarioConfig]:
     if not isinstance(data, list):
         raise ValueError("JSON manifest must be a list of scenario entries")
     base = path.parent
-    return [_row_to_config(entry, base) for entry in data]
+    scenarios: List[ScenarioConfig] = []
+    for entry in data:
+        scenarios.extend(_row_to_config(entry, base))
+    return scenarios
 
 
 def _load_manifest_csv(path: Path) -> List[ScenarioConfig]:
@@ -305,32 +315,84 @@ def _load_manifest_csv(path: Path) -> List[ScenarioConfig]:
         for row in reader:
             if not any(row.values()):
                 continue
-            scenarios.append(_row_to_config(row, base))
+            scenarios.extend(_row_to_config(row, base))
     return scenarios
 
 
-def _row_to_config(raw: dict, base: Path) -> ScenarioConfig:
+def _parse_seed_field(raw_seed: object) -> List[int]:
+    """Parse a seed field that may contain comma lists or ranges (e.g., 1001-1004)."""
+    if isinstance(raw_seed, (int, float)):
+        return [int(raw_seed)]
+    if isinstance(raw_seed, (list, tuple, set)):
+        tokens = list(raw_seed)
+    else:
+        seed_str = str(raw_seed).strip()
+        if not seed_str:
+            raise ValueError("Seed value cannot be empty")
+        tokens = [token.strip() for token in seed_str.split(",")]
+
+    seeds: List[int] = []
+    seen = set()
+
+    for token in tokens:
+        if token in ("", None):
+            raise ValueError("Seed list contains an empty token")
+        if isinstance(token, (int, float)):
+            values = [int(token)]
+        else:
+            token_str = str(token).strip()
+            if "-" in token_str:
+                bounds = [part.strip() for part in token_str.split("-", maxsplit=1)]
+                if len(bounds) != 2 or not all(bounds):
+                    raise ValueError(f"Invalid seed range: {token_str}")
+                start, end = (int(bound) for bound in bounds)
+                if end < start:
+                    raise ValueError(f"Seed range must be ascending: {token_str}")
+                values = list(range(start, end + 1))
+            else:
+                values = [int(token_str)]
+
+        for value in values:
+            if value not in seen:
+                seen.add(value)
+                seeds.append(value)
+
+    if not seeds:
+        raise ValueError("No seeds parsed from seed field")
+    return seeds
+
+
+def _row_to_config(raw: dict, base: Path) -> List[ScenarioConfig]:
     try:
         spec = Path(raw["spec"])
         scenario_id = str(raw["scenario_id"])
-        seed = int(raw["seed"])
+        seeds = _parse_seed_field(raw["seed"])
         demand_dir = Path(raw["demand_dir"])
         scale = float(raw["scale"])
     except KeyError as err:
         raise ValueError(f"Missing manifest field: {err.args[0]}") from err
+    if not scenario_id:
+        raise ValueError("scenario_id cannot be empty")
     begin_filter = float(raw.get("begin_filter", DEFAULT_BEGIN_FILTER))
     end_time = float(raw.get("end_time", DEFAULT_END_TIME))
     spec = spec if spec.is_absolute() else (base / spec)
     demand_dir = demand_dir if demand_dir.is_absolute() else (base / demand_dir)
-    return ScenarioConfig(
-        spec=spec,
-        scenario_id=scenario_id,
-        seed=seed,
-        demand_dir=demand_dir,
-        scale=scale,
-        begin_filter=begin_filter,
-        end_time=end_time,
-    )
+    scenarios: List[ScenarioConfig] = []
+    for seed in seeds:
+        run_id = f"{scenario_id}-{seed}"
+        scenarios.append(
+            ScenarioConfig(
+                spec=spec,
+                scenario_id=run_id,
+                scenario_base_id=scenario_id,
+                seed=seed,
+                demand_dir=demand_dir,
+                scale=scale,
+                begin_filter=begin_filter,
+                end_time=end_time,
+            )
+        )
+    return scenarios
 
 
 def resolve_demand_files(demand_dir: Path) -> DemandFiles:
@@ -381,22 +443,23 @@ def _build_options_for_scenario(
     )
 
 
-def _collect_artifacts(result) -> RunArtifacts:
+def _collect_artifacts(result, *, scenario_id: str) -> RunArtifacts:
     if result.manifest_path is None:
         raise ValueError("manifest path not recorded by build")
     outdir = result.manifest_path.parent
     sumocfg = result.sumocfg_path or (outdir / "config.sumocfg")
+    safe_id = _safe_id_for_filename(scenario_id)
     return RunArtifacts(
         outdir=outdir,
         sumocfg=sumocfg,
-        tripinfo=outdir / "tripinfo.xml",
-        personinfo=outdir / "personinfo.xml",
-        fcd=outdir / "fcd.xml",
-        summary=outdir / "summary.xml",
-        person_summary=outdir / "summary.person.xml",
-        detector=outdir / "detector.xml",
-        queue=outdir / "queue.xml",
-        sumo_log=outdir / "sumo.log",
+        tripinfo=outdir / f"tripinfo_{safe_id}.xml",
+        personinfo=outdir / f"personinfo_{safe_id}.xml",
+        fcd=outdir / f"fcd_{safe_id}.xml",
+        summary=outdir / f"summary_{safe_id}.xml",
+        person_summary=outdir / f"summary.person_{safe_id}.xml",
+        detector=outdir / f"detector_{safe_id}.xml",
+        queue=outdir / f"queue_{safe_id}.xml",
+        sumo_log=outdir / f"sumo_{safe_id}.log",
     )
 
 
@@ -1082,10 +1145,11 @@ def run_scenario(
         )
         options = _build_options_for_scenario(scenario, output_root=output_root)
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
-        artifacts = _collect_artifacts(build_result)
+        artifacts = _collect_artifacts(build_result, scenario_id=scenario.scenario_id)
     except Exception as exc:  # noqa: BLE001
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
+            scenario_base_id=scenario.scenario_base_id,
             seed=scenario.seed,
             scale=scenario.scale,
             begin_filter=scenario.begin_filter,
@@ -1124,6 +1188,7 @@ def run_scenario(
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
+            scenario_base_id=scenario.scenario_base_id,
             seed=scenario.seed,
             scale=scenario.scale,
             begin_filter=scenario.begin_filter,
@@ -1181,6 +1246,7 @@ def run_scenario(
 
     result = ScenarioResult(
         scenario_id=scenario.scenario_id,
+        scenario_base_id=scenario.scenario_base_id,
         seed=scenario.seed,
         scale=scenario.scale,
         begin_filter=scenario.begin_filter,
@@ -1370,6 +1436,7 @@ def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path |
 def _result_to_row(result: ScenarioResult) -> dict:
     return {
         "scenario_id": result.scenario_id,
+        "scenario_base_id": result.scenario_base_id,
         "seed": result.seed,
         "scale": result.scale,
         "begin_filter": result.begin_filter,

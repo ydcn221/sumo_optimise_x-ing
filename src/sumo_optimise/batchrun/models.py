@@ -28,6 +28,7 @@ class DemandFiles:
 class ScenarioConfig:
     spec: Path
     scenario_id: str
+    scenario_base_id: str
     seed: int
     demand_dir: Path
     scale: float
@@ -145,6 +146,7 @@ class WorkerStatus:
 @dataclass
 class ScenarioResult:
     scenario_id: str
+    scenario_base_id: str
     seed: int
     scale: float
     begin_filter: float
