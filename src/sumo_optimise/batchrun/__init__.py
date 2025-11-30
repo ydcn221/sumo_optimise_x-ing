@@ -10,6 +10,7 @@ from .models import (
     DEFAULT_SCALE_PROBE_START,
     QueueDurabilityConfig,
     ScaleProbeConfig,
+    ScaleMode,
     ScenarioConfig,
 )
 from .orchestrator import load_manifest, resolve_demand_files, run_batch
@@ -26,6 +27,7 @@ __all__ = [
     "DEFAULT_SCALE_PROBE_START",
     "QueueDurabilityConfig",
     "ScaleProbeConfig",
+    "ScaleMode",
     "ScenarioConfig",
     "load_manifest",
     "resolve_demand_files",

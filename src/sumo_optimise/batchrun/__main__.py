@@ -15,6 +15,7 @@ from .models import (
     DEFAULT_SCALE_PROBE_START,
     QueueDurabilityConfig,
     ScaleProbeConfig,
+    ScaleMode,
 )
 from .orchestrator import load_manifest, run_batch
 
@@ -102,6 +103,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Temporarily log metrics parsing progress (debug; may be removed later)",
     )
+    parser.add_argument(
+        "--scale-mode",
+        choices=[mode.value for mode in ScaleMode],
+        default=ScaleMode.SUMO.value,
+        help=(
+            "Scale application strategy: 'sumo' passes --scale to SUMO (scales people + vehicles); "
+            "'veh_only' multiplies vehicle demand CSV rows and runs SUMO with scale=1"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -121,7 +131,8 @@ def main() -> None:
         coarse_step=args.scale_probe_coarse_step,
         abort_on_waiting=args.abort_on_waiting_ratio,
     )
-    scenarios = load_manifest(args.manifest)
+    scale_mode = ScaleMode(args.scale_mode)
+    scenarios = load_manifest(args.manifest, default_scale_mode=scale_mode)
     run_batch(
         scenarios,
         output_root=output_root,

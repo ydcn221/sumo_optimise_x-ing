@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 from enum import Enum
@@ -14,6 +14,11 @@ DEFAULT_SCALE_PROBE_START = 0.1
 DEFAULT_SCALE_PROBE_CEILING = 5.0
 DEFAULT_SCALE_PROBE_FINE_STEP = 0.1
 DEFAULT_SCALE_PROBE_COARSE_STEP = 1.0
+
+
+class ScaleMode(str, Enum):
+    SUMO = "sumo"
+    VEH_ONLY = "veh_only"
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,7 @@ class ScenarioConfig:
     seed: int
     demand_dir: Path
     scale: float
+    scale_mode: ScaleMode = ScaleMode.SUMO
     begin_filter: float = DEFAULT_BEGIN_FILTER
     end_time: float = DEFAULT_END_TIME
 
@@ -85,6 +91,7 @@ class QueueDurabilityMetrics:
 class RunArtifacts:
     outdir: Path
     sumocfg: Path
+    network: Path
     tripinfo: Path
     personinfo: Path
     fcd: Path
@@ -109,6 +116,21 @@ class ScaleProbeConfig:
 class CompressionConfig:
     enabled: bool = False
     zstd_level: int = 10  # single-threaded zstd
+
+
+@dataclass
+class PhaseTiming:
+    start: float | None = None
+    end: float | None = None
+
+
+@dataclass
+class RunTimings:
+    build: PhaseTiming = field(default_factory=PhaseTiming)
+    sumo: PhaseTiming = field(default_factory=PhaseTiming)
+    compress: PhaseTiming = field(default_factory=PhaseTiming)
+    probe: PhaseTiming = field(default_factory=PhaseTiming)
+    probe_compress: PhaseTiming = field(default_factory=PhaseTiming)
 
 
 @dataclass
@@ -157,3 +179,5 @@ class ScenarioResult:
     scale_probe: ScaleProbeResult
     fcd_note: str = ""
     error: Optional[str] = None
+    worker_id: Optional[int] = None
+    timings: RunTimings = field(default_factory=RunTimings)

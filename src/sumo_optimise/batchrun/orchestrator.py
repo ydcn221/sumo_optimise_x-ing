@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -31,16 +32,19 @@ from .models import (
     DEFAULT_BEGIN_FILTER,
     DEFAULT_END_TIME,
     DEFAULT_MAX_WORKERS,
+    PhaseTiming,
     DemandFiles,
     QueueDurabilityConfig,
     QueueDurabilityMetrics,
     RunArtifacts,
+    RunTimings,
     ScaleProbeConfig,
     ScaleProbeResult,
     ScenarioConfig,
     ScenarioResult,
     TripinfoMetrics,
     CompressionConfig,
+    ScaleMode,
     WorkerPhase,
     WorkerStatus,
 )
@@ -72,6 +76,17 @@ RESULT_COLUMNS = [
     "scale_probe_attempts",
     "fcd_note",
     "error_note",
+    "worker_id",
+    "build_start",
+    "build_end",
+    "sumo_start",
+    "sumo_end",
+    "compress_start",
+    "compress_end",
+    "probe_start",
+    "probe_end",
+    "probe_compress_start",
+    "probe_compress_end",
 ]
 
 
@@ -163,6 +178,37 @@ def _format_bytes(num: int) -> str:
     return f"{n:.1f}B"
 
 
+def _format_seconds(seconds: float) -> str:
+    if seconds < 0:
+        return "-"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, sec = divmod(int(round(seconds)), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}h{minutes:02d}m{sec:02d}s"
+    return f"{minutes:d}m{sec:02d}s"
+
+
+def _mark_start(timing: PhaseTiming | None) -> None:
+    if timing is None:
+        return
+    if timing.start is None:
+        timing.start = time.time()
+
+
+def _mark_end(timing: PhaseTiming | None) -> None:
+    if timing is None:
+        return
+    timing.end = time.time()
+
+
+def _format_timestamp(timestamp: float | None) -> str:
+    if timestamp is None:
+        return ""
+    return datetime.fromtimestamp(timestamp).isoformat(timespec="seconds")
+
+
 def _dir_size_bytes(path: Path) -> int:
     total = 0
     for root, _, files in os.walk(path):
@@ -179,8 +225,7 @@ def _render_grid(
     *,
     total: int,
     completed: int,
-    size_display: str | None = None,
-) -> None:
+) -> tuple[List[str], int]:
     term_width = shutil.get_terminal_size((160, 24)).columns
     cols = max(1, term_width // 40)
     rows: List[str] = []
@@ -188,7 +233,7 @@ def _render_grid(
     for idx, status in enumerate(ordered):
         scenario = status.scenario_id or "-"
         phase = status.phase
-        scale_str = f"{status.probe_scale or status.scale or 0:.1f}"
+        scale_str = f"{status.probe_scale or status.scale or 0:.2f}"
         label_text = status.label
         if not label_text and status.step is not None:
             label_text = f"sumo#{int(status.step)}"
@@ -199,11 +244,7 @@ def _render_grid(
         if (idx + 1) % cols == 0:
             rows.append("\n")
     error_count = sum(1 for s in statuses.values() if s.phase == WorkerPhase.ERROR)
-    size_part = f" | out {size_display}" if size_display else ""
-    summary = f"completed {completed}/{total} | errors {error_count}{size_part}"
-    print("\x1b[H\x1b[2J", end="")
-    print("".join(rows))
-    print(summary)
+    return rows, error_count
 
 
 def _render_loop(
@@ -221,6 +262,57 @@ def _render_loop(
     completed = 0
     last_size_time = 0.0
     size_display: str | None = None
+    last_height = 0
+    use_tty = sys.stdout.isatty()
+    task_start: Dict[int, float] = {}
+    task_durations: List[float] = []
+    batch_start = time.time()
+
+    def _render() -> None:
+        nonlocal last_height
+        rows, error_count = _render_grid(
+            statuses,
+            total=total,
+            completed=completed,
+        )
+        parts = [
+            f"completed {completed}/{total}",
+            f"errors {error_count}",
+        ]
+        if task_durations:
+            avg_task = sum(task_durations) / len(task_durations)
+            parts.append(f"avg_run {_format_seconds(avg_task)}")
+        else:
+            parts.append("avg_run -")
+        if completed:
+            wall_avg = (time.time() - batch_start) / completed
+            parts.append(f"wall_avg {_format_seconds(wall_avg)}")
+        else:
+            parts.append("wall_avg -")
+        if size_display:
+            parts.append(f"out {size_display}")
+        summary_line = " | ".join(parts)
+        grid_text = "".join(rows)
+        height = grid_text.count("\n")
+        if grid_text and not grid_text.endswith("\n"):
+            height += 1
+        height += 1  # summary line
+
+        if use_tty:
+            if last_height:
+                print(f"\x1b[{last_height}F", end="")
+                print("\x1b[J", end="")
+            print(grid_text, end="")
+            if grid_text and not grid_text.endswith("\n"):
+                print()
+            print(summary_line, end="\n")
+            sys.stdout.flush()
+            last_height = height
+        else:
+            print(grid_text)
+            print(summary_line)
+            last_height = 0
+
     while not stop_event.is_set() or not status_queue.empty():
         try:
             evt = status_queue.get(timeout=0.1)
@@ -242,9 +334,14 @@ def _render_loop(
             status.done = evt.get("done", status.done)
             status.probe_scale = evt.get("probe_scale", status.probe_scale)
             status.last_update = evt.get("timestamp", time.time())
+            if status.phase != WorkerPhase.IDLE and worker_id not in task_start:
+                task_start[worker_id] = status.last_update
             statuses[worker_id] = status
             if evt.get("completed"):
                 completed += 1
+                started_at = task_start.pop(worker_id, None)
+                if started_at is not None:
+                    task_durations.append(max(0.0, status.last_update - started_at))
             if diag_log_path is not None:
                 try:
                     with diag_log_path.open("a", encoding="utf-8") as fp:
@@ -266,36 +363,26 @@ def _render_loop(
                 size_display = None
             last_size_time = now
         if now - last_render >= 0.5:
-            _render_grid(
-                statuses,
-                total=total,
-                completed=completed,
-                size_display=size_display,
-            )
+            _render()
             last_render = now
     try:
-        _render_grid(
-            statuses,
-            total=total,
-            completed=completed,
-            size_display=size_display,
-        )
+        _render()
     except (EOFError, BrokenPipeError):
         return
 
-def load_manifest(path: Path) -> List[ScenarioConfig]:
+def load_manifest(path: Path, *, default_scale_mode: ScaleMode = ScaleMode.SUMO) -> List[ScenarioConfig]:
     manifest_path = Path(path)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
     suffix = manifest_path.suffix.lower()
     if suffix == ".json":
-        return _load_manifest_json(manifest_path)
+        return _load_manifest_json(manifest_path, default_scale_mode=default_scale_mode)
     if suffix == ".csv":
-        return _load_manifest_csv(manifest_path)
+        return _load_manifest_csv(manifest_path, default_scale_mode=default_scale_mode)
     raise ValueError("Manifest must be .json or .csv")
 
 
-def _load_manifest_json(path: Path) -> List[ScenarioConfig]:
+def _load_manifest_json(path: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
     with path.open("r", encoding="utf-8") as fp:
         data = json.load(fp)
     if not isinstance(data, list):
@@ -303,11 +390,11 @@ def _load_manifest_json(path: Path) -> List[ScenarioConfig]:
     base = path.parent
     scenarios: List[ScenarioConfig] = []
     for entry in data:
-        scenarios.extend(_row_to_config(entry, base))
+        scenarios.extend(_row_to_config(entry, base, default_scale_mode=default_scale_mode))
     return scenarios
 
 
-def _load_manifest_csv(path: Path) -> List[ScenarioConfig]:
+def _load_manifest_csv(path: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
     scenarios: List[ScenarioConfig] = []
     base = path.parent
     with path.open("r", encoding="utf-8") as fp:
@@ -315,7 +402,7 @@ def _load_manifest_csv(path: Path) -> List[ScenarioConfig]:
         for row in reader:
             if not any(row.values()):
                 continue
-            scenarios.extend(_row_to_config(row, base))
+            scenarios.extend(_row_to_config(row, base, default_scale_mode=default_scale_mode))
     return scenarios
 
 
@@ -362,13 +449,24 @@ def _parse_seed_field(raw_seed: object) -> List[int]:
     return seeds
 
 
-def _row_to_config(raw: dict, base: Path) -> List[ScenarioConfig]:
+def _parse_scale_mode(raw_mode: object | None, default: ScaleMode) -> ScaleMode:
+    if raw_mode is None or raw_mode == "":
+        return default
+    token = str(raw_mode).strip().lower()
+    try:
+        return ScaleMode(token)
+    except ValueError as err:
+        raise ValueError(f"Invalid scale_mode: {raw_mode!r}") from err
+
+
+def _row_to_config(raw: dict, base: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
     try:
         spec = Path(raw["spec"])
         scenario_id = str(raw["scenario_id"])
         seeds = _parse_seed_field(raw["seed"])
         demand_dir = Path(raw["demand_dir"])
         scale = float(raw["scale"])
+        scale_mode = _parse_scale_mode(raw.get("scale_mode"), default_scale_mode)
     except KeyError as err:
         raise ValueError(f"Missing manifest field: {err.args[0]}") from err
     if not scenario_id:
@@ -388,6 +486,7 @@ def _row_to_config(raw: dict, base: Path) -> List[ScenarioConfig]:
                 seed=seed,
                 demand_dir=demand_dir,
                 scale=scale,
+                scale_mode=scale_mode,
                 begin_filter=begin_filter,
                 end_time=end_time,
             )
@@ -414,10 +513,13 @@ def _build_options_for_scenario(
     scenario: ScenarioConfig,
     *,
     output_root: Path,
+    vehicle_flow_scale: float | None = None,
+    run_label: str | None = None,
+    network_input: Path | None = None,
 ) -> BuildOptions:
     output_template = OutputDirectoryTemplate(
         root=str(output_root / scenario.scenario_id),
-        run="{seq:03}",
+        run=run_label or "{seq:03}",
     )
     output_files = OutputFileTemplates()
     demand_files = resolve_demand_files(scenario.demand_dir)
@@ -427,6 +529,7 @@ def _build_options_for_scenario(
         veh_endpoint_csv=demand_files.veh_endpoint,
         veh_junction_turn_weight_csv=demand_files.veh_junction,
         simulation_end_time=scenario.end_time,
+        vehicle_flow_scale=vehicle_flow_scale if vehicle_flow_scale is not None else 1.0,
     )
 
     return BuildOptions(
@@ -439,7 +542,7 @@ def _build_options_for_scenario(
         output_files=output_files,
         demand=demand_options,
         generate_demand_templates=False,
-        network_input=None,
+        network_input=network_input,
     )
 
 
@@ -448,10 +551,13 @@ def _collect_artifacts(result, *, scenario_id: str) -> RunArtifacts:
         raise ValueError("manifest path not recorded by build")
     outdir = result.manifest_path.parent
     sumocfg = result.sumocfg_path or (outdir / "config.sumocfg")
+    files = OutputFileTemplates()
+    network_path = outdir / files.network
     safe_id = _safe_id_for_filename(scenario_id)
     return RunArtifacts(
         outdir=outdir,
         sumocfg=sumocfg,
+        network=network_path,
         tripinfo=outdir / f"tripinfo_{safe_id}.xml",
         personinfo=outdir / f"personinfo_{safe_id}.xml",
         fcd=outdir / f"fcd_{safe_id}.xml",
@@ -471,6 +577,7 @@ def _artifacts_for_label(base: RunArtifacts, label: str | None) -> RunArtifacts:
     return RunArtifacts(
         outdir=outdir,
         sumocfg=base.sumocfg,
+        network=base.network,
         tripinfo=outdir / base.tripinfo.name,
         personinfo=outdir / base.personinfo.name,
         fcd=outdir / base.fcd.name,
@@ -793,6 +900,7 @@ def _run_for_scale(
     *,
     queue_config: QueueDurabilityConfig,
     scale: float,
+    sumo_scale: float | None = None,
     affinity_cpu: int | None,
     collect_tripinfo: bool,
     status_queue=None,
@@ -801,13 +909,15 @@ def _run_for_scale(
     use_pty: bool = False,
     enable_waiting_abort: bool = False,
     metrics_trace: bool = False,
+    phase_timing: PhaseTiming | None = None,
 ) -> tuple[TripinfoMetrics, QueueDurabilityMetrics]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.personinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.queue.parent.mkdir(parents=True, exist_ok=True)
     artifacts.sumo_log.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = _sumo_command(artifacts, scenario, scale=scale)
+    applied_scale = sumo_scale if sumo_scale is not None else scale
+    cmd = _sumo_command(artifacts, scenario, scale=applied_scale)
     with artifacts.sumo_log.open("a", encoding="utf-8") as log_fp:
         log_fp.write(" ".join(cmd) + "\n")
         log_fp.flush()
@@ -827,6 +937,7 @@ def _run_for_scale(
             enable_waiting_abort=enable_waiting_abort,
         )
 
+    _mark_end(phase_timing)
     _send_status(
         status_queue,
         worker_id=worker_id or 0,
@@ -886,7 +997,7 @@ def _run_for_scale(
                 f"max_ratio={queue_metrics.max_queue_length} "
                 f"size_bytes={artifacts.summary.stat().st_size if artifacts.summary.exists() else 0}"
             ),
-        )
+    )
     phase_label = phase.name if hasattr(phase, "name") else str(phase)
     queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
     queue_reason = ""
@@ -898,7 +1009,7 @@ def _run_for_scale(
     _debug_log(
         artifacts.sumo_log,
         (
-            f"[scale-run] phase={phase_label} scale={scale:.2f} "
+            f"[scale-run] phase={phase_label} scale={scale:.2f} sumo_scale={applied_scale:.2f} "
             f"aborted={aborted} queue_status={queue_status} "
             f"first_over_saturation_time={queue_metrics.first_failure_time} "
             f"max_ratio={queue_metrics.max_queue_length}"
@@ -914,6 +1025,7 @@ def _probe_scale_durability(
     *,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
+    compression: CompressionConfig,
     affinity_cpu: int | None,
     queue_cache: Dict[float, QueueDurabilityMetrics],
     attempts: int,
@@ -921,6 +1033,10 @@ def _probe_scale_durability(
     worker_id: int | None = None,
     use_pty: bool = False,
     metrics_trace: bool = False,
+    output_root: Path | None = None,
+    scale_mode: ScaleMode = ScaleMode.SUMO,
+    base_network: Path | None = None,
+    timings: RunTimings | None = None,
 ) -> ScaleProbeResult:
     fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
     coarse_step = scale_probe.coarse_step if scale_probe.coarse_step > 0 else fine_step
@@ -929,6 +1045,7 @@ def _probe_scale_durability(
     ceiling = max(scale_probe.ceiling, start_scale)
     probe_tag = f"[scale-probe scenario={scenario.scenario_id} seed={scenario.seed}]"
     log_path = base_artifacts.sumo_log
+    _mark_start(timings.probe if timings is not None else None)
     over_saturation_reason_text = _format_over_saturation_reason(
         queue_config.length_threshold, queue_config.step_window
     )
@@ -972,12 +1089,30 @@ def _probe_scale_durability(
             )
             return queue_cache[scale_value]
 
-        artifacts = _artifacts_for_label(base_artifacts, _format_scale_label(scale_value))
+        run_label = _format_scale_label(scale_value)
+        if scale_mode == ScaleMode.VEH_ONLY:
+            target_root = output_root or base_artifacts.outdir.parent
+            task = BuildTask.DEMAND if base_network is not None else BuildTask.ALL
+            options = _build_options_for_scenario(
+                scenario,
+                output_root=target_root,
+                vehicle_flow_scale=scale_value,
+                run_label=run_label,
+                network_input=base_network,
+            )
+            build_result = build_and_persist(scenario.spec, options, task=task)
+            artifacts = _collect_artifacts(build_result, scenario_id=scenario.scenario_id)
+            applied_sumo_scale = 1.0
+        else:
+            artifacts = _artifacts_for_label(base_artifacts, run_label)
+            applied_sumo_scale = scale_value
+
         _, queue_metrics = _run_for_scale(
             artifacts,
             scenario,
             queue_config=queue_config,
             scale=scale_value,
+            sumo_scale=applied_sumo_scale,
             affinity_cpu=affinity_cpu,
             collect_tripinfo=False,
             status_queue=status_queue,
@@ -987,6 +1122,14 @@ def _probe_scale_durability(
             enable_waiting_abort=scale_probe.abort_on_waiting,
             metrics_trace=metrics_trace,
         )
+        if compression.enabled:
+            _mark_start(timings.probe_compress if timings is not None else None)
+            _compress_artifacts(
+                artifacts,
+                level=compression.zstd_level,
+                log_path=artifacts.sumo_log,
+            )
+            _mark_end(timings.probe_compress if timings is not None else None)
         queue_cache[scale_value] = queue_metrics
         attempt_no = attempts + 1
         attempts = attempt_no
@@ -1132,8 +1275,12 @@ def run_scenario(
         max_durable_scale=None,
         attempts=0,
     )
+    vehicle_flow_scale = scenario.scale if scenario.scale_mode == ScaleMode.VEH_ONLY else None
+    timings = RunTimings()
+    scenario_worker = worker_id
 
     try:
+        _mark_start(timings.build)
         _send_status(
             status_queue,
             worker_id=worker_id,
@@ -1143,10 +1290,16 @@ def run_scenario(
             phase=WorkerPhase.BUILD,
             label="build",
         )
-        options = _build_options_for_scenario(scenario, output_root=output_root)
+        options = _build_options_for_scenario(
+            scenario,
+            output_root=output_root,
+            vehicle_flow_scale=vehicle_flow_scale,
+        )
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
         artifacts = _collect_artifacts(build_result, scenario_id=scenario.scenario_id)
+        _mark_end(timings.build)
     except Exception as exc:  # noqa: BLE001
+        _mark_end(timings.build)
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
             scenario_base_id=scenario.scenario_base_id,
@@ -1160,9 +1313,13 @@ def run_scenario(
             scale_probe=probe_result,
             fcd_note="build failed",
             error=str(exc),
+            worker_id=scenario_worker,
+            timings=timings,
         )
 
     try:
+        sumo_scale = 1.0 if scenario.scale_mode == ScaleMode.VEH_ONLY else scenario.scale
+        _mark_start(timings.sumo)
         _send_status(
             status_queue,
             worker_id=worker_id,
@@ -1177,6 +1334,7 @@ def run_scenario(
             scenario,
             queue_config=queue_config,
             scale=scenario.scale,
+            sumo_scale=sumo_scale,
             affinity_cpu=affinity_cpu,
             collect_tripinfo=True,
             status_queue=status_queue,
@@ -1184,8 +1342,12 @@ def run_scenario(
             phase=WorkerPhase.SUMO,
             use_pty=use_pty,
             metrics_trace=metrics_trace,
+            phase_timing=timings.sumo,
         )
+        if timings.sumo.end is None:
+            _mark_end(timings.sumo)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        _mark_end(timings.sumo)
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
             scenario_base_id=scenario.scenario_base_id,
@@ -1203,6 +1365,8 @@ def run_scenario(
             ),
             fcd_note="sumo failed",
             error=getattr(exc, "stderr", None) or str(exc),
+            worker_id=scenario_worker,
+            timings=timings,
         )
 
     fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
@@ -1213,22 +1377,8 @@ def run_scenario(
         max_durable_scale=None,
         attempts=1,
     )
-    if scale_probe.enabled:
-        probe_result = _probe_scale_durability(
-            artifacts,
-            scenario,
-            queue_config=queue_config,
-            scale_probe=scale_probe,
-            affinity_cpu=affinity_cpu,
-            queue_cache=queue_cache,
-            attempts=1,
-            status_queue=status_queue,
-            worker_id=worker_id,
-            use_pty=use_pty,
-            metrics_trace=metrics_trace,
-        )
-
     if compression.enabled:
+        _mark_start(timings.compress)
         _send_status(
             status_queue,
             worker_id=worker_id,
@@ -1243,6 +1393,47 @@ def run_scenario(
             level=compression.zstd_level,
             log_path=artifacts.sumo_log,
         )
+        _mark_end(timings.compress)
+    if scale_probe.enabled:
+        _mark_start(timings.probe)
+        probe_result = _probe_scale_durability(
+            artifacts,
+            scenario,
+            queue_config=queue_config,
+            scale_probe=scale_probe,
+            compression=compression,
+            affinity_cpu=affinity_cpu,
+            queue_cache=queue_cache,
+            attempts=1,
+            status_queue=status_queue,
+            worker_id=worker_id,
+            use_pty=use_pty,
+            metrics_trace=metrics_trace,
+            output_root=output_root,
+            scale_mode=scenario.scale_mode,
+            base_network=artifacts.network,
+            timings=timings,
+        )
+        _mark_end(timings.probe)
+
+    if compression.enabled:
+        target_timing = timings.probe_compress if scale_probe.enabled else timings.compress
+        _mark_start(target_timing)
+        _send_status(
+            status_queue,
+            worker_id=worker_id,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scenario.scale,
+            phase=WorkerPhase.PARSE,
+            label="compressing",
+        )
+        _compress_artifacts(
+            artifacts,
+            level=compression.zstd_level,
+            log_path=artifacts.sumo_log,
+        )
+        _mark_end(target_timing)
 
     result = ScenarioResult(
         scenario_id=scenario.scenario_id,
@@ -1257,6 +1448,8 @@ def run_scenario(
         scale_probe=probe_result,
         fcd_note="n/a",
         error=None,
+        worker_id=scenario_worker,
+        timings=timings,
     )
     _send_status(
         status_queue,
@@ -1434,6 +1627,13 @@ def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path |
 
 
 def _result_to_row(result: ScenarioResult) -> dict:
+    build_start, build_end = _timing_to_strings(result.timings.build)
+    sumo_start, sumo_end = _timing_to_strings(result.timings.sumo)
+    compress_start, compress_end = _timing_to_strings(result.timings.compress)
+    probe_start, probe_end = _timing_to_strings(result.timings.probe)
+    probe_compress_start, probe_compress_end = _timing_to_strings(
+        result.timings.probe_compress
+    )
     return {
         "scenario_id": result.scenario_id,
         "scenario_base_id": result.scenario_base_id,
@@ -1456,6 +1656,17 @@ def _result_to_row(result: ScenarioResult) -> dict:
         "scale_probe_attempts": result.scale_probe.attempts,
         "fcd_note": result.fcd_note,
         "error_note": result.error or "",
+        "worker_id": result.worker_id if result.worker_id is not None else "",
+        "build_start": build_start,
+        "build_end": build_end,
+        "sumo_start": sumo_start,
+        "sumo_end": sumo_end,
+        "compress_start": compress_start,
+        "compress_end": compress_end,
+        "probe_start": probe_start,
+        "probe_end": probe_end,
+        "probe_compress_start": probe_compress_start,
+        "probe_compress_end": probe_compress_end,
     }
 
 
@@ -1463,3 +1674,9 @@ def _fmt(value) -> str | float:
     if value is None:
         return ""
     return round(value, 3) if isinstance(value, float) else value
+
+
+def _timing_to_strings(timing: PhaseTiming | None) -> tuple[str, str]:
+    if timing is None:
+        return "", ""
+    return _format_timestamp(timing.start), _format_timestamp(timing.end)

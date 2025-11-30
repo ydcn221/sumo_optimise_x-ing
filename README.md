@@ -372,6 +372,8 @@ Columns are grouped for readability:
 * **Queue durability:** `queue_threshold_steps`, `queue_threshold_length`, `queue_first_over_saturation_time`, `queue_is_durable`.
   * `queue_first_over_saturation_time` = first timestep where the waiting/running ratio stays at or above `queue_threshold_length` for at least `queue_threshold_steps` consecutive seconds; blank means durable (no over-saturation detected).
 * **Scale probe metadata:** `scale_probe_enabled`, `scale_probe_max_durable_scale`, `scale_probe_attempts`.
+* **Runtime + workers:** `worker_id`, `build_start`, `build_end`, `sumo_start`, `sumo_end`, `compress_start`, `compress_end`, `probe_start`, `probe_end`, `probe_compress_start`, `probe_compress_end`.
+  * Timestamps are ISO-8601 (local) per process shown in the batch progress grid; `sumo_*` is the main run only, `probe_*` covers probe executions (including their compression) without folding in the main run.
 * **Notes:** `fcd_note`, `error_note`.
 
 Only the over-saturation timing is retained for queues; legacy waiting-threshold metrics and max waiting values have been removed.
