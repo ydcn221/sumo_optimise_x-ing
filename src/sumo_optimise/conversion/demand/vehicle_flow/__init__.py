@@ -1,7 +1,7 @@
 """Vehicle demand routing orchestration."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Sequence
 
 from ...domain.models import (
@@ -45,6 +45,12 @@ def prepare_vehicle_routes(
         return None
 
     pattern, endpoint_rows = load_vehicle_endpoint_demands(veh_endpoint)
+    vehicle_scale = options.vehicle_flow_scale if options.vehicle_flow_scale is not None else 1.0
+    if vehicle_scale != 1.0:
+        endpoint_rows = [
+            replace(row, flow_per_hour=row.flow_per_hour * vehicle_scale)
+            for row in endpoint_rows
+        ]
     turn_weight_map = load_vehicle_turn_weights(veh_turn_weights)
     network = build_vehicle_network(breakpoints, clusters)
     od_flows = compute_vehicle_od_flows(endpoint_rows, network=network, turn_weights=turn_weight_map)

@@ -71,7 +71,7 @@ def test_vehicle_flow_propagation_and_rendering() -> None:
         simulation_end_time=3600.0,
     )
     assert all('departLane="best_prob"' in entry for entry in entries)
-    assert all('departSpeed="desired"' in entry for entry in entries)
+    assert all('departSpeed="max"' in entry for entry in entries)
     assert any("vehsPerHour" in entry for entry in entries)
 
     combined = render_routes_document(person_entries=None, vehicle_entries=entries)

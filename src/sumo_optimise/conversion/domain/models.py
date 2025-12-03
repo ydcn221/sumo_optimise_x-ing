@@ -381,6 +381,7 @@ class DemandOptions:
     veh_endpoint_csv: Optional[Path] = None
     veh_junction_turn_weight_csv: Optional[Path] = None
     simulation_end_time: float = 3600.0
+    vehicle_flow_scale: float = 1.0
 
 
 @dataclass(frozen=True)
