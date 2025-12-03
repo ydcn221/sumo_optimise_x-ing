@@ -77,8 +77,20 @@ The values without a tick in the "On" column need to be [enabled explicitly](#fu
 | blockTime | m                   |    |  x   | The time at which the vehicle was blocked from leaving the current segment (or -1 if not blocked)           |
 | tag | string                    |    |      | Whether a vehicle, container or person is being written (mainly useful for tabular output)           |
 
+### Emission Attributes
+
 All attributes from the [emission output](EmissionOutput.md) can be added to the FCD output as well.
 They need to be enabled by using the option **--fcd-output.attributes**, see below.
+
+```xml
+<configuration>
+  ...
+  <output>
+    <fcd-output.attributes value="eclass,CO2,CO,HC,NOx,PMx,fuel,electricity,noise"/>
+  </output>
+  ...
+</configuration>
+```
 
 When the option **--fcd-output.geo** is set, the written (x,y)-coordinates will be the
 lon/lat geo-coordinates.
@@ -101,9 +113,9 @@ following form:
   <timestep time="<TIME_STEP>">
       <vehicle .../>
       ...
-      <person id="..." x="..." y="..." angle="..." type="..." speed="..." edge="..." slope="..."/>
+      <person id="..." x="..." y="..." angle="..." type="..." speed="..." pos="..." edge="..." slope="..."/>
       ...
-      <container id="..." x="..." y="..." angle="..." type="..." speed="..." edge="..." slope="..."/>
+      <container id="..." x="..." y="..." angle="..." type="..." speed="..." pos="..." edge="..." slope="..."/>
       ...
   </timestep>
 
@@ -115,6 +127,10 @@ following form:
 If persons or containers are transported within a vehicle, their
 respective `<person>` and `<container>` elements will be written as child elements of that
 vehicle.
+
+Person and container output can be written to a separate file using the option **--person-fcd-output**.
+If this option is given, the specified file will only contain containers and persons while the fcd-output
+will contain only vehicles.
 
 ## Filtering / Restricting Output
 

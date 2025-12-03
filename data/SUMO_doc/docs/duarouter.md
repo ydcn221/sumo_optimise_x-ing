@@ -100,6 +100,7 @@ Files](Basics/Using_the_Command_Line_Applications.md#configuration_files).
 | **--emissions.volumetric-fuel** {{DT_BOOL}} | Return fuel consumption values in (legacy) unit l instead of mg; *default:* **false** |
 | **--named-routes** {{DT_BOOL}} | Write vehicles that reference routes by their id; *default:* **false** |
 | **--write-license** {{DT_BOOL}} | Include license info into every output file; *default:* **false** |
+| **--write-metadata** {{DT_BOOL}} | Write parsable metadata (configuration etc.) instead of comments; *default:* **false** |
 | **--output-prefix** {{DT_STR}} | Prefix which is applied to all output files. The special string 'TIME' is replaced by the current time. |
 | **--precision** {{DT_INT}} | Defines the number of digits after the comma for floating point output; *default:* **2** |
 | **--precision.geo** {{DT_INT}} | Defines the number of digits after the comma for lon,lat output; *default:* **6** |
@@ -145,6 +146,7 @@ Files](Basics/Using_the_Command_Line_Applications.md#configuration_files).
 | **--weights.minor-penalty** {{DT_FLOAT}} | Apply the given time penalty when computing routing costs for minor-link internal lanes; *default:* **1.5** |
 | **--weights.tls-penalty** {{DT_FLOAT}} | Apply the given time penalty when computing routing costs across a traffic light; *default:* **0** |
 | **--weights.turnaround-penalty** {{DT_FLOAT}} | Apply the given time penalty when computing routing costs for turnaround internal lanes; *default:* **5** |
+| **--weights.reversal-penalty** {{DT_FLOAT}} | Apply the given time penalty when computing routing costs for train reversal. Negative values disable reversal; *default:* **60** |
 | **--weights.random-factor** {{DT_FLOAT}} | Edge weights for routing are dynamically disturbed by a random factor drawn uniformly from [1,FLOAT); *default:* **1** |
 | **--weight-period** {{DT_TIME}} | Aggregation period for the given weight files; triggers rebuilding of Contraction Hierarchy; *default:* **3600** |
 | **--weights.priority-factor** {{DT_FLOAT}} | Consider edge priorities in addition to travel times, weighted by factor; *default:* **0** |
@@ -159,6 +161,7 @@ Files](Basics/Using_the_Command_Line_Applications.md#configuration_files).
 | **--skip-new-routes** {{DT_BOOL}} | Only reuse routes from input, do not calculate new ones; *default:* **false** |
 | **--keep-route-probability** {{DT_FLOAT}} | The probability of keeping the old route; *default:* **0** |
 | **--ptline-routing** {{DT_BOOL}} | Route all public transport input; *default:* **false** |
+| **--keep-flows** {{DT_BOOL}} | Write flows instead of expanding them into vehicles; *default:* **false** |
 | **--route-choice-method** {{DT_STR}} | Choose a route choice method: gawron, logit, or lohse; *default:* **gawron** |
 | **--logit** {{DT_BOOL}} | Use c-logit model (deprecated in favor of --route-choice-method logit); *default:* **false** |
 | **--logit.beta** {{DT_FLOAT}} | Use FLOAT as logit's beta; *default:* **-1** |
