@@ -13,7 +13,7 @@ Generate a SUMO network (PlainXML) for a **single, straight main road** with ort
 * **Grid snapping** with configurable step and tie-break.
 * **Per-junction geometry controls** (tee/cross) embedded directly in layout events: approach-lane tapers, minor in/out lane counts, `median_continuous`, and `main_u_turn_allowed`.
 * **Pedestrian crossings** at intersections and mid-block (single or split).
-* **Vehicle turn connections** (L/T/R) with deterministic lane mapping (left-to-left, straight fan-out, rightmost sharing).
+* **Vehicle turn connections** (L/T/R/U) with deterministic one-to-one mapping (compacts overflow to the edge-side lane, no fan-out into extra target lanes) and optional per-approach manual lane movement overrides.
 * **Two-step `netconvert` integration** (optional) and structured build logs.
 
 ---
@@ -258,6 +258,7 @@ See the spec for data schemas, propagation rules, and output semantics.
     * `minor_lanes_approach`: lanes for minor traffic travelling **toward** the main road.
     * `minor_lanes_departure`: lanes for movements leaving the main road onto the minor leg.
     * `median_continuous`: whether the median stays closed through the junction (blocks main right + U turns, minor straight-throughs, etc.).
+    * `lane_movements` (optional): manual lane-movement templates per approach (`main`/`EB`/`WB`/`minor`/`NB`/`SB`). Provide one or more arrays of lane labels per approach (labels combine `L`/`T`/`R`/`U`; template length = lane count). If no template matches the actual lane count, the automatic allocation runs as before.
   * `tee`: `{ pos_m, branch: "north"|"south", <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `cross`: `{ pos_m, <geometry>, main_u_turn_allowed, refuge_island_on_main, signalized, two_stage_tll_control?, signal?, main_ped_crossing_placement }`
   * `xwalk_midblock`: `{ pos_m, refuge_island_on_main, signalized, two_stage_tll_control?, signal? }`
@@ -271,6 +272,7 @@ See the spec for data schemas, propagation rules, and output semantics.
 * Events must lie within `[0, length]`; snapped positions within `[0, grid_max]`.
 * A junction and a mid-block crossing at the **same** position will be **absorbed** into the junction’s crossing flags.
 * `median_continuous=true` restricts certain turns (e.g., main-road right turn).
+* Manual `lane_movements` drop impossible movements (e.g., blocked turn) but otherwise override the automatic allocation. Do not specify both `main` **and** `EB`/`WB` (or both `minor` **and** `NB`/`SB`) at the same junction.
 * `main_u_turn_allowed=false` removes U-turn connections on the main road (both EB and WB) at that junction.
 * If `signalized=true`, a valid profile reference is required.
 
@@ -352,7 +354,7 @@ Typical flags (names may vary by release):
 
   * `1-generated.nod.xml` — main road endpoints and breakpoints; cluster `<join>` nodes at interior junctions; minor dead-ends.
   * `1-generated.edg.xml` — EB/WB segments per breakpoint; minor “to/from” one-way edges; lane counts with overrides; speeds in m/s.
-  * `1-generated.con.xml` — `<connection>` for vehicle L/T/R movements with left turns mapped from the inside out, straight lanes paired left-to-left (fanning the rightmost lane when targets exceed sources), and right/U turns sharing the outermost lane when needed; `<crossing>` for pedestrians (junction/min-block; single/split).
+  * `1-generated.con.xml` — `<connection>` for vehicle L/T/R/U movements with left turns mapped from the inside out, straight lanes paired left-to-left (overflow collapses into the rightmost target lane; extra target lanes remain unused), and right/U turns sharing the innermost target lane when approaches exceed targets; `<crossing>` for pedestrians (junction/min-block; single/split).
   * `1-generated.tll.xml` — `<tlLogic>` definitions assembled from the signal profiles referenced by each cluster.
 * **Build artifacts**
 

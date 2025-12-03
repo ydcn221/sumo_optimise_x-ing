@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from ..builder.ids import (
     cluster_id,
@@ -32,11 +32,12 @@ from ..planner.crossings import decide_midblock_side_for_collision
 from ..planner.lanes import find_neighbor_segments, pick_lanes_for_segment
 from ..utils.errors import SemanticValidationError
 from ..utils.logging import get_logger
+from ..utils.movements import ALLOWED_LANE_SYMBOLS, LANE_MOVEMENT_ORDER, canonical_lane_label
 
 LOG = get_logger()
 
 
-_ORDER = ("L", "T", "R", "U")
+_ORDER = LANE_MOVEMENT_ORDER
 
 
 @dataclass
@@ -378,11 +379,10 @@ def _crossing_movement_priority(movement: str) -> int:
     return 0
 
 
-def _canon(label: str) -> str:
+def _canon(label: str, *, allowed: Iterable[str] | None = None) -> str:
     """Normalize lane labels to the canonical L→T→R→U order."""
 
-    s = set(label)
-    return "".join(ch for ch in _ORDER if ch in s)
+    return canonical_lane_label(label, allowed=allowed or ALLOWED_LANE_SYMBOLS)
 
 
 def _add(label: str, move: str) -> str:
@@ -431,6 +431,30 @@ def _count_effective(lanes: List[str], sym: str) -> int:
     """Count lanes that effectively behave as ``sym`` while ignoring shared ``U``."""
 
     return sum(1 for lane in lanes if lane.replace("U", "") == sym)
+
+
+def _sanitize_lane_plan(lane_plan: List[str], allowed: Dict[str, bool]) -> List[str]:
+    allowed_symbols = {sym for sym, ok in allowed.items() if ok}
+    return [
+        _canon("".join(ch for ch in str(label).upper() if ch in allowed_symbols), allowed=allowed_symbols)
+        for label in lane_plan
+    ]
+
+
+def _pick_lane_plan(cfg: JunctionConfig, approach: str, lane_count: int) -> Optional[List[str]]:
+    plans = cfg.lane_movements or {}
+
+    def _select(key: str) -> Optional[List[str]]:
+        template = plans.get(key, {}).get(lane_count) if isinstance(plans.get(key), dict) else None
+        if template:
+            return list(template)
+        return None
+
+    if approach in {"EB", "WB"}:
+        return _select(approach) or _select("main")
+    if approach in {"NB", "SB"}:
+        return _select(approach) or _select("minor")
+    return None
 
 
 def _fallback_shared_allocation(s: int, l: int, t: int, r: int, u: int) -> List[str]:
@@ -597,16 +621,78 @@ def _emit_vehicle_connections_for_approach(
     *,
     tl_id: Optional[str],
     movement_prefix: str,
+    lane_plan: Optional[List[str]] = None,
 ) -> int:
     l_target = L_target[1] if L_target else 0
     t_target = T_target[1] if T_target else 0
     r_target = R_target[1] if R_target else 0
     u_target = U_target[1] if U_target else 0
 
-    l = min(l_target, s_count)
-    t = min(t_target, s_count)
-    r = min(r_target, s_count)
-    u = min(u_target, s_count)
+    allowed = {
+        "L": l_target > 0,
+        "T": t_target > 0,
+        "R": r_target > 0,
+        "U": u_target > 0,
+    }
+
+    lane_labels: Optional[List[str]] = None
+    if lane_plan is not None and len(lane_plan) == s_count:
+        manual_labels = _sanitize_lane_plan(list(lane_plan), allowed)
+        if any(manual_labels):
+            lane_labels = manual_labels
+
+    if lane_labels is None:
+        l = min(l_target, s_count)
+        t = min(t_target, s_count)
+        r = min(r_target, s_count)
+        u = min(u_target, s_count)
+
+        if s_count > 0 and (l + t + r + u) == 0:
+            LOG.error(
+                "[VAL] E401 no available movements: pos=%s in_edge=%s s=%d l=%d t=%d r=%d u=%d",
+                pos,
+                in_edge_id,
+                s_count,
+                l,
+                t,
+                r,
+                u,
+            )
+            raise SemanticValidationError("no available movements for approach")
+
+        try:
+            lane_labels = allocate_lanes(s_count, l, t, r, u)
+        except ValueError as exc:  # pragma: no cover - defensive, should be validated upstream
+            LOG.error(
+                "[VAL] E403 invalid lane allocation inputs: pos=%s in_edge=%s s=%d l=%d t=%d r=%d u=%d msg=%s",
+                pos,
+                in_edge_id,
+                s_count,
+                l,
+                t,
+                r,
+                u,
+                exc,
+            )
+            raise SemanticValidationError("invalid lane allocation") from exc
+    else:
+        LOG.info(
+            "lane movements override: pos=%s in_edge=%s lanes=%d plan=%s",
+            pos,
+            in_edge_id,
+            s_count,
+            lane_labels,
+        )
+
+    idx_l = [i for i, label in enumerate(lane_labels, start=1) if "L" in label]
+    idx_t = [i for i, label in enumerate(lane_labels, start=1) if "T" in label]
+    idx_r = [i for i, label in enumerate(lane_labels, start=1) if "R" in label]
+    idx_u = [i for i, label in enumerate(lane_labels, start=1) if "U" in label]
+
+    l = len(idx_l)
+    t = len(idx_t)
+    r = len(idx_r)
+    u = len(idx_u)
 
     if s_count > 0 and (l + t + r + u) == 0:
         LOG.error(
@@ -620,27 +706,6 @@ def _emit_vehicle_connections_for_approach(
             u,
         )
         raise SemanticValidationError("no available movements for approach")
-
-    try:
-        lane_labels = allocate_lanes(s_count, l, t, r, u)
-    except ValueError as exc:  # pragma: no cover - defensive, should be validated upstream
-        LOG.error(
-            "[VAL] E403 invalid lane allocation inputs: pos=%s in_edge=%s s=%d l=%d t=%d r=%d u=%d msg=%s",
-            pos,
-            in_edge_id,
-            s_count,
-            l,
-            t,
-            r,
-            u,
-            exc,
-        )
-        raise SemanticValidationError("invalid lane allocation") from exc
-
-    idx_l = [i for i, label in enumerate(lane_labels, start=1) if "L" in label]
-    idx_t = [i for i, label in enumerate(lane_labels, start=1) if "T" in label]
-    idx_r = [i for i, label in enumerate(lane_labels, start=1) if "R" in label]
-    idx_u = [i for i, label in enumerate(lane_labels, start=1) if "U" in label]
 
     emitted = 0
 
@@ -686,10 +751,6 @@ def _emit_vehicle_connections_for_approach(
         if count > lane_count:
             for from_lane in idx[lane_count:]:
                 append_connection(from_lane, lane_count, edge_id, "T")
-        elif lane_count > count:
-            edge_from = idx[-1]
-            for to_lane in range(count + 1, lane_count + 1):
-                append_connection(edge_from, to_lane, edge_id, "T")
 
     def emit_right(idx: List[int], target: Optional[Tuple[str, int]]) -> None:
         """Attach right (and U) turns from the outside in, sharing the edge lane as needed."""
@@ -702,7 +763,7 @@ def _emit_vehicle_connections_for_approach(
             if offset < lane_count:
                 to_lane = lane_count - offset
             else:
-                to_lane = lane_count
+                to_lane = 1
             append_connection(from_lane, to_lane, edge_id, "R")
 
     if l > 0:
@@ -721,7 +782,7 @@ def _emit_vehicle_connections_for_approach(
             if offset < lane_count:
                 to_lane = lane_count - offset
             else:
-                to_lane = lane_count
+                to_lane = 1
             append_connection(from_lane, to_lane, edge_id, "U")
 
     if (l + t + r + u) > 0 and emitted == 0 and s_count > 0:
@@ -1030,6 +1091,7 @@ def render_connections_xml(
                 U_target,
                 tl_id=tl_id,
                 movement_prefix="main_EB",
+                lane_plan=_pick_lane_plan(cfg, "EB", s_count),
             )
 
         if east is not None:
@@ -1064,6 +1126,7 @@ def render_connections_xml(
                 U_target,
                 tl_id=tl_id,
                 movement_prefix="main_WB",
+                lane_plan=_pick_lane_plan(cfg, "WB", s_count),
             )
 
         if exist_north:
@@ -1106,6 +1169,7 @@ def render_connections_xml(
                 U_target,
                 tl_id=tl_id,
                 movement_prefix="minor_N",
+                lane_plan=_pick_lane_plan(cfg, "NB", s_count),
             )
 
         if exist_south:
@@ -1148,6 +1212,7 @@ def render_connections_xml(
                 U_target,
                 tl_id=tl_id,
                 movement_prefix="minor_S",
+                lane_plan=_pick_lane_plan(cfg, "SB", s_count),
             )
 
     inner_lines, metadata, controlled = collector.finalize()

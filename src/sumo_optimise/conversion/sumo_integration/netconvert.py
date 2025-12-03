@@ -40,6 +40,7 @@ def run_two_step_netconvert(
     plain_prefix: str,
     network_output: Path,
     sidewalk_width: Optional[float] = None,
+    junction_radius: Optional[float] = None,
 ) -> None:
     """Execute the two-stage netconvert workflow required by SUMO."""
 
@@ -69,6 +70,11 @@ def run_two_step_netconvert(
         step1 += [
             "--default.sidewalk-width",
             str(sidewalk_width),
+        ]
+    if junction_radius is not None:
+        step1 += [
+            "--default.junctions.radius",
+            str(junction_radius),
         ]
     step2 = [
         exe,

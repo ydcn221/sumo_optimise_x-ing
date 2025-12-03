@@ -18,6 +18,11 @@ class VehicleState:
     incoming: CardinalDirection  # direction vehicles used to enter this cluster
 
 
+def _requires_turn_weights(pos: int, network: VehicleNetwork) -> bool:
+    meta = network.meta(pos)
+    return meta.has_north_minor or meta.has_south_minor
+
+
 def compute_vehicle_od_flows(
     rows: Iterable[EndpointDemandRow],
     *,
@@ -25,6 +30,17 @@ def compute_vehicle_od_flows(
     turn_weights: VehicleTurnMap,
 ) -> List[Tuple[str, str, float, EndpointDemandRow]]:
     """Return OD rows as (origin, destination, value, source_row)."""
+
+    missing_turns = {
+        vehicle_cluster_id(meta.pos)
+        for meta in network.cluster_meta.values()
+        if _requires_turn_weights(meta.pos, network)
+    } - set(turn_weights.keys())
+    if missing_turns:
+        missing_list = ", ".join(sorted(missing_turns))
+        raise DemandValidationError(
+            f"missing vehicle turn-weight rows for: {missing_list}"
+        )
 
     results: List[Tuple[str, str, float, EndpointDemandRow]] = []
     for row in rows:
@@ -64,9 +80,9 @@ def _initial_states(endpoint_id: str, network: VehicleNetwork) -> List[VehicleSt
         pos = int(tokens[2])
         suffix = tokens[3]
         if suffix == "N_end":
-            return [VehicleState(pos=pos, incoming=CardinalDirection.NORTH)]
-        if suffix == "S_end":
             return [VehicleState(pos=pos, incoming=CardinalDirection.SOUTH)]
+        if suffix == "S_end":
+            return [VehicleState(pos=pos, incoming=CardinalDirection.NORTH)]
         raise DemandValidationError(f"unsupported minor endpoint suffix: {suffix}")
     if tokens[0] == "Node" and tokens[1] == "Main":
         pos = int(tokens[2])
@@ -127,10 +143,13 @@ def _compute_shares(
     # so the true U-turn would send vehicles toward the opposite heading.
     available[_opposite(state.incoming)] = False
     approach = _approach_for(state.incoming)
-    movement_weights = _movement_weights(
-        approach=approach,
-        turn_weights=turn_weights.get(vehicle_cluster_id(state.pos)),
-    )
+    weights_for_cluster = turn_weights.get(vehicle_cluster_id(state.pos))
+    if weights_for_cluster is None:
+        if _requires_turn_weights(state.pos, network):
+            raise DemandValidationError(
+                f"missing vehicle turn-weight row for {vehicle_cluster_id(state.pos)}"
+            )
+    movement_weights = _movement_weights(approach=approach, turn_weights=weights_for_cluster)
 
     direction_weights: Dict[CardinalDirection, float] = defaultdict(float)
     through_bonus = 0.0
@@ -141,6 +160,8 @@ def _compute_shares(
             if approach == "main" and movement in (TurnMovement.LEFT, TurnMovement.RIGHT):
                 through_bonus += weight
             weight = 0.0
+        # When a main approach turn is blocked (e.g., missing branch), we explicitly
+        # fold its weight into the through movement to keep vehicles advancing.
         if approach == "main" and movement is TurnMovement.THROUGH and not available.get(direction, False):
             weight = 0.0
         movement_targets[movement] = (direction, weight)
@@ -163,17 +184,13 @@ def _movement_weights(
     turn_weights: JunctionTurnWeights | None,
 ) -> Dict[TurnMovement, float]:
     if turn_weights:
-        base = turn_weights.main if approach == "main" else turn_weights.minor
-    else:
-        base = {
-            TurnMovement.LEFT: 1.0,
-            TurnMovement.THROUGH: 1.0 if approach == "main" else 0.0,
-            TurnMovement.RIGHT: 1.0,
-        }
-    weights = dict(base)
-    if approach == "minor":
-        weights[TurnMovement.THROUGH] = 0.0
-    return weights
+        return dict(turn_weights.main if approach == "main" else turn_weights.minor)
+    # Fallback only for internal defaults (e.g., after all weights zero out)
+    return {
+        TurnMovement.LEFT: 1.0,
+        TurnMovement.THROUGH: 98.0,
+        TurnMovement.RIGHT: 1.0,
+    }
 
 
 def _movement_direction(incoming: CardinalDirection, movement: TurnMovement) -> CardinalDirection:

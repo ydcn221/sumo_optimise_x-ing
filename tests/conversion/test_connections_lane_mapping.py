@@ -37,20 +37,16 @@ def test_straight_fans_out_to_rightmost_targets():
     )
 
     lines, metadata, controlled = collector.finalize()
-    assert emitted == 4
+    assert emitted == 2
     assert extract_connections(lines, "Edge.Straight") == {
         '<connection from="Edge.In" to="Edge.Straight" fromLane="1" toLane="1"/>',
         '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="3"/>',
-        '<connection from="Edge.In" to="Edge.Straight" fromLane="2" toLane="4"/>',
     }
-    assert [link.link_index for link in metadata] == [0, 1, 2, 3]
+    assert [link.link_index for link in metadata] == [0, 1]
     assert {link.tl_id for link in metadata} == {"TestTL"}
     assert [(conn.tl_id, conn.link_index) for conn in controlled] == [
         ("TestTL", 0),
         ("TestTL", 1),
-        ("TestTL", 2),
-        ("TestTL", 3),
     ]
 
 
@@ -117,8 +113,8 @@ def test_right_turns_share_outer_lane(monkeypatch):
     assert extract_connections(lines, "Edge.Right") == {
         '<connection from="Edge.In" to="Edge.Right" fromLane="4" toLane="2"/>',
         '<connection from="Edge.In" to="Edge.Right" fromLane="3" toLane="1"/>',
-        '<connection from="Edge.In" to="Edge.Right" fromLane="2" toLane="2"/>',
-        '<connection from="Edge.In" to="Edge.Right" fromLane="1" toLane="2"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="2" toLane="1"/>',
+        '<connection from="Edge.In" to="Edge.Right" fromLane="1" toLane="1"/>',
     }
     assert [link.link_index for link in metadata] == [0, 1, 2, 3]
     assert {link.tl_id for link in metadata} == {"TestTL"}
@@ -128,6 +124,42 @@ def test_right_turns_share_outer_lane(monkeypatch):
         ("TestTL", 2),
         ("TestTL", 3),
     ]
+
+
+def test_manual_lane_plan_filters_impossible_movements(monkeypatch):
+    def explode(*_args, **_kwargs):
+        raise AssertionError("allocate_lanes should not run when lane_plan matches")
+
+    monkeypatch.setattr(mod, "allocate_lanes", explode)
+
+    collector = mod.LinkEmissionCollector()
+    emitted = mod._emit_vehicle_connections_for_approach(
+        collector,
+        pos=0,
+        in_edge_id="Edge.In",
+        s_count=3,
+        L_target=("Edge.Left", 1),
+        T_target=("Edge.Straight", 1),
+        R_target=None,
+        U_target=("Edge.U", 1),
+        tl_id=None,
+        movement_prefix="override",
+        lane_plan=["LT", "RU", "R"],  # right turns are disallowed; the last lane should be ignored
+    )
+
+    lines, metadata, controlled = collector.finalize()
+    assert emitted == 3
+    assert extract_connections(lines, "Edge.Left") == {
+        '<connection from="Edge.In" to="Edge.Left" fromLane="1" toLane="1"/>',
+    }
+    assert extract_connections(lines, "Edge.Straight") == {
+        '<connection from="Edge.In" to="Edge.Straight" fromLane="1" toLane="1"/>',
+    }
+    assert extract_connections(lines, "Edge.U") == {
+        '<connection from="Edge.In" to="Edge.U" fromLane="2" toLane="1"/>',
+    }
+    assert metadata == []
+    assert controlled == []
 
 
 def test_crossing_link_index_offsets_after_vehicle_links():
