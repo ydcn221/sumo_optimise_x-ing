@@ -9,7 +9,11 @@ description = "Modular SUMO corridor PlainXML converter"
 authors = [{name = "Auto Generated"}]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["sqids>=0.4", "networkx>=3.0"]
+dependencies = [
+    "sqids>=0.4",
+    "networkx>=3.0",
+    "zstandard>=0.22",
+]
 
 [project.optional-dependencies]
 test = ["pytest"]

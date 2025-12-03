@@ -118,6 +118,7 @@ def _send_status(
     scenario_id: str = "",
     seed: int = 0,
     scale: float | None = None,
+    affinity_cpu: int | None = None,
     phase: WorkerPhase = WorkerPhase.IDLE,
     step: float | None = None,
     label: str = "",
@@ -134,6 +135,7 @@ def _send_status(
             "scenario_id": scenario_id,
             "seed": seed,
             "scale": scale,
+            "affinity_cpu": affinity_cpu,
             "phase": phase.value if isinstance(phase, WorkerPhase) else str(phase),
             "step": step,
             "label": label,
@@ -227,7 +229,8 @@ def _render_grid(
     completed: int,
 ) -> tuple[List[str], int]:
     term_width = shutil.get_terminal_size((160, 24)).columns
-    cols = max(1, term_width // 40)
+    cell_width = 44
+    cols = max(1, term_width // cell_width)
     rows: List[str] = []
     ordered = [statuses[k] for k in sorted(statuses.keys())]
     for idx, status in enumerate(ordered):
@@ -238,8 +241,9 @@ def _render_grid(
         if not label_text and status.step is not None:
             label_text = f"sumo#{int(status.step)}"
         label = (label_text or phase.value)[:10]
-        cell = f"[{status.worker_id:02d}] {label:<10} {scenario:<12} (s {scale_str:>4})"
-        cell = cell[:40].ljust(40)
+        cpu_text = "--" if status.affinity_cpu is None else f"{status.affinity_cpu:02d}"
+        cell = f"[{status.worker_id:02d}@{cpu_text}] {label:<10} {scenario:<12} (s {scale_str:>4})"
+        cell = cell[:cell_width].ljust(cell_width)
         rows.append(_colorize(cell, phase))
         if (idx + 1) % cols == 0:
             rows.append("\n")
@@ -324,6 +328,7 @@ def _render_loop(
             status.scenario_id = evt.get("scenario_id", status.scenario_id)
             status.seed = evt.get("seed", status.seed)
             status.scale = evt.get("scale", status.scale)
+            status.affinity_cpu = evt.get("affinity_cpu", status.affinity_cpu)
             try:
                 status.phase = WorkerPhase(evt.get("phase", status.phase))
             except ValueError:
@@ -349,7 +354,8 @@ def _render_loop(
                         fp.write(
                             f"{ts} worker={worker_id} scenario={status.scenario_id} "
                             f"phase={status.phase.value} label={status.label} "
-                            f"step={status.step} scale={status.scale} probe_scale={status.probe_scale} "
+                            f"step={status.step} scale={status.scale} "
+                            f"probe_scale={status.probe_scale} cpu={status.affinity_cpu} "
                             f"done={status.done} error={status.error or ''}\n"
                         )
                 except OSError:
@@ -780,6 +786,7 @@ def _run_sumo_streaming(
             scenario_id=scenario_id,
             seed=seed,
             scale=scale,
+            affinity_cpu=affinity_cpu,
             phase=phase,
             step=step_value if step_value is not None else last_step,
             label=label_text,
@@ -944,6 +951,7 @@ def _run_for_scale(
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         scale=scale,
+        affinity_cpu=affinity_cpu,
         phase=WorkerPhase.PARSE,
         label="metrics",
     )
@@ -1241,7 +1249,8 @@ def _probe_scale_durability(
 
 
 def _set_affinity_preexec(cpu: int | None):
-    if cpu is None:
+    # Windows does not support preexec_fn; skip affinity binding there.
+    if cpu is None or os.name == "nt":
         return None
 
     def setter():
@@ -1287,6 +1296,7 @@ def run_scenario(
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
             scale=scenario.scale,
+            affinity_cpu=affinity_cpu,
             phase=WorkerPhase.BUILD,
             label="build",
         )
@@ -1326,6 +1336,7 @@ def run_scenario(
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
             scale=scenario.scale,
+            affinity_cpu=affinity_cpu,
             phase=WorkerPhase.SUMO,
             label="sumo",
         )
@@ -1385,6 +1396,7 @@ def run_scenario(
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
             scale=scenario.scale,
+            affinity_cpu=affinity_cpu,
             phase=WorkerPhase.PARSE,
             label="compressing",
         )
@@ -1425,6 +1437,7 @@ def run_scenario(
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
             scale=scenario.scale,
+            affinity_cpu=affinity_cpu,
             phase=WorkerPhase.PARSE,
             label="compressing",
         )
@@ -1457,6 +1470,7 @@ def run_scenario(
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         scale=scenario.scale,
+        affinity_cpu=affinity_cpu,
         phase=WorkerPhase.DONE,
         label="done",
         done=True,
@@ -1466,7 +1480,8 @@ def run_scenario(
 
 
 def _affinity_plan(count: int) -> List[int | None]:
-    return [None] * count
+    cpu_total = os.cpu_count() or 1
+    return [(idx % cpu_total) for idx in range(count)]
 
 
 def run_batch(
@@ -1509,6 +1524,7 @@ def run_batch(
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
             scale=scenario.scale,
+            affinity_cpu=affinity[idx % workers],
             phase=WorkerPhase.IDLE,
             label="queued",
         )
@@ -1561,6 +1577,7 @@ def run_batch(
                     scenario_id=result.scenario_id,
                     seed=result.seed,
                     scale=result.scale,
+                    affinity_cpu=affinity[worker_slot],
                     phase=WorkerPhase.ERROR,
                     label="error",
                     error=result.error,
@@ -1596,8 +1613,12 @@ def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path |
     try:
         import zstandard as zstd
     except ImportError:
-        _debug_log(log_path, "[compress] zstandard not installed; skipping compression")
-        return
+        message = (
+            "[compress] zstandard not installed; install with "
+            "`pip install zstandard` to enable zst compression"
+        )
+        _debug_log(log_path, message)
+        raise RuntimeError(message)
 
     targets = [
         artifacts.tripinfo,

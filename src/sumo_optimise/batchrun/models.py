@@ -156,6 +156,7 @@ class WorkerStatus:
     scenario_id: str = ""
     seed: int = 0
     scale: float = 0.0
+    affinity_cpu: Optional[int] = None
     phase: WorkerPhase = WorkerPhase.IDLE
     step: Optional[float] = None
     label: str = ""
