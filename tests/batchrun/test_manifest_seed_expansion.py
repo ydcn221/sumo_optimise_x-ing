@@ -6,6 +6,7 @@ from sumo_optimise.batchrun.orchestrator import (
     _safe_id_for_filename,
     load_manifest,
 )
+from sumo_optimise.batchrun.models import OutputFormat
 
 
 def test_manifest_seed_range_expands_per_seed(tmp_path: Path) -> None:
@@ -46,11 +47,15 @@ def test_collect_artifacts_names_include_scenario_id(tmp_path: Path) -> None:
     result = SimpleNamespace(manifest_path=manifest_path, sumocfg_path=None)
 
     scenario_id = "S-1001/x"
-    artifacts = _collect_artifacts(result, scenario_id=scenario_id)
+    artifacts = _collect_artifacts(
+        result,
+        scenario_id=scenario_id,
+        output_format=OutputFormat(),
+    )
     safe_id = _safe_id_for_filename(scenario_id)
 
-    assert artifacts.fcd.name == f"fcd_{safe_id}.xml"
-    assert artifacts.tripinfo.name == f"tripinfo_{safe_id}.xml"
-    assert artifacts.personinfo.name == f"personinfo_{safe_id}.xml"
-    assert artifacts.summary.name == f"summary_{safe_id}.xml"
+    assert artifacts.fcd.name == f"fcd_{safe_id}.csv.gz"
+    assert artifacts.tripinfo.name == f"vehicle_tripinfo_{safe_id}.csv.gz"
+    assert artifacts.personinfo.name == f"person_tripinfo_{safe_id}.csv.gz"
+    assert artifacts.summary.name == f"vehicle_summary_{safe_id}.csv.gz"
     assert artifacts.sumo_log.name == f"sumo_{safe_id}.log"

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from enum import Enum
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from enum import Enum
 
 DEFAULT_BEGIN_FILTER = 1200.0
 DEFAULT_END_TIME = 2400.0
@@ -19,6 +19,49 @@ DEFAULT_SCALE_PROBE_COARSE_STEP = 1.0
 class ScaleMode(str, Enum):
     SUMO = "sumo"
     VEH_ONLY = "veh_only"
+
+
+class OutputFileType(str, Enum):
+    CSV = "csv"
+    XML = "xml"
+
+
+class OutputCompression(str, Enum):
+    GZ = "gz"
+    ZST = "zst"
+
+
+@dataclass(frozen=True)
+class OutputFormat:
+    file_type: OutputFileType = OutputFileType.CSV
+    compression: OutputCompression = OutputCompression.GZ
+    zstd_level: int = 10  # single-threaded zstd
+
+    @classmethod
+    def from_string(cls, value: str, *, zstd_level: int | None = None) -> "OutputFormat":
+        normalized = value.strip().lower()
+        if normalized not in {"xml.gz", "csv.gz", "xml.zst", "csv.zst"}:
+            raise ValueError(f"unsupported output format: {value}")
+        file_type = OutputFileType.XML if normalized.startswith("xml") else OutputFileType.CSV
+        compression = OutputCompression.GZ if normalized.endswith("gz") else OutputCompression.ZST
+        level = 10 if zstd_level is None else max(1, min(22, zstd_level))
+        return cls(file_type=file_type, compression=compression, zstd_level=level)
+
+    @property
+    def base_suffix(self) -> str:
+        return ".csv" if self.file_type is OutputFileType.CSV else ".xml"
+
+    @property
+    def sumo_output_suffix(self) -> str:
+        if self.compression is OutputCompression.GZ:
+            return f"{self.base_suffix}.gz"
+        return self.base_suffix
+
+    @property
+    def compressed_suffix(self) -> str:
+        if self.compression is OutputCompression.ZST:
+            return f"{self.base_suffix}.zst"
+        return f"{self.base_suffix}.gz"
 
 
 @dataclass(frozen=True)
@@ -112,12 +155,6 @@ class ScaleProbeConfig:
     abort_on_waiting: bool = False
 
 
-@dataclass(frozen=True)
-class CompressionConfig:
-    enabled: bool = False
-    zstd_level: int = 10  # single-threaded zstd
-
-
 @dataclass
 class PhaseTiming:
     start: float | None = None
@@ -128,9 +165,8 @@ class PhaseTiming:
 class RunTimings:
     build: PhaseTiming = field(default_factory=PhaseTiming)
     sumo: PhaseTiming = field(default_factory=PhaseTiming)
-    compress: PhaseTiming = field(default_factory=PhaseTiming)
+    postprocess: PhaseTiming = field(default_factory=PhaseTiming)
     probe: PhaseTiming = field(default_factory=PhaseTiming)
-    probe_compress: PhaseTiming = field(default_factory=PhaseTiming)
 
 
 @dataclass

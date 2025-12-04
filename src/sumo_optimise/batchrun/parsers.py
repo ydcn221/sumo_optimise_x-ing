@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import math
 import xml.etree.ElementTree as ET
 import time
@@ -19,7 +20,140 @@ def _as_float(value: Optional[str]) -> Optional[float]:
     try:
         return float(value)
     except (TypeError, ValueError):
-            return None
+        return None
+
+
+def _parse_tripinfo_csv_file(
+    path: Path,
+    metrics: TripinfoMetrics,
+    *,
+    begin_filter: float,
+    is_person_file: bool,
+    progress_cb: Callable[[int, float], None] | None,
+) -> None:
+    start_time = time.time()
+    total_processed = 0
+    with path.open("r", encoding="utf-8", newline="") as fp:
+        reader = csv.DictReader(fp, delimiter=";")
+        for row in reader:
+            arrival = _as_float(row.get("arrival"))
+            if arrival is None:
+                depart = _as_float(row.get("depart"))
+                duration = _as_float(row.get("duration"))
+                if depart is not None and duration is not None:
+                    arrival = depart + duration
+            if arrival is None or arrival < begin_filter:
+                continue
+
+            if is_person_file:
+                time_loss = _as_float(row.get("timeLoss"))
+                if time_loss is None:
+                    time_loss = _as_float(row.get("walk_timeLoss"))
+                route_length = _as_float(row.get("routeLength"))
+                if route_length is None:
+                    route_length = _as_float(row.get("walk_routeLength"))
+                if time_loss is not None and not math.isnan(time_loss):
+                    metrics.person_time_loss_sum += time_loss
+                if route_length is not None and not math.isnan(route_length):
+                    metrics.person_route_length_sum += route_length
+                metrics.person_count += 1
+            else:
+                time_loss = _as_float(row.get("timeLoss"))
+                if time_loss is not None and not math.isnan(time_loss):
+                    metrics.vehicle_time_loss_sum += time_loss
+                    metrics.vehicle_count += 1
+
+            total_processed += 1
+            if progress_cb:
+                elapsed = time.time() - start_time
+                if elapsed > 0.5:
+                    progress_cb(total_processed, elapsed)
+                    start_time = time.time()
+
+
+def _parse_tripinfo_xml_file(
+    path: Path,
+    metrics: TripinfoMetrics,
+    *,
+    begin_filter: float,
+    progress_cb: Callable[[int, float], None] | None,
+) -> None:
+    start_time = time.time()
+    processed = 0
+    total_processed = 0
+    for _, elem in ET.iterparse(path, events=("end",)):
+        tag = elem.tag.split("}")[-1]
+        if tag in {"walk", "ride", "stop", "tranship"}:
+            # keep child legs intact so the parent <personinfo> can access their attributes
+            continue
+
+        if tag not in {"tripinfo", "personinfo"}:
+            elem.clear()
+            continue
+
+        arrival = _as_float(elem.attrib.get("arrival"))
+        if arrival is None:
+            for child in elem:
+                child_tag = child.tag.split("}")[-1]
+                if child_tag in {"walk", "ride", "stop", "tranship"}:
+                    arrival = _as_float(child.attrib.get("arrival"))
+                    if arrival is not None:
+                        break
+        if arrival is None:
+            depart = _as_float(elem.attrib.get("depart"))
+            duration = _as_float(elem.attrib.get("duration"))
+            if depart is not None and duration is not None:
+                arrival = depart + duration
+
+        if arrival is None or arrival < begin_filter:
+            elem.clear()
+            continue
+
+        time_loss = _as_float(elem.attrib.get("timeLoss"))
+        route_length = _as_float(elem.attrib.get("routeLength"))
+
+        if tag == "tripinfo":
+            if time_loss is not None and not math.isnan(time_loss):
+                metrics.vehicle_time_loss_sum += time_loss
+                metrics.vehicle_count += 1
+        else:
+            child_time_loss = 0.0
+            child_route_length = 0.0
+            has_child_time_loss = False
+            has_child_route_length = False
+            for child in elem:
+                child_tag = child.tag.split("}")[-1]
+                if child_tag not in {"walk", "ride", "stop", "tranship"}:
+                    continue
+                child_tl = _as_float(child.attrib.get("timeLoss"))
+                child_rl = _as_float(child.attrib.get("routeLength"))
+                if child_tl is not None and not math.isnan(child_tl):
+                    child_time_loss += child_tl
+                    has_child_time_loss = True
+                if child_rl is not None and not math.isnan(child_rl):
+                    child_route_length += child_rl
+                    has_child_route_length = True
+
+            if time_loss is None or math.isnan(time_loss):
+                time_loss = child_time_loss if has_child_time_loss else None
+            if route_length is None or math.isnan(route_length):
+                route_length = child_route_length if has_child_route_length else None
+
+            if time_loss is not None:
+                metrics.person_time_loss_sum += time_loss
+            if route_length is not None:
+                metrics.person_route_length_sum += route_length
+            metrics.person_count += 1
+
+        elem.clear()
+        processed += 1
+        total_processed += 1
+        if progress_cb:
+            elapsed = time.time() - start_time
+            if elapsed > 0.5:  # throttle logs to ~2 Hz
+                progress_cb(total_processed, elapsed)
+                start_time = time.time()
+                processed = 0
 
 
 def parse_tripinfo(
@@ -34,86 +168,68 @@ def parse_tripinfo(
     if not paths:
         return metrics
 
-    start_time = time.time()
-    processed = 0
-    total_processed = 0
     for current_path in paths:
         if not current_path.exists():
             continue
+        is_person_file = personinfo is not None and current_path == personinfo
+        suffix = current_path.suffix.lower()
+        if suffix == ".csv":
+            _parse_tripinfo_csv_file(
+                current_path,
+                metrics,
+                begin_filter=begin_filter,
+                is_person_file=is_person_file,
+                progress_cb=progress_cb,
+            )
+            continue
 
-        for _, elem in ET.iterparse(current_path, events=("end",)):
-            tag = elem.tag.split("}")[-1]
-            if tag in {"walk", "ride", "stop", "tranship"}:
-                # keep child legs intact so the parent <personinfo> can access their attributes
-                continue
+        _parse_tripinfo_xml_file(
+            current_path,
+            metrics,
+            begin_filter=begin_filter,
+            progress_cb=progress_cb,
+        )
 
-            if tag not in {"tripinfo", "personinfo"}:
-                elem.clear()
-                continue
+    return metrics
 
-            arrival = _as_float(elem.attrib.get("arrival"))
-            if arrival is None:
-                for child in elem:
-                    child_tag = child.tag.split("}")[-1]
-                    if child_tag in {"walk", "ride", "stop", "tranship"}:
-                        arrival = _as_float(child.attrib.get("arrival"))
-                        if arrival is not None:
-                            break
-            if arrival is None:
-                depart = _as_float(elem.attrib.get("depart"))
-                duration = _as_float(elem.attrib.get("duration"))
-                if depart is not None and duration is not None:
-                    arrival = depart + duration
 
-            if arrival is None or arrival < begin_filter:
-                elem.clear()
-                continue
+def _parse_waiting_ratio_csv_file(
+    path: Path,
+    config: QueueDurabilityConfig,
+    progress_cb: Callable[[str], None] | None,
+) -> QueueDurabilityMetrics:
+    metrics = QueueDurabilityMetrics(
+        threshold_steps=config.step_window,
+        threshold_length=config.length_threshold,
+    )
+    start_time = time.time()
+    total_processed = 0
+    with path.open("r", encoding="utf-8", newline="") as fp:
+        reader = csv.DictReader(fp, delimiter=";")
+        streak = 0
+        for row in reader:
+            waiting = _as_float(row.get("waiting")) or 0.0
+            running = _as_float(row.get("running")) or 0.0
+            time_value = _as_float(row.get("time")) or _as_float(row.get("timestep")) or 0.0
 
-            time_loss = _as_float(elem.attrib.get("timeLoss"))
-            route_length = _as_float(elem.attrib.get("routeLength"))
+            ratio = (waiting / running) if running > 0 else 0.0
+            metrics.max_queue_length = max(metrics.max_queue_length, ratio)
 
-            if tag == "tripinfo":
-                if time_loss is not None and not math.isnan(time_loss):
-                    metrics.vehicle_time_loss_sum += time_loss
-                    metrics.vehicle_count += 1
+            if ratio >= config.length_threshold:
+                streak += 1
+                if metrics.first_failure_time is None and streak >= config.step_window:
+                    metrics.first_failure_time = time_value
             else:
-                child_time_loss = 0.0
-                child_route_length = 0.0
-                has_child_time_loss = False
-                has_child_route_length = False
-                for child in elem:
-                    child_tag = child.tag.split("}")[-1]
-                    if child_tag not in {"walk", "ride", "stop", "tranship"}:
-                        continue
-                    child_tl = _as_float(child.attrib.get("timeLoss"))
-                    child_rl = _as_float(child.attrib.get("routeLength"))
-                    if child_tl is not None and not math.isnan(child_tl):
-                        child_time_loss += child_tl
-                        has_child_time_loss = True
-                    if child_rl is not None and not math.isnan(child_rl):
-                        child_route_length += child_rl
-                        has_child_route_length = True
+                streak = 0
 
-                if time_loss is None or math.isnan(time_loss):
-                    time_loss = child_time_loss if has_child_time_loss else None
-                if route_length is None or math.isnan(route_length):
-                    route_length = child_route_length if has_child_route_length else None
-
-                if time_loss is not None:
-                    metrics.person_time_loss_sum += time_loss
-                if route_length is not None:
-                    metrics.person_route_length_sum += route_length
-                metrics.person_count += 1
-
-            elem.clear()
-            processed += 1
             total_processed += 1
             if progress_cb:
                 elapsed = time.time() - start_time
-                if elapsed > 0.5:  # throttle logs to ~2 Hz
-                    progress_cb(total_processed, elapsed)
+                if elapsed > 0.5:
+                    progress_cb(
+                        f"[metrics-trace] waiting_ratio steps={total_processed} elapsed={elapsed:.1f}s file={path}"
+                    )
                     start_time = time.time()
-                    processed = 0
 
     return metrics
 
@@ -124,13 +240,16 @@ def parse_waiting_ratio(
     config: QueueDurabilityConfig,
     progress_cb: Callable[[str], None] | None = None,
 ) -> QueueDurabilityMetrics:
-    """Determine durability from summary.xml using waiting/running ratio."""
+    """Determine durability from summary output using waiting/running ratio."""
     metrics = QueueDurabilityMetrics(
         threshold_steps=config.step_window,
         threshold_length=config.length_threshold,
     )
     if not path.exists():
         return metrics
+
+    if path.suffix.lower() == ".csv":
+        return _parse_waiting_ratio_csv_file(path, config, progress_cb)
 
     streak = 0
     processed = 0

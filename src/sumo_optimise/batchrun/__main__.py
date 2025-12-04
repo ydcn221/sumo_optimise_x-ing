@@ -13,6 +13,7 @@ from .models import (
     DEFAULT_SCALE_PROBE_COARSE_STEP,
     DEFAULT_SCALE_PROBE_FINE_STEP,
     DEFAULT_SCALE_PROBE_START,
+    OutputFormat,
     QueueDurabilityConfig,
     ScaleProbeConfig,
     ScaleMode,
@@ -92,11 +93,16 @@ def parse_args() -> argparse.Namespace:
         help="Abort SUMO during probe when waiting ratio condition is hit, then switch to fine search",
     )
     parser.add_argument(
-        "--compress-zstd",
-        nargs="?",
-        const=10,
+        "--output-format",
+        choices=["csv.gz", "xml.gz", "csv.zst", "xml.zst"],
+        default="csv.gz",
+        help="Output format for SUMO artefacts (default: csv.gz)",
+    )
+    parser.add_argument(
+        "--zstd-level",
         type=int,
-        help="Compress generated XML files with zstd at given level (1-22, default: 10); single-threaded",
+        default=10,
+        help="Zstandard level used when output-format ends with '.zst' (1-22, default: 10)",
     )
     parser.add_argument(
         "--metrics-trace",
@@ -133,6 +139,7 @@ def main() -> None:
     )
     scale_mode = ScaleMode(args.scale_mode)
     scenarios = load_manifest(args.manifest, default_scale_mode=scale_mode)
+    output_format = OutputFormat.from_string(args.output_format, zstd_level=args.zstd_level)
     run_batch(
         scenarios,
         output_root=output_root,
@@ -141,7 +148,7 @@ def main() -> None:
         results_csv=results_path,
         max_workers=args.workers,
         metrics_trace=args.metrics_trace,
-        compress_zstd_level=args.compress_zstd,
+        output_format=output_format,
     )
 
 

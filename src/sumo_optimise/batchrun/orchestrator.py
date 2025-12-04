@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import math
 import multiprocessing
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -33,6 +35,8 @@ from .models import (
     DEFAULT_END_TIME,
     DEFAULT_MAX_WORKERS,
     PhaseTiming,
+    OutputCompression,
+    OutputFormat,
     DemandFiles,
     QueueDurabilityConfig,
     QueueDurabilityMetrics,
@@ -43,7 +47,6 @@ from .models import (
     ScenarioConfig,
     ScenarioResult,
     TripinfoMetrics,
-    CompressionConfig,
     ScaleMode,
     WorkerPhase,
     WorkerStatus,
@@ -81,12 +84,10 @@ RESULT_COLUMNS = [
     "build_end",
     "sumo_start",
     "sumo_end",
-    "compress_start",
-    "compress_end",
+    "postprocess_start",
+    "postprocess_end",
     "probe_start",
     "probe_end",
-    "probe_compress_start",
-    "probe_compress_end",
 ]
 
 
@@ -552,7 +553,7 @@ def _build_options_for_scenario(
     )
 
 
-def _collect_artifacts(result, *, scenario_id: str) -> RunArtifacts:
+def _collect_artifacts(result, *, scenario_id: str, output_format: OutputFormat) -> RunArtifacts:
     if result.manifest_path is None:
         raise ValueError("manifest path not recorded by build")
     outdir = result.manifest_path.parent
@@ -560,15 +561,16 @@ def _collect_artifacts(result, *, scenario_id: str) -> RunArtifacts:
     files = OutputFileTemplates()
     network_path = outdir / files.network
     safe_id = _safe_id_for_filename(scenario_id)
+    suffix = output_format.sumo_output_suffix
     return RunArtifacts(
         outdir=outdir,
         sumocfg=sumocfg,
         network=network_path,
-        tripinfo=outdir / f"tripinfo_{safe_id}.xml",
-        personinfo=outdir / f"personinfo_{safe_id}.xml",
-        fcd=outdir / f"fcd_{safe_id}.xml",
-        summary=outdir / f"summary_{safe_id}.xml",
-        person_summary=outdir / f"summary.person_{safe_id}.xml",
+        tripinfo=outdir / f"vehicle_tripinfo_{safe_id}{suffix}",
+        personinfo=outdir / f"person_tripinfo_{safe_id}{suffix}",
+        fcd=outdir / f"fcd_{safe_id}{suffix}",
+        summary=outdir / f"vehicle_summary_{safe_id}{suffix}",
+        person_summary=outdir / f"person_summary_{safe_id}{suffix}",
         detector=outdir / f"detector_{safe_id}.xml",
         queue=outdir / f"queue_{safe_id}.xml",
         sumo_log=outdir / f"sumo_{safe_id}.log",
@@ -615,6 +617,8 @@ def _sumo_command(
         str(artifacts.summary),
         "--person-summary-output",
         str(artifacts.person_summary),
+        "--output.column-header",
+        "auto",
         "--device.fcd.begin",
         str(scenario.begin_filter),
         "--end",
@@ -623,8 +627,59 @@ def _sumo_command(
         str(scenario.seed),
         "--scale",
         str(scale),
+        "-W",
     ]
     return cmd
+
+
+def _decompress_gz(src: Path) -> Path:
+    if not src.name.endswith(".gz"):
+        return src
+    dst = src.with_name(src.name[: -len(".gz")])
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(src, "rb") as rfp, dst.open("wb") as wfp:
+        shutil.copyfileobj(rfp, wfp)
+    return dst
+
+
+@contextmanager
+def _materialize_metrics_inputs(
+    artifacts: RunArtifacts,
+    *,
+    output_format: OutputFormat,
+    need_tripinfo: bool,
+    need_personinfo: bool,
+    need_summary: bool,
+):
+    temp_plain: List[Path] = []
+
+    def _maybe_decompress(path: Path | None) -> Path | None:
+        if path is None or not path.exists():
+            return None
+        if output_format.compression is OutputCompression.GZ:
+            if path.name.endswith(".gz"):
+                plain = _decompress_gz(path)
+                temp_plain.append(plain)
+                return plain
+            return path
+        return path
+
+    trip_path = _maybe_decompress(artifacts.tripinfo) if need_tripinfo else None
+    person_path = _maybe_decompress(artifacts.personinfo) if need_personinfo else None
+    summary_path = _maybe_decompress(artifacts.summary) if need_summary else None
+
+    try:
+        yield trip_path, person_path, summary_path
+    finally:
+        if output_format.compression is OutputCompression.GZ:
+            for path in temp_plain:
+                path.unlink(missing_ok=True)
+        elif output_format.compression is OutputCompression.ZST:
+            _compress_artifacts(
+                artifacts,
+                level=output_format.zstd_level,
+                log_path=artifacts.sumo_log,
+            )
 
 
 def _run_sumo_streaming(
@@ -906,6 +961,7 @@ def _run_for_scale(
     scenario: ScenarioConfig,
     *,
     queue_config: QueueDurabilityConfig,
+    output_format: OutputFormat,
     scale: float,
     sumo_scale: float | None = None,
     affinity_cpu: int | None,
@@ -916,7 +972,10 @@ def _run_for_scale(
     use_pty: bool = False,
     enable_waiting_abort: bool = False,
     metrics_trace: bool = False,
-    phase_timing: PhaseTiming | None = None,
+    sumo_timing: PhaseTiming | None = None,
+    postprocess_timing: PhaseTiming | None = None,
+    metrics_phase: WorkerPhase | None = None,
+    metrics_label: str | None = None,
 ) -> tuple[TripinfoMetrics, QueueDurabilityMetrics]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.personinfo.parent.mkdir(parents=True, exist_ok=True)
@@ -944,7 +1003,7 @@ def _run_for_scale(
             enable_waiting_abort=enable_waiting_abort,
         )
 
-    _mark_end(phase_timing)
+    _mark_end(sumo_timing)
     _send_status(
         status_queue,
         worker_id=worker_id or 0,
@@ -952,60 +1011,76 @@ def _run_for_scale(
         seed=scenario.seed,
         scale=scale,
         affinity_cpu=affinity_cpu,
-        phase=WorkerPhase.PARSE,
-        label="metrics",
+        phase=metrics_phase or WorkerPhase.PARSE,
+        label=metrics_label or "post",
     )
 
     tripinfo_metrics = TripinfoMetrics()
-    if collect_tripinfo:
-        trip_start = time.time()
-        last_trip_progress = {"count": 0, "logged_at": trip_start}
+    need_summary = live_waiting_metrics is None
+    _mark_start(postprocess_timing)
+    with _materialize_metrics_inputs(
+        artifacts,
+        output_format=output_format,
+        need_tripinfo=collect_tripinfo,
+        need_personinfo=collect_tripinfo,
+        need_summary=need_summary,
+    ) as (trip_path, person_path, summary_path):
+        if collect_tripinfo and trip_path is not None:
+            trip_start = time.time()
+            last_trip_progress = {"count": 0, "logged_at": trip_start}
 
-        def _trip_progress(count: int, elapsed: float) -> None:
-            last_trip_progress["count"] = count
-            now = time.time()
-            if now - last_trip_progress["logged_at"] >= 1.0:
-                last_trip_progress["logged_at"] = now
+            def _trip_progress(count: int, elapsed: float) -> None:
+                last_trip_progress["count"] = count
+                now = time.time()
+                if now - last_trip_progress["logged_at"] >= 1.0:
+                    last_trip_progress["logged_at"] = now
+                    _debug_log(
+                        artifacts.sumo_log,
+                        f"[metrics-trace] tripinfo count={count} elapsed={elapsed:.1f}s rate={count/max(elapsed, 1e-9):.0f}/s",
+                    )
+
+            tripinfo_metrics = parse_tripinfo(
+                trip_path,
+                begin_filter=scenario.begin_filter,
+                personinfo=person_path,
+                progress_cb=_trip_progress if metrics_trace else None,
+            )
+            if metrics_trace:
+                trip_elapsed = time.time() - trip_start
+                trip_size = trip_path.stat().st_size if trip_path.exists() else 0
                 _debug_log(
                     artifacts.sumo_log,
-                    f"[metrics-trace] tripinfo count={count} elapsed={elapsed:.1f}s rate={count/max(elapsed, 1e-9):.0f}/s",
+                    (
+                        f"[metrics-trace] tripinfo done count={last_trip_progress['count']} "
+                        f"elapsed={trip_elapsed:.2f}s size_bytes={trip_size}"
+                    ),
                 )
 
-        tripinfo_metrics = parse_tripinfo(
-            artifacts.tripinfo,
-            begin_filter=scenario.begin_filter,
-            personinfo=artifacts.personinfo,
-            progress_cb=_trip_progress if metrics_trace else None,
+        queue_start = time.time()
+        queue_metrics = live_waiting_metrics or parse_waiting_ratio(
+            summary_path or artifacts.summary,
+            config=queue_config,
+            progress_cb=(
+                (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
+            ),
         )
         if metrics_trace:
-            trip_elapsed = time.time() - trip_start
+            queue_elapsed = time.time() - queue_start
+            summary_size = (
+                (summary_path or artifacts.summary).stat().st_size
+                if (summary_path or artifacts.summary).exists()
+                else 0
+            )
             _debug_log(
                 artifacts.sumo_log,
                 (
-                    f"[metrics-trace] tripinfo done count={last_trip_progress['count']} "
-                    f"elapsed={trip_elapsed:.2f}s size_bytes={artifacts.tripinfo.stat().st_size if artifacts.tripinfo.exists() else 0}"
+                    f"[metrics-trace] waiting_ratio done elapsed={queue_elapsed:.2f}s "
+                    f"first_over_saturation_time={queue_metrics.first_failure_time} "
+                    f"max_ratio={queue_metrics.max_queue_length} "
+                    f"size_bytes={summary_size}"
                 ),
             )
-
-    queue_start = time.time()
-    queue_metrics = live_waiting_metrics or parse_waiting_ratio(
-        artifacts.summary,
-        config=queue_config,
-        progress_cb=(
-            (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
-        ),
-    )
-    if metrics_trace:
-        queue_elapsed = time.time() - queue_start
-        _debug_log(
-            artifacts.sumo_log,
-            (
-                f"[metrics-trace] waiting_ratio done elapsed={queue_elapsed:.2f}s "
-                f"first_over_saturation_time={queue_metrics.first_failure_time} "
-                f"max_ratio={queue_metrics.max_queue_length} "
-                f"size_bytes={artifacts.summary.stat().st_size if artifacts.summary.exists() else 0}"
-            ),
-    )
+    _mark_end(postprocess_timing)
     phase_label = phase.name if hasattr(phase, "name") else str(phase)
     queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
     queue_reason = ""
@@ -1033,7 +1108,7 @@ def _probe_scale_durability(
     *,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
-    compression: CompressionConfig,
+    output_format: OutputFormat,
     affinity_cpu: int | None,
     queue_cache: Dict[float, QueueDurabilityMetrics],
     attempts: int,
@@ -1053,7 +1128,6 @@ def _probe_scale_durability(
     ceiling = max(scale_probe.ceiling, start_scale)
     probe_tag = f"[scale-probe scenario={scenario.scenario_id} seed={scenario.seed}]"
     log_path = base_artifacts.sumo_log
-    _mark_start(timings.probe if timings is not None else None)
     over_saturation_reason_text = _format_over_saturation_reason(
         queue_config.length_threshold, queue_config.step_window
     )
@@ -1109,16 +1183,33 @@ def _probe_scale_durability(
                 network_input=base_network,
             )
             build_result = build_and_persist(scenario.spec, options, task=task)
-            artifacts = _collect_artifacts(build_result, scenario_id=scenario.scenario_id)
+            artifacts = _collect_artifacts(
+                build_result,
+                scenario_id=scenario.scenario_id,
+                output_format=output_format,
+            )
             applied_sumo_scale = 1.0
         else:
             artifacts = _artifacts_for_label(base_artifacts, run_label)
             applied_sumo_scale = scale_value
 
+        _send_status(
+            status_queue,
+            worker_id=worker_id or 0,
+            scenario_id=scenario.scenario_id,
+            seed=scenario.seed,
+            scale=scale_value,
+            affinity_cpu=affinity_cpu,
+            phase=WorkerPhase.PROBE,
+            label="probe-sumo",
+            step=scale_value,
+        )
+
         _, queue_metrics = _run_for_scale(
             artifacts,
             scenario,
             queue_config=queue_config,
+            output_format=output_format,
             scale=scale_value,
             sumo_scale=applied_sumo_scale,
             affinity_cpu=affinity_cpu,
@@ -1129,15 +1220,9 @@ def _probe_scale_durability(
             use_pty=use_pty,
             enable_waiting_abort=scale_probe.abort_on_waiting,
             metrics_trace=metrics_trace,
+            metrics_phase=WorkerPhase.PROBE,
+            metrics_label="probe-post",
         )
-        if compression.enabled:
-            _mark_start(timings.probe_compress if timings is not None else None)
-            _compress_artifacts(
-                artifacts,
-                level=compression.zstd_level,
-                log_path=artifacts.sumo_log,
-            )
-            _mark_end(timings.probe_compress if timings is not None else None)
         queue_cache[scale_value] = queue_metrics
         attempt_no = attempts + 1
         attempts = attempt_no
@@ -1268,7 +1353,7 @@ def run_scenario(
     output_root: Path,
     queue_config: QueueDurabilityConfig,
     scale_probe: ScaleProbeConfig,
-    compression: CompressionConfig,
+    output_format: OutputFormat,
     affinity_cpu: int | None,
     worker_id: int,
     status_queue,
@@ -1306,7 +1391,11 @@ def run_scenario(
             vehicle_flow_scale=vehicle_flow_scale,
         )
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
-        artifacts = _collect_artifacts(build_result, scenario_id=scenario.scenario_id)
+        artifacts = _collect_artifacts(
+            build_result,
+            scenario_id=scenario.scenario_id,
+            output_format=output_format,
+        )
         _mark_end(timings.build)
     except Exception as exc:  # noqa: BLE001
         _mark_end(timings.build)
@@ -1344,6 +1433,7 @@ def run_scenario(
             artifacts,
             scenario,
             queue_config=queue_config,
+            output_format=output_format,
             scale=scenario.scale,
             sumo_scale=sumo_scale,
             affinity_cpu=affinity_cpu,
@@ -1353,7 +1443,10 @@ def run_scenario(
             phase=WorkerPhase.SUMO,
             use_pty=use_pty,
             metrics_trace=metrics_trace,
-            phase_timing=timings.sumo,
+            sumo_timing=timings.sumo,
+            postprocess_timing=timings.postprocess,
+            metrics_phase=WorkerPhase.PARSE,
+            metrics_label="post",
         )
         if timings.sumo.end is None:
             _mark_end(timings.sumo)
@@ -1388,24 +1481,6 @@ def run_scenario(
         max_durable_scale=None,
         attempts=1,
     )
-    if compression.enabled:
-        _mark_start(timings.compress)
-        _send_status(
-            status_queue,
-            worker_id=worker_id,
-            scenario_id=scenario.scenario_id,
-            seed=scenario.seed,
-            scale=scenario.scale,
-            affinity_cpu=affinity_cpu,
-            phase=WorkerPhase.PARSE,
-            label="compressing",
-        )
-        _compress_artifacts(
-            artifacts,
-            level=compression.zstd_level,
-            log_path=artifacts.sumo_log,
-        )
-        _mark_end(timings.compress)
     if scale_probe.enabled:
         _mark_start(timings.probe)
         probe_result = _probe_scale_durability(
@@ -1413,7 +1488,7 @@ def run_scenario(
             scenario,
             queue_config=queue_config,
             scale_probe=scale_probe,
-            compression=compression,
+            output_format=output_format,
             affinity_cpu=affinity_cpu,
             queue_cache=queue_cache,
             attempts=1,
@@ -1427,26 +1502,6 @@ def run_scenario(
             timings=timings,
         )
         _mark_end(timings.probe)
-
-    if compression.enabled:
-        target_timing = timings.probe_compress if scale_probe.enabled else timings.compress
-        _mark_start(target_timing)
-        _send_status(
-            status_queue,
-            worker_id=worker_id,
-            scenario_id=scenario.scenario_id,
-            seed=scenario.seed,
-            scale=scenario.scale,
-            affinity_cpu=affinity_cpu,
-            phase=WorkerPhase.PARSE,
-            label="compressing",
-        )
-        _compress_artifacts(
-            artifacts,
-            level=compression.zstd_level,
-            log_path=artifacts.sumo_log,
-        )
-        _mark_end(target_timing)
 
     result = ScenarioResult(
         scenario_id=scenario.scenario_id,
@@ -1494,16 +1549,9 @@ def run_batch(
     max_workers: int = DEFAULT_MAX_WORKERS,
     use_pty: bool | None = None,
     metrics_trace: bool = False,
-    compress_zstd_level: int | None = None,
+    output_format: OutputFormat = OutputFormat(),
 ) -> None:
     scenario_list = list(scenarios)
-    compression_level = 10
-    if compress_zstd_level is not None:
-        compression_level = max(1, min(22, compress_zstd_level))
-    compression = CompressionConfig(
-        enabled=compress_zstd_level is not None,
-        zstd_level=compression_level,
-    )
     scenario_order = {sc.scenario_id: idx for idx, sc in enumerate(scenario_list)}
     if not scenario_list:
         return
@@ -1553,7 +1601,7 @@ def run_batch(
                 output_root=output_root,
                 queue_config=queue_config,
                 scale_probe=scale_probe,
-                compression=compression,
+                output_format=output_format,
                 affinity_cpu=affinity[worker_slot],
                 worker_id=worker_slot,
                 status_queue=status_queue,
@@ -1650,11 +1698,8 @@ def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path |
 def _result_to_row(result: ScenarioResult) -> dict:
     build_start, build_end = _timing_to_strings(result.timings.build)
     sumo_start, sumo_end = _timing_to_strings(result.timings.sumo)
-    compress_start, compress_end = _timing_to_strings(result.timings.compress)
+    postprocess_start, postprocess_end = _timing_to_strings(result.timings.postprocess)
     probe_start, probe_end = _timing_to_strings(result.timings.probe)
-    probe_compress_start, probe_compress_end = _timing_to_strings(
-        result.timings.probe_compress
-    )
     return {
         "scenario_id": result.scenario_id,
         "scenario_base_id": result.scenario_base_id,
@@ -1682,12 +1727,10 @@ def _result_to_row(result: ScenarioResult) -> dict:
         "build_end": build_end,
         "sumo_start": sumo_start,
         "sumo_end": sumo_end,
-        "compress_start": compress_start,
-        "compress_end": compress_end,
+        "postprocess_start": postprocess_start,
+        "postprocess_end": postprocess_end,
         "probe_start": probe_start,
         "probe_end": probe_end,
-        "probe_compress_start": probe_compress_start,
-        "probe_compress_end": probe_compress_end,
     }
 
 
