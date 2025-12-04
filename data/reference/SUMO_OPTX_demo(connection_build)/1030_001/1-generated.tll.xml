@@ -1,0 +1,52 @@
+<tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
+    <tlLogic id="Cluster.225.Main" type="static" programID="0" offset="0">
+        <phase duration="29" state="GGrrrrrGGrrrGrr"/>
+        <phase duration="3" state="GGrrrrrGGrrrrrr"/>
+        <phase duration="3" state="yyrrrrryyrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrr"/>
+        <phase duration="14" state="rrgGGrrrrrGGrGr"/>
+        <phase duration="3" state="rrgGGrrrrrrrrrr"/>
+        <phase duration="3" state="rryyyrrrrrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrr"/>
+        <phase duration="23" state="rrrrrgGrrrrGrGG"/>
+        <phase duration="3" state="rrrrrgGrrrrrrrr"/>
+        <phase duration="3" state="rrrrryyrrrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrr"/>
+    </tlLogic>
+    <tlLogic id="Cluster.75.Main" type="static" programID="0" offset="0">
+        <phase duration="22" state="rrrGGGrrrrGGGrGG"/>
+        <phase duration="2" state="rrrGGGrrrrGGGrrr"/>
+        <phase duration="3" state="rrryyyrrrryyyrrr"/>
+        <phase duration="13" state="rrrrrrgrrrrrrgrr"/>
+        <phase duration="3" state="rrrrrryrrrrrryrr"/>
+        <phase duration="5" state="rrrrrrrrrrrrrrGG"/>
+        <phase duration="5" state="rrrrrrrrrrrrrrrr"/>
+        <phase duration="32" state="GGgrrrrGGgrrrrrr"/>
+        <phase duration="3" state="yyyrrrryyyrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrrr"/>
+    </tlLogic>
+    <connection from="Edge.Main.WB.270-225" to="Edge.Main.WB.225-180" fromLane="1" toLane="1" tl="Cluster.225.Main" linkIndex="0"/>
+    <connection from="Edge.Main.WB.270-225" to="Edge.Main.WB.225-180" fromLane="2" toLane="2" tl="Cluster.225.Main" linkIndex="1"/>
+    <connection from="Edge.Main.WB.270-225" to="Edge.MinorN.NB.225" fromLane="3" toLane="1" tl="Cluster.225.Main" linkIndex="2"/>
+    <connection from="Edge.Main.WB.270-225" to="Edge.Main.EB.225-270" fromLane="3" toLane="2" tl="Cluster.225.Main" linkIndex="3"/>
+    <connection from="Edge.MinorN.SB.225" to="Edge.Main.EB.225-270" fromLane="1" toLane="1" tl="Cluster.225.Main" linkIndex="4"/>
+    <connection from="Edge.MinorN.SB.225" to="Edge.Main.WB.225-180" fromLane="2" toLane="2" tl="Cluster.225.Main" linkIndex="5"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.MinorN.NB.225" fromLane="1" toLane="1" tl="Cluster.225.Main" linkIndex="6"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.Main.EB.225-270" fromLane="2" toLane="1" tl="Cluster.225.Main" linkIndex="7"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.Main.EB.225-270" fromLane="3" toLane="2" tl="Cluster.225.Main" linkIndex="8"/>
+    <connection from="Edge.Main.EB.180-225" to="Edge.Main.WB.225-180" fromLane="3" toLane="2" tl="Cluster.225.Main" linkIndex="9"/>
+    <connection from="Edge.MinorS.NB.75" to="Edge.Main.WB.75-30" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="0"/>
+    <connection from="Edge.MinorS.NB.75" to="Edge.MinorN.NB.75" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="1"/>
+    <connection from="Edge.MinorS.NB.75" to="Edge.Main.EB.75-120" fromLane="2" toLane="2" tl="Cluster.75.Main" linkIndex="2"/>
+    <connection from="Edge.Main.WB.120-75" to="Edge.MinorS.SB.75" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="3"/>
+    <connection from="Edge.Main.WB.120-75" to="Edge.Main.WB.75-30" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="4"/>
+    <connection from="Edge.Main.WB.120-75" to="Edge.Main.WB.75-30" fromLane="2" toLane="2" tl="Cluster.75.Main" linkIndex="5"/>
+    <connection from="Edge.Main.WB.120-75" to="Edge.MinorN.NB.75" fromLane="3" toLane="1" tl="Cluster.75.Main" linkIndex="6"/>
+    <connection from="Edge.MinorN.SB.75" to="Edge.Main.EB.75-120" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="7"/>
+    <connection from="Edge.MinorN.SB.75" to="Edge.MinorS.SB.75" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="8"/>
+    <connection from="Edge.MinorN.SB.75" to="Edge.Main.WB.75-30" fromLane="2" toLane="2" tl="Cluster.75.Main" linkIndex="9"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.MinorN.NB.75" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="10"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.Main.EB.75-120" fromLane="1" toLane="1" tl="Cluster.75.Main" linkIndex="11"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.Main.EB.75-120" fromLane="2" toLane="2" tl="Cluster.75.Main" linkIndex="12"/>
+    <connection from="Edge.Main.EB.30-75" to="Edge.MinorS.SB.75" fromLane="3" toLane="1" tl="Cluster.75.Main" linkIndex="13"/>
+</tlLogics>

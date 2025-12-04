@@ -32,7 +32,7 @@ plainXML_out/
 **/*.con.xml
 # ↑ 生成する PlainXML を Git に含めたい場合は、上の3行を削除する
 tests/data
-
+pip-tmp
 # Jupyter等（使わないなら不要）
 .ipynb_checkpoints/
 
