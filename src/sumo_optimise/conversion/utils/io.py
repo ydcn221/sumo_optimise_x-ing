@@ -185,6 +185,8 @@ class BuildArtifacts:
 def ensure_output_directory(
     template: OutputDirectoryTemplate | None = None,
     file_templates: OutputFileTemplates | None = None,
+    *,
+    extra_context: Mapping[str, object] | None = None,
 ) -> BuildArtifacts:
     config = template or OutputDirectoryTemplate()
     file_config = file_templates or OutputFileTemplates()
@@ -202,6 +204,9 @@ def ensure_output_directory(
             uid=uid,
             epoch_ms=epoch_ms,
         )
+        if extra_context:
+            context.update(extra_context)
+        context.setdefault("id", uid)
         root_name = _format_template(config.root, context)
         run_name = _format_template(config.run, context) if config.run else ""
 
@@ -273,31 +278,82 @@ def _config_value(path: Path, base: Path) -> str:
             return path.resolve().as_posix()
 
 
-def write_sumocfg(artifacts: BuildArtifacts, *, net_path: Path, routes_path: Path) -> None:
-    """Emit a minimal SUMO configuration referencing the generated net and routes."""
+def write_sumocfg(
+    sumocfg_path: Path,
+    *,
+    net_path: Path,
+    routes_path: Path,
+    sim_end: float | None = None,
+    seed: int | None = None,
+    step_length: float | None = None,
+    tripinfo_path: Path | None = None,
+    personinfo_path: Path | None = None,
+    fcd_output_path: Path | None = None,
+    summary_output_path: Path | None = None,
+    person_summary_output_path: Path | None = None,
+    column_header_value: str | None = None,
+    fcd_begin: float | None = None,
+    no_warnings: bool | None = True,
+) -> None:
+    """Emit SUMO configuration referencing generated net/routes and optional outputs."""
 
-    net_value = _config_value(net_path, artifacts.sumocfg_path.parent)
-    route_value = _config_value(routes_path, artifacts.sumocfg_path.parent)
-    content = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        "<configuration>\n"
-        "    <input>\n"
-        f'        <net-file value="{net_value}"/>\n'
-        f'        <route-files value="{route_value}"/>\n'
-        '        <junction-taz value="true"/>\n'
-        "    </input>\n"
-        "    <!-- <time>\n"
-        '         <step-length value="0.01"/>\n'
-        "    </time> -->\n"
-        "    <!-- <output>\n"
-        '         <summary-output value="summary.xml"/>\n'
-        '         <person-summary-output value="personSummary.xml"/>\n'
-        '         <fcd-output value="fcd.xml"/>\n'
-        '         <tripinfo-output value="tripinfo.xml"/>\n'
-        "    </output> -->\n"
-        "</configuration>\n"
-    )
-    _write_text(artifacts.sumocfg_path, content)
+    base = sumocfg_path.parent
+    net_value = _config_value(net_path, base)
+    route_value = _config_value(routes_path, base)
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        "<configuration>",
+        "    <input>",
+        f'        <net-file value="{net_value}"/>',
+        f'        <route-files value="{route_value}"/>',
+        '        <junction-taz value="true"/>',
+        "    </input>",
+    ]
+
+    if sim_end is not None or seed is not None or step_length is not None:
+        lines.append("    <time>")
+        if sim_end is not None:
+            lines.append(f'        <end value="{sim_end}"/>')
+        if seed is not None:
+            lines.append(f'        <seed value="{seed}"/>')
+        if step_length is not None:
+            lines.append(f'        <step-length value="{step_length}"/>')
+        lines.append("    </time>")
+
+    outputs = []
+    if summary_output_path is not None:
+        outputs.append(f'        <summary-output value="{_config_value(summary_output_path, base)}"/>')
+    if person_summary_output_path is not None:
+        outputs.append(
+            f'        <person-summary-output value="{_config_value(person_summary_output_path, base)}"/>'
+        )
+    if fcd_output_path is not None:
+        outputs.append(f'        <fcd-output value="{_config_value(fcd_output_path, base)}"/>')
+    if tripinfo_path is not None:
+        outputs.append(f'        <tripinfo-output value="{_config_value(tripinfo_path, base)}"/>')
+    if personinfo_path is not None:
+        outputs.append(f'        <personinfo-output value="{_config_value(personinfo_path, base)}"/>')
+    if column_header_value is not None:
+        outputs.append(f'        <output.column-header value="{column_header_value}"/>')
+    if outputs:
+        lines.append("    <output>")
+        lines.extend(outputs)
+        lines.append("    </output>")
+
+    if fcd_begin is not None:
+        lines.append("    <devices>")
+        lines.append(f'        <device.fcd.begin value="{fcd_begin}"/>')
+        lines.append("    </devices>")
+
+    if no_warnings is not None:
+        lines.append("    <report>")
+        lines.append(f'        <no-warnings value="{str(bool(no_warnings)).lower()}"/>')
+        lines.append("    </report>")
+
+    lines.append("</configuration>")
+    content = "\n".join(lines) + "\n"
+    _write_text(sumocfg_path, content)
 
 
 __all__ = [

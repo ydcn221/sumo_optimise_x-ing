@@ -5,7 +5,7 @@ import math
 import xml.etree.ElementTree as ET
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 
 from .models import (
     QueueDurabilityConfig,
@@ -28,6 +28,7 @@ def _parse_tripinfo_csv_file(
     metrics: TripinfoMetrics,
     *,
     begin_filter: float,
+    end_filter: float | None,
     is_person_file: bool,
     progress_cb: Callable[[int, float], None] | None,
 ) -> None:
@@ -37,12 +38,13 @@ def _parse_tripinfo_csv_file(
         reader = csv.DictReader(fp, delimiter=";")
         for row in reader:
             arrival = _as_float(row.get("arrival"))
-            if arrival is None:
-                depart = _as_float(row.get("depart"))
-                duration = _as_float(row.get("duration"))
-                if depart is not None and duration is not None:
-                    arrival = depart + duration
+            depart = _as_float(row.get("depart"))
+            duration = _as_float(row.get("duration"))
+            if arrival is None and depart is not None and duration is not None:
+                arrival = depart + duration
             if arrival is None or arrival < begin_filter:
+                continue
+            if end_filter is not None and arrival > end_filter:
                 continue
 
             if is_person_file:
@@ -76,6 +78,7 @@ def _parse_tripinfo_xml_file(
     metrics: TripinfoMetrics,
     *,
     begin_filter: float,
+    end_filter: float | None,
     progress_cb: Callable[[int, float], None] | None,
 ) -> None:
     start_time = time.time()
@@ -106,6 +109,9 @@ def _parse_tripinfo_xml_file(
                 arrival = depart + duration
 
         if arrival is None or arrival < begin_filter:
+            elem.clear()
+            continue
+        if end_filter is not None and arrival > end_filter:
             elem.clear()
             continue
 
@@ -160,6 +166,7 @@ def parse_tripinfo(
     path: Path,
     *,
     begin_filter: float,
+    end_filter: float | None = None,
     personinfo: Path | None = None,
     progress_cb: Callable[[int, float], None] | None = None,
 ) -> TripinfoMetrics:
@@ -178,6 +185,7 @@ def parse_tripinfo(
                 current_path,
                 metrics,
                 begin_filter=begin_filter,
+                end_filter=end_filter,
                 is_person_file=is_person_file,
                 progress_cb=progress_cb,
             )
@@ -187,6 +195,7 @@ def parse_tripinfo(
             current_path,
             metrics,
             begin_filter=begin_filter,
+            end_filter=end_filter,
             progress_cb=progress_cb,
         )
 
@@ -342,3 +351,72 @@ def parse_queue_output(
         return metrics
 
     return metrics
+
+
+def parse_waiting_percentile(
+    path: Path,
+    *,
+    begin: float,
+    end: float,
+    progress_cb: Callable[[str], None] | None = None,
+) -> float | None:
+    """Compute 95th percentile of waiting (vehicle count), trimming top 5% (ceiling) in [begin, end]."""
+    if not path.exists() or end <= begin:
+        return None
+
+    waiting_values: List[float] = []
+    start_time = time.time()
+    if path.suffix.lower() == ".csv":
+        with path.open("r", encoding="utf-8", newline="") as fp:
+            reader = csv.DictReader(fp, delimiter=";")
+            for idx, row in enumerate(reader, start=1):
+                time_value = _as_float(row.get("time")) or _as_float(row.get("timestep")) or 0.0
+                if time_value < begin or time_value > end:
+                    continue
+                waiting = _as_float(row.get("waiting"))
+                if waiting is not None and not math.isnan(waiting):
+                    waiting_values.append(waiting)
+                if progress_cb and idx % 50000 == 0:
+                    elapsed = time.time() - start_time
+                    progress_cb(
+                        f"[metrics-trace] waiting_p95 steps={idx} elapsed={elapsed:.1f}s file={path}"
+                    )
+    else:
+        for idx, (_, elem) in enumerate(ET.iterparse(path, events=("end",)), start=1):
+            tag = elem.tag.split("}")[-1]
+            if tag != "step":
+                elem.clear()
+                continue
+            time_value = (
+                _as_float(elem.attrib.get("time"))
+                or _as_float(elem.attrib.get("timestep"))
+                or 0.0
+            )
+            if time_value < begin or time_value > end:
+                elem.clear()
+                continue
+            waiting = _as_float(elem.attrib.get("waiting"))
+            if waiting is not None and not math.isnan(waiting):
+                waiting_values.append(waiting)
+            if progress_cb and idx % 50000 == 0:
+                elapsed = time.time() - start_time
+                progress_cb(
+                    f"[metrics-trace] waiting_p95 steps={idx} elapsed={elapsed:.1f}s file={path}"
+                )
+            elem.clear()
+
+    if not waiting_values:
+        return None
+
+    waiting_values.sort()
+    # Trim the highest ceil(5%) samples (more aggressive trimming if not exact).
+    trim = math.ceil(len(waiting_values) * 0.05)
+    if trim > 0:
+        waiting_values = waiting_values[:-trim]
+    if not waiting_values:
+        return None
+
+    # Return the sample at or above the 95% position without interpolation.
+    idx = math.ceil(0.95 * len(waiting_values)) - 1
+    idx = max(0, min(idx, len(waiting_values) - 1))
+    return waiting_values[idx]

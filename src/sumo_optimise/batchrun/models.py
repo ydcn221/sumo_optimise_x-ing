@@ -3,10 +3,8 @@ from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-DEFAULT_BEGIN_FILTER = 1200.0
-DEFAULT_END_TIME = 2400.0
 DEFAULT_MAX_WORKERS = 32
 DEFAULT_QUEUE_THRESHOLD_STEPS = 10
 DEFAULT_QUEUE_THRESHOLD_LENGTH = 0.25  # ratio threshold (waiting/running)
@@ -14,6 +12,9 @@ DEFAULT_SCALE_PROBE_START = 0.1
 DEFAULT_SCALE_PROBE_CEILING = 5.0
 DEFAULT_SCALE_PROBE_FINE_STEP = 0.1
 DEFAULT_SCALE_PROBE_COARSE_STEP = 1.0
+DEFAULT_WARMUP_SECONDS = 1200.0
+DEFAULT_UNSAT_SECONDS = 1200.0
+DEFAULT_SAT_SECONDS = 0.0
 
 
 class ScaleMode(str, Enum):
@@ -79,10 +80,35 @@ class ScenarioConfig:
     scenario_base_id: str
     seed: int
     demand_dir: Path
-    scale: float
-    scale_mode: ScaleMode = ScaleMode.SUMO
-    begin_filter: float = DEFAULT_BEGIN_FILTER
-    end_time: float = DEFAULT_END_TIME
+    warmup_seconds: float
+    unsat_seconds: float
+    sat_seconds: float
+    ped_unsat_scale: float
+    ped_sat_scale: float
+    veh_unsat_scale: float
+    veh_sat_scale: float
+    scale_mode: ScaleMode = ScaleMode.VEH_ONLY
+
+    @property
+    def unsat_begin(self) -> float:
+        return self.warmup_seconds
+
+    @property
+    def unsat_end(self) -> float:
+        return self.warmup_seconds + self.unsat_seconds
+
+    @property
+    def sat_begin(self) -> float:
+        return self.unsat_end
+
+    @property
+    def sim_end(self) -> float:
+        return self.unsat_end + self.sat_seconds
+
+    @property
+    def scale(self) -> float:
+        # Compatibility helper for legacy code paths; returns vehicle unsaturated scale.
+        return self.veh_unsat_scale
 
 
 @dataclass(frozen=True)
@@ -143,6 +169,7 @@ class RunArtifacts:
     detector: Path
     queue: Path
     sumo_log: Path
+    run_id: str
 
 
 @dataclass(frozen=True)
@@ -165,7 +192,7 @@ class PhaseTiming:
 class RunTimings:
     build: PhaseTiming = field(default_factory=PhaseTiming)
     sumo: PhaseTiming = field(default_factory=PhaseTiming)
-    postprocess: PhaseTiming = field(default_factory=PhaseTiming)
+    metrics: PhaseTiming = field(default_factory=PhaseTiming)
     probe: PhaseTiming = field(default_factory=PhaseTiming)
 
 
@@ -207,14 +234,20 @@ class ScenarioResult:
     scenario_id: str
     scenario_base_id: str
     seed: int
-    scale: float
-    begin_filter: float
-    end_time: float
+    warmup_seconds: float
+    unsat_seconds: float
+    sat_seconds: float
+    ped_unsat_scale: float
+    ped_sat_scale: float
+    veh_unsat_scale: float
+    veh_sat_scale: float
     demand_dir: Path
     tripinfo: TripinfoMetrics
     queue: QueueDurabilityMetrics
     scale_probe: ScaleProbeResult
+    waiting_p95_sat: Optional[float] = None
     fcd_note: str = ""
     error: Optional[str] = None
+    error_messages: List[str] = field(default_factory=list)
     worker_id: Optional[int] = None
     timings: RunTimings = field(default_factory=RunTimings)

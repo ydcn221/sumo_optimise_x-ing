@@ -1,0 +1,70 @@
+<tlLogics version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
+    <tlLogic id="Cluster.200" type="static" programID="0" offset="0">
+        <phase duration="34" state="rrrrgGGGggrrrrgGGGggGrrGrr"/>
+        <phase duration="22" state="rrrrgGGGggrrrrgGGGggrrrrrr"/>
+        <phase duration="4" state="rrrryyyyggrrrryyyyggrrrrrr"/>
+        <phase duration="12" state="rrrrrrrrGgrrrrrrrrGgrrrrrr"/>
+        <phase duration="4" state="rrrrrrrryyrrrrrrrryyrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrrrrrrrrrrrrr"/>
+        <phase duration="20" state="gGGgrrrrrrgGGgrrrrrrrGGrGG"/>
+        <phase duration="12" state="gGGgrrrrrrgGGgrrrrrrrrrrrr"/>
+        <phase duration="4" state="yyygrrrrrryyygrrrrrrrrrrrr"/>
+        <phase duration="10" state="rrrGrrrrrrrrrGrrrrrrrrrrrr"/>
+        <phase duration="4" state="rrryrrrrrrrrryrrrrrrrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrrrrrrrrrrrrr"/>
+    </tlLogic>
+    <tlLogic id="Cluster.540" type="static" programID="0" offset="0">
+        <phase duration="34" state="rrrrgGGGggrrrrgGGGggGrrGrr"/>
+        <phase duration="22" state="rrrrgGGGggrrrrgGGGggrrrrrr"/>
+        <phase duration="4" state="rrrryyyyggrrrryyyyggrrrrrr"/>
+        <phase duration="12" state="rrrrrrrrGgrrrrrrrrGgrrrrrr"/>
+        <phase duration="4" state="rrrrrrrryyrrrrrrrryyrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrrrrrrrrrrrrr"/>
+        <phase duration="20" state="gGGgrrrrrrgGGgrrrrrrrGGrGG"/>
+        <phase duration="12" state="gGGgrrrrrrgGGgrrrrrrrrrrrr"/>
+        <phase duration="4" state="yyygrrrrrryyygrrrrrrrrrrrr"/>
+        <phase duration="10" state="rrrGrrrrrrrrrGrrrrrrrrrrrr"/>
+        <phase duration="4" state="rrryrrrrrrrrryrrrrrrrrrrrr"/>
+        <phase duration="2" state="rrrrrrrrrrrrrrrrrrrrrrrrrr"/>
+    </tlLogic>
+    <connection from="Edge.Minor.S_arm.NB.200" to="Edge.Main.WB.200-120" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="0"/>
+    <connection from="Edge.Minor.S_arm.NB.200" to="Edge.Minor.N_arm.NB.200" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="1"/>
+    <connection from="Edge.Minor.S_arm.NB.200" to="Edge.Minor.N_arm.NB.200" fromLane="2" toLane="2" tl="Cluster.200" linkIndex="2"/>
+    <connection from="Edge.Minor.S_arm.NB.200" to="Edge.Main.EB.200-280" fromLane="3" toLane="3" tl="Cluster.200" linkIndex="3"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Minor.S_arm.SB.200" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="4"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Main.WB.200-120" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="5"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Main.WB.200-120" fromLane="2" toLane="2" tl="Cluster.200" linkIndex="6"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Main.WB.200-120" fromLane="3" toLane="3" tl="Cluster.200" linkIndex="7"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Minor.N_arm.NB.200" fromLane="4" toLane="2" tl="Cluster.200" linkIndex="8"/>
+    <connection from="Edge.Main.WB.280-200" to="Edge.Main.EB.200-280" fromLane="4" toLane="3" tl="Cluster.200" linkIndex="9"/>
+    <connection from="Edge.Minor.N_arm.SB.200" to="Edge.Main.EB.200-280" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="10"/>
+    <connection from="Edge.Minor.N_arm.SB.200" to="Edge.Minor.S_arm.SB.200" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="11"/>
+    <connection from="Edge.Minor.N_arm.SB.200" to="Edge.Minor.S_arm.SB.200" fromLane="2" toLane="2" tl="Cluster.200" linkIndex="12"/>
+    <connection from="Edge.Minor.N_arm.SB.200" to="Edge.Main.WB.200-120" fromLane="3" toLane="3" tl="Cluster.200" linkIndex="13"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Minor.N_arm.NB.200" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="14"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Main.EB.200-280" fromLane="1" toLane="1" tl="Cluster.200" linkIndex="15"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Main.EB.200-280" fromLane="2" toLane="2" tl="Cluster.200" linkIndex="16"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Main.EB.200-280" fromLane="3" toLane="3" tl="Cluster.200" linkIndex="17"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Minor.S_arm.SB.200" fromLane="4" toLane="2" tl="Cluster.200" linkIndex="18"/>
+    <connection from="Edge.Main.EB.120-200" to="Edge.Main.WB.200-120" fromLane="4" toLane="3" tl="Cluster.200" linkIndex="19"/>
+    <connection from="Edge.Minor.S_arm.NB.540" to="Edge.Main.WB.540-460" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="0"/>
+    <connection from="Edge.Minor.S_arm.NB.540" to="Edge.Minor.N_arm.NB.540" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="1"/>
+    <connection from="Edge.Minor.S_arm.NB.540" to="Edge.Minor.N_arm.NB.540" fromLane="2" toLane="2" tl="Cluster.540" linkIndex="2"/>
+    <connection from="Edge.Minor.S_arm.NB.540" to="Edge.Main.EB.540-620" fromLane="3" toLane="3" tl="Cluster.540" linkIndex="3"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Minor.S_arm.SB.540" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="4"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Main.WB.540-460" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="5"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Main.WB.540-460" fromLane="2" toLane="2" tl="Cluster.540" linkIndex="6"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Main.WB.540-460" fromLane="3" toLane="3" tl="Cluster.540" linkIndex="7"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Minor.N_arm.NB.540" fromLane="4" toLane="2" tl="Cluster.540" linkIndex="8"/>
+    <connection from="Edge.Main.WB.620-540" to="Edge.Main.EB.540-620" fromLane="4" toLane="3" tl="Cluster.540" linkIndex="9"/>
+    <connection from="Edge.Minor.N_arm.SB.540" to="Edge.Main.EB.540-620" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="10"/>
+    <connection from="Edge.Minor.N_arm.SB.540" to="Edge.Minor.S_arm.SB.540" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="11"/>
+    <connection from="Edge.Minor.N_arm.SB.540" to="Edge.Minor.S_arm.SB.540" fromLane="2" toLane="2" tl="Cluster.540" linkIndex="12"/>
+    <connection from="Edge.Minor.N_arm.SB.540" to="Edge.Main.WB.540-460" fromLane="3" toLane="3" tl="Cluster.540" linkIndex="13"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Minor.N_arm.NB.540" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="14"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Main.EB.540-620" fromLane="1" toLane="1" tl="Cluster.540" linkIndex="15"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Main.EB.540-620" fromLane="2" toLane="2" tl="Cluster.540" linkIndex="16"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Main.EB.540-620" fromLane="3" toLane="3" tl="Cluster.540" linkIndex="17"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Minor.S_arm.SB.540" fromLane="4" toLane="2" tl="Cluster.540" linkIndex="18"/>
+    <connection from="Edge.Main.EB.460-540" to="Edge.Main.WB.540-460" fromLane="4" toLane="3" tl="Cluster.540" linkIndex="19"/>
+</tlLogics>

@@ -381,7 +381,13 @@ class DemandOptions:
     veh_endpoint_csv: Optional[Path] = None
     veh_junction_turn_weight_csv: Optional[Path] = None
     simulation_end_time: float = 3600.0
-    vehicle_flow_scale: float = 1.0
+    warmup_seconds: float = 0.0
+    unsat_seconds: float = 0.0
+    sat_seconds: float = 0.0
+    ped_unsat_scale: float = 1.0
+    ped_sat_scale: float = 1.0
+    veh_unsat_scale: float = 1.0
+    veh_sat_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -406,6 +412,7 @@ class BuildOptions:
     demand: Optional[DemandOptions] = None
     generate_demand_templates: bool = False
     network_input: Optional[Path] = None
+    extra_context: Optional[Dict[str, object]] = None
 
 
 class BuildTask(str, Enum):
@@ -436,6 +443,7 @@ class BuildResult:
     network_image_path: Optional[Path] = None
     sumocfg_path: Optional[Path] = None
     defaults: Optional[Defaults] = None
+    run_id: Optional[str] = None
 
 
 @dataclass

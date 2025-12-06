@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <input>
+        <net-file value="3-assembled.net.xml"/>
+        <route-files value="demandflow.rou.xml"/>
+        <junction-taz value="true"/>
+    </input>
+    <!-- <time>
+         <step-length value="0.01"/>
+    </time> -->
+    <!-- <output>
+         <summary-output value="vehicle_summary.csv"/>
+         <person-summary-output value="person_summary.csv"/>
+         <fcd-output value="fcd.csv"/>
+         <tripinfo-output value="vehicle_tripinfo.csv"/>
+         <personinfo-output value="person_tripinfo.csv"/>
+    </output> -->
+</configuration>

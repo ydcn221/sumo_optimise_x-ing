@@ -242,6 +242,13 @@ def _resolve_demand_options(args: argparse.Namespace) -> DemandOptions | None:
         veh_endpoint_csv=veh_endpoint_csv,
         veh_junction_turn_weight_csv=veh_ratio_csv,
         simulation_end_time=args.demand_sim_end,
+        warmup_seconds=0.0,
+        unsat_seconds=args.demand_sim_end,
+        sat_seconds=0.0,
+        ped_unsat_scale=1.0,
+        ped_sat_scale=1.0,
+        veh_unsat_scale=1.0,
+        veh_sat_scale=1.0,
     )
 
 

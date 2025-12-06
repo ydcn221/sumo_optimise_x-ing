@@ -37,3 +37,5 @@ pip-tmp
 .ipynb_checkpoints/
 
 workspace/
+.pytest_tmp/
+data/reference/1122_340m_5scenarios_ref

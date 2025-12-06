@@ -218,7 +218,13 @@ def build_and_persist(
     task: BuildTask = BuildTask.ALL,
 ) -> BuildResult:
     result = build_corridor_artifacts(spec_path, options)
-    artifacts = ensure_output_directory(options.output_template, options.output_files)
+    if options.extra_context:
+        result.run_id = str(options.extra_context.get("id", ""))
+    artifacts = ensure_output_directory(
+        options.output_template,
+        options.output_files,
+        extra_context=options.extra_context,
+    )
     artifacts.log_path.parent.mkdir(parents=True, exist_ok=True)
     configure_logger(artifacts.log_path, console=options.console_log)
     LOG.info("outdir: %s", artifacts.outdir.resolve())
@@ -245,9 +251,13 @@ def build_and_persist(
         persist_routes(artifacts, demand=result.demand_xml)
         if network_ready:
             write_sumocfg(
-                artifacts,
+                artifacts.sumocfg_path,
                 net_path=artifacts.network_path,
                 routes_path=artifacts.routes_path,
+                sim_end=options.demand.simulation_end_time if options.demand else None,
+                seed=int(options.extra_context.get("seed", 0)) if options.extra_context else None,
+                fcd_begin=options.demand.warmup_seconds if options.demand else None,
+                no_warnings=True,
             )
             result.sumocfg_path = artifacts.sumocfg_path
         else:

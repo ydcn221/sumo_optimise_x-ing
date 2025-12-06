@@ -70,6 +70,24 @@ def test_tripinfo_parsing_supports_csv_reference() -> None:
     assert metrics.person_mean_route_length is not None
 
 
+def test_tripinfo_end_filter_limits_window(tmp_path: Path) -> None:
+    tripinfo_path = tmp_path / "tripinfo.xml"
+    tripinfo_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<tripinfos>
+  <tripinfo id="veh_0" arrival="5.0" timeLoss="1.0" routeLength="10.0"/>
+  <tripinfo id="veh_1" arrival="15.0" timeLoss="2.0" routeLength="20.0"/>
+</tripinfos>
+""",
+        encoding="utf-8",
+    )
+
+    metrics = parse_tripinfo(tripinfo_path, begin_filter=0.0, end_filter=10.0)
+
+    assert metrics.vehicle_count == 1
+    assert metrics.vehicle_mean_time_loss == pytest.approx(1.0)
+
+
 def test_waiting_ratio_parsing_supports_csv_reference() -> None:
     base = Path("data/reference/csv outputs")
     summary_path = base / "vehicle_summary.csv"

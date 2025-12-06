@@ -59,14 +59,29 @@ def prepare_person_flow_routes(
     od_flows = compute_od_flows(graph, turn_weight_map, endpoint_rows)
     LOG.info("derived %d OD flows", len(od_flows))
 
-    entries = build_person_flow_entries(
-        od_flows,
-        ped_pattern=pattern,
-        simulation_end_time=options.simulation_end_time,
-        endpoint_offset_m=defaults.ped_endpoint_offset_m,
-        breakpoints=breakpoints,
-        defaults=defaults,
-    )
+    unsat_end = options.warmup_seconds + options.unsat_seconds
+    sat_end = options.simulation_end_time
+    segments = [(0.0, unsat_end, options.ped_unsat_scale)]
+    if options.sat_seconds > 0:
+        segments.append((unsat_end, sat_end, options.ped_sat_scale))
+
+    entries: List[str] = []
+    for idx, (begin_time, end_time, scale) in enumerate(segments):
+        scaled_flows = [
+            (origin, destination, value * scale, row) for origin, destination, value, row in od_flows
+        ]
+        entries.extend(
+            build_person_flow_entries(
+                scaled_flows,
+                ped_pattern=pattern,
+                begin_time=begin_time,
+                end_time=end_time,
+                segment_tag=f"seg{idx}",
+                endpoint_offset_m=defaults.ped_endpoint_offset_m,
+                breakpoints=breakpoints,
+                defaults=defaults,
+            )
+        )
     return PersonRouteResult(entries=entries)
 
 

@@ -224,7 +224,9 @@ def build_person_flow_entries(
     flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
     *,
     ped_pattern: PersonFlowPattern,
-    simulation_end_time: float,
+    begin_time: float,
+    end_time: float,
+    segment_tag: str | None = None,
     endpoint_offset_m: float,
     breakpoints: Sequence[int],
     defaults: Defaults,
@@ -243,7 +245,8 @@ def build_person_flow_entries(
         seq = counter_by_pair[pair_key]
         counter_by_pair[pair_key] += 1
 
-        pf_id = f"pf_{origin}__{destination}__{seq}"
+        seg = f"{segment_tag}__" if segment_tag else ""
+        pf_id = f"pf_{origin}__{destination}__{seg}{seq}"
         depart = resolver.resolve_depart(origin)
         arrive = resolver.resolve_arrival(destination)
 
@@ -252,7 +255,7 @@ def build_person_flow_entries(
         pattern_attr = _format_pattern_attribute(ped_pattern, value)
 
         entry_lines = [
-            f'  <personFlow id="{pf_id}" begin="0.00" end="{simulation_end_time:.2f}" '
+            f'  <personFlow id="{pf_id}" begin="{begin_time:.2f}" end="{end_time:.2f}" '
             f'departPos="{depart_pos:.2f}" {pattern_attr}>',
             f'    <personTrip from="{depart.edge_id}" to="{arrive.edge_id}" arrivalPos="{arrival_pos:.2f}"/>',
             "  </personFlow>",
@@ -266,7 +269,8 @@ def render_person_flows(
     flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
     *,
     ped_pattern: PersonFlowPattern,
-    simulation_end_time: float,
+    begin_time: float,
+    end_time: float,
     endpoint_offset_m: float,
     breakpoints: Sequence[int],
     defaults: Defaults,
@@ -274,7 +278,8 @@ def render_person_flows(
     entries = build_person_flow_entries(
         flows,
         ped_pattern=ped_pattern,
-        simulation_end_time=simulation_end_time,
+        begin_time=begin_time,
+        end_time=end_time,
         endpoint_offset_m=endpoint_offset_m,
         breakpoints=breakpoints,
         defaults=defaults,

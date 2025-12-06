@@ -12,7 +12,9 @@ def build_vehicle_flow_entries(
     flows: Iterable[Tuple[str, str, float, EndpointDemandRow]],
     *,
     vehicle_pattern: PersonFlowPattern,
-    simulation_end_time: float,
+    begin_time: float,
+    end_time: float,
+    segment_tag: str | None = None,
 ) -> List[str]:
     counter_by_pair = defaultdict(int)
     entries: List[str] = []
@@ -21,11 +23,12 @@ def build_vehicle_flow_entries(
         seq = counter_by_pair[pair_key]
         counter_by_pair[pair_key] += 1
 
-        # Keep IDs stable and unique per OD pair: vf_{origin}__{destination}__{n}
-        flow_id = f"vf_{origin}__{destination}__{seq}"
+        # Keep IDs stable and unique per OD pair and segment: vf_{origin}__{destination}__{segment}__{n}
+        seg = f"{segment_tag}__" if segment_tag else ""
+        flow_id = f"vf_{origin}__{destination}__{seg}{seq}"
         attr = _format_pattern_attribute(vehicle_pattern, value)
         entry = (
-            f'  <flow id="{flow_id}" begin="0.00" end="{simulation_end_time:.2f}" '
+            f'  <flow id="{flow_id}" begin="{begin_time:.2f}" end="{end_time:.2f}" '
             f'fromJunction="{origin}" toJunction="{destination}" '
             f'departLane="best_prob" departSpeed="max" {attr}/>'
         )

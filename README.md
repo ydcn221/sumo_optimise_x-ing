@@ -380,6 +380,16 @@ Only the over-saturation timing is retained for queues; legacy waiting-threshold
 
 ---
 
+## Batch run (multi-phase demand)
+
+* **Manifest is mandatory** for time windows and scales: `warmup_seconds`, `unsat_seconds`, `sat_seconds`, `ped_unsat_scale`, `ped_sat_scale`, `veh_unsat_scale`, `veh_sat_scale` (plus `spec`, `scenario_id`, `seed`, `demand_dir`). Old manifests are rejected; a non-destructive `.new` template is emitted beside the legacy file for migration.
+* **CLI scale switches removed**: all ped/veh scaling is set in the manifest. SUMO `--scale` is fixed at 1; demand CSVs are scaled when generating the single `rou.xml`.
+* **Two-phase demand in one routes file**: vehicles flow with `veh_unsat_scale` from `t=0` to `warmup+unsat`, then `veh_sat_scale` until `t=end`; pedestrians use the ped scales over the same windows.
+* **Metrics windows**: Group A (tripinfo) averages arrivals in `[warmup, warmup+unsat]`; Group B (summary) computes the trimmed 95th percentile of `waiting` in `[warmup+unsat, end]` after removing the top 5%. If `sat_seconds == 0`, saturated metrics are skipped.
+* **FCD**: `--device.fcd.begin` is set to `warmup_seconds`; SUMO still emits beyond the unsaturated window, so downstream consumers should ignore late timesteps if they need strict bounds.
+
+---
+
 ## Troubleshooting
 
 * **Import errors:** Use a venv and `pip install -e .`. Do not name your own folder `jsonschema` at repo root in a way that shadows the PyPI package.

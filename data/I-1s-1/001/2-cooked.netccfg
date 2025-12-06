@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-12-04T20:39:24.597076+09:00 by Eclipse SUMO netconvert 1.25.0
+-->
+
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <node-files value="2-cooked.nod.xml"/>
+        <edge-files value="2-cooked.edg.xml"/>
+        <connection-files value="2-cooked.con.xml"/>
+        <tllogic-files value="2-cooked.tll.xml"/>
+    </input>
+
+    <processing>
+        <lefthand value="true"/>
+    </processing>
+
+    <building_defaults>
+        <default.sidewalk-width value="3.0"/>
+        <default.junctions.radius value="8.0"/>
+    </building_defaults>
+
+    <junctions>
+        <no-internal-links value="true"/>
+        <no-turnarounds.fringe value="true"/>
+    </junctions>
+
+    <pedestrian>
+        <sidewalks.guess value="true"/>
+    </pedestrian>
+
+</netconvertConfiguration>

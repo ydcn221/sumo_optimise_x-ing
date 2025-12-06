@@ -29,11 +29,13 @@ from sumo_optimise.conversion.domain.models import (
 )
 from sumo_optimise.conversion.pipeline import build_and_persist
 from sumo_optimise.conversion.utils.constants import SCHEMA_JSON_PATH
+from sumo_optimise.conversion.utils.io import write_sumocfg
 
 from .models import (
-    DEFAULT_BEGIN_FILTER,
-    DEFAULT_END_TIME,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_SAT_SECONDS,
+    DEFAULT_UNSAT_SECONDS,
+    DEFAULT_WARMUP_SECONDS,
     PhaseTiming,
     OutputCompression,
     OutputFormat,
@@ -46,30 +48,44 @@ from .models import (
     ScaleProbeResult,
     ScenarioConfig,
     ScenarioResult,
-    TripinfoMetrics,
     ScaleMode,
+    TripinfoMetrics,
     WorkerPhase,
     WorkerStatus,
 )
 # CSV output layout (grouped by scenario inputs → trip stats → queue durability → probe metadata → notes).
 # queue_first_over_saturation_time: first timestep where waiting/running ratio stayed above
 # queue_threshold_length for at least queue_threshold_steps consecutive seconds; blank means durable.
-from .parsers import parse_tripinfo, parse_waiting_ratio
+from .parsers import parse_tripinfo, parse_waiting_ratio, parse_waiting_percentile
 
 
 RESULT_COLUMNS = [
     "scenario_id",
     "scenario_base_id",
     "seed",
-    "scale",
-    "begin_filter",
-    "end_time",
+    "warmup_seconds",
+    "unsat_seconds",
+    "sat_seconds",
+    "ped_unsat_scale",
+    "ped_sat_scale",
+    "veh_unsat_scale",
+    "veh_sat_scale",
     "demand_dir",
     "vehicle_count",
     "person_count",
     "vehicle_mean_timeLoss",
     "person_mean_timeLoss",
     "person_mean_routeLength",
+    "waiting_p95_sat",
+    "worker_id",
+    "build_start",
+    "build_end",
+    "sumo_start",
+    "sumo_end",
+    "metrics_start",
+    "metrics_end",
+]
+QUEUE_PROBE_COLUMNS = [
     "queue_threshold_steps",
     "queue_threshold_length",
     "queue_first_over_saturation_time",
@@ -77,18 +93,11 @@ RESULT_COLUMNS = [
     "scale_probe_enabled",
     "scale_probe_max_durable_scale",
     "scale_probe_attempts",
-    "fcd_note",
-    "error_note",
-    "worker_id",
-    "build_start",
-    "build_end",
-    "sumo_start",
-    "sumo_end",
-    "postprocess_start",
-    "postprocess_end",
     "probe_start",
     "probe_end",
 ]
+RESULT_COLUMNS_PROBE = RESULT_COLUMNS + QUEUE_PROBE_COLUMNS + ["error"]
+RESULT_COLUMNS_NO_PROBE = RESULT_COLUMNS + ["error"]
 
 
 def _debug_log(log_path: Path | None, message: str) -> None:
@@ -110,6 +119,23 @@ def _format_over_saturation_reason(length_threshold: float, step_window: int) ->
         f"waiting/running ratio >= {length_threshold:.3f} was detected for at least "
         f"{step_window} consecutive seconds"
     )
+
+
+def _run_layout(
+    scenario: ScenarioConfig, *, output_root: Path, run_label: str | None
+) -> tuple[str, Path, Path, str, str]:
+    safe_sid = _safe_id_for_filename(scenario.scenario_id)
+    safe_base_sid = _safe_id_for_filename(scenario.scenario_base_id or scenario.scenario_id)
+    label = run_label or "base"
+    safe_label = _safe_id_for_filename(label)
+    run_id = f"{safe_sid}-{scenario.seed}-{safe_label}"
+    root_dir = output_root / f"scenario-{safe_base_sid}"
+    run_dir = root_dir / f"seed-{scenario.seed}" / f"run-{safe_label}"
+    return run_id, root_dir, run_dir, safe_sid, safe_label
+
+
+def _sumo_log_path(run_dir: Path, run_id: str) -> Path:
+    return run_dir / f"sumo_{run_id}.log"
 
 
 def _send_status(
@@ -237,13 +263,12 @@ def _render_grid(
     for idx, status in enumerate(ordered):
         scenario = status.scenario_id or "-"
         phase = status.phase
-        scale_str = f"{status.probe_scale or status.scale or 0:.2f}"
         label_text = status.label
         if not label_text and status.step is not None:
             label_text = f"sumo#{int(status.step)}"
         label = (label_text or phase.value)[:10]
         cpu_text = "--" if status.affinity_cpu is None else f"{status.affinity_cpu:02d}"
-        cell = f"[{status.worker_id:02d}@{cpu_text}] {label:<10} {scenario:<12} (s {scale_str:>4})"
+        cell = f"[{status.worker_id:02d}@{cpu_text}] {label:<10} {scenario:<20}"
         cell = cell[:cell_width].ljust(cell_width)
         rows.append(_colorize(cell, phase))
         if (idx + 1) % cols == 0:
@@ -377,39 +402,77 @@ def _render_loop(
     except (EOFError, BrokenPipeError):
         return
 
-def load_manifest(path: Path, *, default_scale_mode: ScaleMode = ScaleMode.SUMO) -> List[ScenarioConfig]:
+REQUIRED_MANIFEST_FIELDS = [
+    "spec",
+    "scenario_id",
+    "seed",
+    "demand_dir",
+    "warmup_seconds",
+    "unsat_seconds",
+    "sat_seconds",
+    "ped_unsat_scale",
+    "ped_sat_scale",
+    "veh_unsat_scale",
+    "veh_sat_scale",
+]
+
+LEGACY_MANIFEST_FIELDS = {
+    "spec",
+    "scenario_id",
+    "seed",
+    "demand_dir",
+    "scale",
+    "begin_filter",
+    "end_time",
+}
+
+
+def load_manifest(path: Path) -> List[ScenarioConfig]:
     manifest_path = Path(path)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
     suffix = manifest_path.suffix.lower()
     if suffix == ".json":
-        return _load_manifest_json(manifest_path, default_scale_mode=default_scale_mode)
+        return _load_manifest_json(manifest_path)
     if suffix == ".csv":
-        return _load_manifest_csv(manifest_path, default_scale_mode=default_scale_mode)
+        return _load_manifest_csv(manifest_path)
     raise ValueError("Manifest must be .json or .csv")
 
 
-def _load_manifest_json(path: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
+def _load_manifest_json(path: Path) -> List[ScenarioConfig]:
     with path.open("r", encoding="utf-8") as fp:
         data = json.load(fp)
     if not isinstance(data, list):
         raise ValueError("JSON manifest must be a list of scenario entries")
     base = path.parent
+    if data and all(_is_legacy_manifest_row(entry) for entry in data):
+        _emit_legacy_manifest_template(path, data)
+        raise ValueError(
+            f"Legacy manifest detected (missing required fields). A template with the new format was written next to {path}"
+        )
     scenarios: List[ScenarioConfig] = []
     for entry in data:
-        scenarios.extend(_row_to_config(entry, base, default_scale_mode=default_scale_mode))
+        scenarios.extend(_row_to_config(entry, base))
     return scenarios
 
 
-def _load_manifest_csv(path: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
+def _load_manifest_csv(path: Path) -> List[ScenarioConfig]:
     scenarios: List[ScenarioConfig] = []
     base = path.parent
+    rows: List[dict] = []
     with path.open("r", encoding="utf-8") as fp:
         reader = csv.DictReader(fp)
         for row in reader:
             if not any(row.values()):
                 continue
-            scenarios.extend(_row_to_config(row, base, default_scale_mode=default_scale_mode))
+            rows.append(row)
+    if rows and all(_is_legacy_manifest_row(row) for row in rows):
+        _emit_legacy_manifest_template(path, rows)
+        raise ValueError(
+            f"Legacy manifest detected (missing required fields). A template with the new format was written next to {path}"
+        )
+    for row in rows:
+        scenarios.extend(_row_to_config(row, base))
     return scenarios
 
 
@@ -456,30 +519,32 @@ def _parse_seed_field(raw_seed: object) -> List[int]:
     return seeds
 
 
-def _parse_scale_mode(raw_mode: object | None, default: ScaleMode) -> ScaleMode:
-    if raw_mode is None or raw_mode == "":
-        return default
-    token = str(raw_mode).strip().lower()
-    try:
-        return ScaleMode(token)
-    except ValueError as err:
-        raise ValueError(f"Invalid scale_mode: {raw_mode!r}") from err
-
-
-def _row_to_config(raw: dict, base: Path, *, default_scale_mode: ScaleMode) -> List[ScenarioConfig]:
+def _row_to_config(raw: dict, base: Path) -> List[ScenarioConfig]:
+    missing = [field for field in REQUIRED_MANIFEST_FIELDS if field not in raw]
+    if missing:
+        raise ValueError(f"Missing manifest field(s): {', '.join(missing)}")
     try:
         spec = Path(raw["spec"])
         scenario_id = str(raw["scenario_id"])
         seeds = _parse_seed_field(raw["seed"])
         demand_dir = Path(raw["demand_dir"])
-        scale = float(raw["scale"])
-        scale_mode = _parse_scale_mode(raw.get("scale_mode"), default_scale_mode)
+        warmup_seconds = float(raw["warmup_seconds"])
+        unsat_seconds = float(raw["unsat_seconds"])
+        sat_seconds = float(raw["sat_seconds"])
+        ped_unsat_scale = float(raw["ped_unsat_scale"])
+        ped_sat_scale = float(raw["ped_sat_scale"])
+        veh_unsat_scale = float(raw["veh_unsat_scale"])
+        veh_sat_scale = float(raw["veh_sat_scale"])
     except KeyError as err:
         raise ValueError(f"Missing manifest field: {err.args[0]}") from err
+    except ValueError as err:
+        raise ValueError(f"Invalid manifest value: {err}") from err
+
     if not scenario_id:
         raise ValueError("scenario_id cannot be empty")
-    begin_filter = float(raw.get("begin_filter", DEFAULT_BEGIN_FILTER))
-    end_time = float(raw.get("end_time", DEFAULT_END_TIME))
+    if warmup_seconds < 0 or unsat_seconds < 0 or sat_seconds < 0:
+        raise ValueError("Time window values cannot be negative")
+
     spec = spec if spec.is_absolute() else (base / spec)
     demand_dir = demand_dir if demand_dir.is_absolute() else (base / demand_dir)
     scenarios: List[ScenarioConfig] = []
@@ -492,13 +557,62 @@ def _row_to_config(raw: dict, base: Path, *, default_scale_mode: ScaleMode) -> L
                 scenario_base_id=scenario_id,
                 seed=seed,
                 demand_dir=demand_dir,
-                scale=scale,
-                scale_mode=scale_mode,
-                begin_filter=begin_filter,
-                end_time=end_time,
+                warmup_seconds=warmup_seconds,
+                unsat_seconds=unsat_seconds,
+                sat_seconds=sat_seconds,
+                ped_unsat_scale=ped_unsat_scale,
+                ped_sat_scale=ped_sat_scale,
+                veh_unsat_scale=veh_unsat_scale,
+                veh_sat_scale=veh_sat_scale,
             )
         )
     return scenarios
+
+
+def _is_legacy_manifest_row(raw: dict) -> bool:
+    return LEGACY_MANIFEST_FIELDS.issubset(raw.keys()) and not all(
+        field in raw for field in REQUIRED_MANIFEST_FIELDS
+    )
+
+
+def _emit_legacy_manifest_template(path: Path, rows: List[dict]) -> None:
+    template_path = path.with_name(path.name + ".new")
+    if template_path.exists():
+        return
+
+    header = REQUIRED_MANIFEST_FIELDS
+    template_rows: List[dict] = []
+    for row in rows:
+        try:
+            warmup = float(row.get("begin_filter", DEFAULT_WARMUP_SECONDS))
+            end_time = float(row.get("end_time", warmup))
+            unsat = max(end_time - warmup, 0.0)
+            scale = float(row.get("scale", 1.0))
+        except Exception:
+            warmup = DEFAULT_WARMUP_SECONDS
+            end_time = warmup + DEFAULT_UNSAT_SECONDS
+            unsat = DEFAULT_UNSAT_SECONDS
+            scale = 1.0
+        template_rows.append(
+            {
+                "spec": row.get("spec", ""),
+                "scenario_id": row.get("scenario_id", ""),
+                "seed": row.get("seed", ""),
+                "demand_dir": row.get("demand_dir", ""),
+                "warmup_seconds": warmup,
+                "unsat_seconds": unsat,
+                "sat_seconds": DEFAULT_SAT_SECONDS,
+                "ped_unsat_scale": scale,
+                "ped_sat_scale": scale,
+                "veh_unsat_scale": scale,
+                "veh_sat_scale": scale,
+            }
+        )
+
+    with template_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=header)
+        writer.writeheader()
+        writer.writerows(template_rows)
 
 
 def resolve_demand_files(demand_dir: Path) -> DemandFiles:
@@ -520,23 +634,32 @@ def _build_options_for_scenario(
     scenario: ScenarioConfig,
     *,
     output_root: Path,
-    vehicle_flow_scale: float | None = None,
     run_label: str | None = None,
     network_input: Path | None = None,
 ) -> BuildOptions:
+    run_id, root_dir, _, safe_sid, safe_label = _run_layout(
+        scenario, output_root=output_root, run_label=run_label
+    )
     output_template = OutputDirectoryTemplate(
-        root=str(output_root / scenario.scenario_id),
-        run=run_label or "{seq:03}",
+        root=str(root_dir),
+        run=f"seed-{scenario.seed}/run-{safe_label}",
     )
     output_files = OutputFileTemplates()
     demand_files = resolve_demand_files(scenario.demand_dir)
+    sim_end = scenario.sim_end
     demand_options = DemandOptions(
         ped_endpoint_csv=demand_files.ped_endpoint,
         ped_junction_turn_weight_csv=demand_files.ped_junction,
         veh_endpoint_csv=demand_files.veh_endpoint,
         veh_junction_turn_weight_csv=demand_files.veh_junction,
-        simulation_end_time=scenario.end_time,
-        vehicle_flow_scale=vehicle_flow_scale if vehicle_flow_scale is not None else 1.0,
+        simulation_end_time=sim_end,
+        warmup_seconds=scenario.warmup_seconds,
+        unsat_seconds=scenario.unsat_seconds,
+        sat_seconds=scenario.sat_seconds,
+        ped_unsat_scale=scenario.ped_unsat_scale,
+        ped_sat_scale=scenario.ped_sat_scale,
+        veh_unsat_scale=scenario.veh_unsat_scale,
+        veh_sat_scale=scenario.veh_sat_scale,
     )
 
     return BuildOptions(
@@ -550,30 +673,57 @@ def _build_options_for_scenario(
         demand=demand_options,
         generate_demand_templates=False,
         network_input=network_input,
+        extra_context={
+            "scenario": safe_sid,
+            "seed": scenario.seed,
+            "label": safe_label,
+            "run_id": run_id,
+            "id": run_id,
+        },
     )
 
 
-def _collect_artifacts(result, *, scenario_id: str, output_format: OutputFormat) -> RunArtifacts:
+def _collect_artifacts(result, *, scenario: ScenarioConfig, label: str, output_format: OutputFormat) -> RunArtifacts:
     if result.manifest_path is None:
         raise ValueError("manifest path not recorded by build")
     outdir = result.manifest_path.parent
-    sumocfg = result.sumocfg_path or (outdir / "config.sumocfg")
+    safe_sid = _safe_id_for_filename(scenario.scenario_id)
+    safe_label = _safe_id_for_filename(label or "base")
+    run_id = result.run_id or f"{safe_sid}-{scenario.seed}-{safe_label}"
+    context = {"id": run_id}
     files = OutputFileTemplates()
-    network_path = outdir / files.network
-    safe_id = _safe_id_for_filename(scenario_id)
+    network_path = outdir / files.network.format_map(context)
+    routes_path = outdir / files.routes.format_map(context)
+    sumocfg = result.sumocfg_path or (outdir / files.sumocfg.format_map(context))
     suffix = output_format.sumo_output_suffix
+    write_sumocfg(
+        sumocfg_path=sumocfg,
+        net_path=network_path,
+        routes_path=routes_path,
+        sim_end=scenario.sim_end,
+        seed=scenario.seed,
+        fcd_begin=scenario.unsat_begin,
+        tripinfo_path=outdir / f"vehicle_tripinfo_{run_id}{suffix}",
+        personinfo_path=outdir / f"person_tripinfo_{run_id}{suffix}",
+        fcd_output_path=outdir / f"fcd_{run_id}{suffix}",
+        summary_output_path=outdir / f"vehicle_summary_{run_id}{suffix}",
+        person_summary_output_path=outdir / f"person_summary_{run_id}{suffix}",
+        column_header_value="auto",
+        no_warnings=True,
+    )
     return RunArtifacts(
         outdir=outdir,
         sumocfg=sumocfg,
         network=network_path,
-        tripinfo=outdir / f"vehicle_tripinfo_{safe_id}{suffix}",
-        personinfo=outdir / f"person_tripinfo_{safe_id}{suffix}",
-        fcd=outdir / f"fcd_{safe_id}{suffix}",
-        summary=outdir / f"vehicle_summary_{safe_id}{suffix}",
-        person_summary=outdir / f"person_summary_{safe_id}{suffix}",
-        detector=outdir / f"detector_{safe_id}.xml",
-        queue=outdir / f"queue_{safe_id}.xml",
-        sumo_log=outdir / f"sumo_{safe_id}.log",
+        tripinfo=outdir / f"vehicle_tripinfo_{run_id}{suffix}",
+        personinfo=outdir / f"person_tripinfo_{run_id}{suffix}",
+        fcd=outdir / f"fcd_{run_id}{suffix}",
+        summary=outdir / f"vehicle_summary_{run_id}{suffix}",
+        person_summary=outdir / f"person_summary_{run_id}{suffix}",
+        detector=outdir / f"detector_{run_id}.xml",
+        queue=outdir / f"queue_{run_id}.xml",
+        sumo_log=outdir / f"sumo_{run_id}.log",
+        run_id=run_id,
     )
 
 
@@ -581,19 +731,31 @@ def _artifacts_for_label(base: RunArtifacts, label: str | None) -> RunArtifacts:
     if not label:
         return base
 
-    outdir = base.outdir / label
+    safe_label = _safe_id_for_filename(label)
+    parts = base.run_id.split("-")
+    if len(parts) >= 3:
+        prefix = "-".join(parts[:-1])
+        new_run_id = f"{prefix}-{safe_label}"
+    else:
+        new_run_id = f"{base.run_id}-{safe_label}"
+    outdir = base.outdir.parent / f"run-{safe_label}"
+
+    def _replace(path: Path) -> Path:
+        return outdir / path.name.replace(base.run_id, new_run_id)
+
     return RunArtifacts(
         outdir=outdir,
         sumocfg=base.sumocfg,
         network=base.network,
-        tripinfo=outdir / base.tripinfo.name,
-        personinfo=outdir / base.personinfo.name,
-        fcd=outdir / base.fcd.name,
-        summary=outdir / base.summary.name,
-        person_summary=outdir / base.person_summary.name,
-        detector=outdir / base.detector.name,
-        queue=outdir / base.queue.name,
-        sumo_log=outdir / base.sumo_log.name,
+        tripinfo=_replace(base.tripinfo),
+        personinfo=_replace(base.personinfo),
+        fcd=_replace(base.fcd),
+        summary=_replace(base.summary),
+        person_summary=_replace(base.person_summary),
+        detector=_replace(base.detector),
+        queue=_replace(base.queue),
+        sumo_log=_replace(base.sumo_log),
+        run_id=new_run_id,
     )
 
 
@@ -601,35 +763,9 @@ def _sumo_command(
     artifacts: RunArtifacts,
     scenario: ScenarioConfig,
     *,
-    scale: float,
+    fcd_begin: float,
 ) -> List[str]:
-    cmd = [
-        "sumo",
-        "-c",
-        str(artifacts.sumocfg),
-        "--tripinfo-output",
-        str(artifacts.tripinfo),
-        "--personinfo-output",
-        str(artifacts.personinfo),
-        "--fcd-output",
-        str(artifacts.fcd),
-        "--summary-output",
-        str(artifacts.summary),
-        "--person-summary-output",
-        str(artifacts.person_summary),
-        "--output.column-header",
-        "auto",
-        "--device.fcd.begin",
-        str(scenario.begin_filter),
-        "--end",
-        str(scenario.end_time),
-        "--seed",
-        str(scenario.seed),
-        "--scale",
-        str(scale),
-        "-W",
-    ]
-    return cmd
+    return ["sumo", "-c", str(artifacts.sumocfg)]
 
 
 def _decompress_gz(src: Path) -> Path:
@@ -973,17 +1109,18 @@ def _run_for_scale(
     enable_waiting_abort: bool = False,
     metrics_trace: bool = False,
     sumo_timing: PhaseTiming | None = None,
-    postprocess_timing: PhaseTiming | None = None,
+    metrics_timing: PhaseTiming | None = None,
     metrics_phase: WorkerPhase | None = None,
     metrics_label: str | None = None,
-) -> tuple[TripinfoMetrics, QueueDurabilityMetrics]:
+    compute_queue_metrics: bool = True,
+) -> tuple[TripinfoMetrics, QueueDurabilityMetrics, float | None]:
     artifacts.tripinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.personinfo.parent.mkdir(parents=True, exist_ok=True)
     artifacts.queue.parent.mkdir(parents=True, exist_ok=True)
     artifacts.sumo_log.parent.mkdir(parents=True, exist_ok=True)
 
     applied_scale = sumo_scale if sumo_scale is not None else scale
-    cmd = _sumo_command(artifacts, scenario, scale=applied_scale)
+    cmd = _sumo_command(artifacts, scenario, fcd_begin=scenario.unsat_begin)
     with artifacts.sumo_log.open("a", encoding="utf-8") as log_fp:
         log_fp.write(" ".join(cmd) + "\n")
         log_fp.flush()
@@ -999,8 +1136,8 @@ def _run_for_scale(
             use_pty=use_pty,
             log_file=log_fp,
             summary_path=artifacts.summary,
-            waiting_config=queue_config,
-            enable_waiting_abort=enable_waiting_abort,
+            waiting_config=queue_config if compute_queue_metrics else None,
+            enable_waiting_abort=enable_waiting_abort and compute_queue_metrics,
         )
 
     _mark_end(sumo_timing)
@@ -1016,8 +1153,15 @@ def _run_for_scale(
     )
 
     tripinfo_metrics = TripinfoMetrics()
-    need_summary = live_waiting_metrics is None
-    _mark_start(postprocess_timing)
+    waiting_p95_sat: float | None = None
+    queue_metrics = QueueDurabilityMetrics(
+        threshold_steps=queue_config.step_window,
+        threshold_length=queue_config.length_threshold,
+    )
+    need_summary_for_queue = compute_queue_metrics and live_waiting_metrics is None
+    need_summary_for_waiting = scenario.sat_seconds > 0
+    need_summary = need_summary_for_queue or need_summary_for_waiting
+    _mark_start(metrics_timing)
     with _materialize_metrics_inputs(
         artifacts,
         output_format=output_format,
@@ -1041,7 +1185,8 @@ def _run_for_scale(
 
             tripinfo_metrics = parse_tripinfo(
                 trip_path,
-                begin_filter=scenario.begin_filter,
+                begin_filter=scenario.unsat_begin,
+                end_filter=scenario.unsat_end,
                 personinfo=person_path,
                 progress_cb=_trip_progress if metrics_trace else None,
             )
@@ -1057,14 +1202,24 @@ def _run_for_scale(
                 )
 
         queue_start = time.time()
-        queue_metrics = live_waiting_metrics or parse_waiting_ratio(
-            summary_path or artifacts.summary,
-            config=queue_config,
-            progress_cb=(
-                (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
-            ),
-        )
-        if metrics_trace:
+        if compute_queue_metrics:
+            queue_metrics = live_waiting_metrics or parse_waiting_ratio(
+                summary_path or artifacts.summary,
+                config=queue_config,
+                progress_cb=(
+                    (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
+                ),
+            )
+        if scenario.sat_seconds > 0 and (summary_path or artifacts.summary).exists():
+            waiting_p95_sat = parse_waiting_percentile(
+                summary_path or artifacts.summary,
+                begin=scenario.sat_begin,
+                end=scenario.sim_end,
+                progress_cb=(
+                    (lambda msg: _debug_log(artifacts.sumo_log, msg)) if metrics_trace else None
+                ),
+            )
+        if metrics_trace and compute_queue_metrics:
             queue_elapsed = time.time() - queue_start
             summary_size = (
                 (summary_path or artifacts.summary).stat().st_size
@@ -1080,26 +1235,35 @@ def _run_for_scale(
                     f"size_bytes={summary_size}"
                 ),
             )
-    _mark_end(postprocess_timing)
+    _mark_end(metrics_timing)
     phase_label = phase.name if hasattr(phase, "name") else str(phase)
-    queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
-    queue_reason = ""
-    if not queue_metrics.is_durable:
-        queue_reason = (
-            "; over saturation detected because "
-            f"{_format_over_saturation_reason(queue_metrics.threshold_length, queue_metrics.threshold_steps)}"
+    if compute_queue_metrics:
+        queue_status = "over_saturation_detected" if not queue_metrics.is_durable else "durable"
+        queue_reason = ""
+        if not queue_metrics.is_durable:
+            queue_reason = (
+                "; over saturation detected because "
+                f"{_format_over_saturation_reason(queue_metrics.threshold_length, queue_metrics.threshold_steps)}"
+            )
+        _debug_log(
+            artifacts.sumo_log,
+            (
+                f"[scale-run] phase={phase_label} scale={scale:.2f} sumo_scale={applied_scale:.2f} "
+                f"aborted={aborted} queue_status={queue_status} "
+                f"first_over_saturation_time={queue_metrics.first_failure_time} "
+                f"max_ratio={queue_metrics.max_queue_length}"
+                f"{queue_reason}"
+            ),
         )
-    _debug_log(
-        artifacts.sumo_log,
-        (
-            f"[scale-run] phase={phase_label} scale={scale:.2f} sumo_scale={applied_scale:.2f} "
-            f"aborted={aborted} queue_status={queue_status} "
-            f"first_over_saturation_time={queue_metrics.first_failure_time} "
-            f"max_ratio={queue_metrics.max_queue_length}"
-            f"{queue_reason}"
-        ),
-    )
-    return tripinfo_metrics, queue_metrics
+    else:
+        _debug_log(
+            artifacts.sumo_log,
+            (
+                f"[scale-run] phase={phase_label} scale={scale:.2f} sumo_scale={applied_scale:.2f} "
+                "queue_metrics=skipped (probe disabled)"
+            ),
+        )
+    return tripinfo_metrics, queue_metrics, waiting_p95_sat
 
 
 def _probe_scale_durability(
@@ -1121,6 +1285,7 @@ def _probe_scale_durability(
     base_network: Path | None = None,
     timings: RunTimings | None = None,
 ) -> ScaleProbeResult:
+    raise NotImplementedError("Scale probe is not supported with multi-phase scaling.")
     fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
     coarse_step = scale_probe.coarse_step if scale_probe.coarse_step > 0 else fine_step
     coarse_step = max(coarse_step, fine_step)
@@ -1185,7 +1350,8 @@ def _probe_scale_durability(
             build_result = build_and_persist(scenario.spec, options, task=task)
             artifacts = _collect_artifacts(
                 build_result,
-                scenario_id=scenario.scenario_id,
+                scenario=scenario,
+                label=run_label,
                 output_format=output_format,
             )
             applied_sumo_scale = 1.0
@@ -1222,6 +1388,7 @@ def _probe_scale_durability(
             metrics_trace=metrics_trace,
             metrics_phase=WorkerPhase.PROBE,
             metrics_label="probe-post",
+            compute_queue_metrics=True,
         )
         queue_cache[scale_value] = queue_metrics
         attempt_no = attempts + 1
@@ -1360,16 +1527,21 @@ def run_scenario(
     use_pty: bool,
     metrics_trace: bool = False,
 ) -> ScenarioResult | None:
+    if scale_probe.enabled:
+        raise ValueError("Scale probing is not supported with multi-phase scaling; please disable it.")
+
+    base_run_id, base_root_dir, base_run_dir, _, _ = _run_layout(
+        scenario, output_root=output_root, run_label="base"
+    )
     base_queue_metrics = QueueDurabilityMetrics(
         threshold_steps=queue_config.step_window,
         threshold_length=queue_config.length_threshold,
     )
     probe_result = ScaleProbeResult(
-        enabled=scale_probe.enabled,
+        enabled=False,
         max_durable_scale=None,
         attempts=0,
     )
-    vehicle_flow_scale = scenario.scale if scenario.scale_mode == ScaleMode.VEH_ONLY else None
     timings = RunTimings()
     scenario_worker = worker_id
 
@@ -1380,7 +1552,7 @@ def run_scenario(
             worker_id=worker_id,
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
-            scale=scenario.scale,
+            scale=scenario.veh_unsat_scale,
             affinity_cpu=affinity_cpu,
             phase=WorkerPhase.BUILD,
             label="build",
@@ -1388,54 +1560,63 @@ def run_scenario(
         options = _build_options_for_scenario(
             scenario,
             output_root=output_root,
-            vehicle_flow_scale=vehicle_flow_scale,
         )
         build_result = build_and_persist(scenario.spec, options, task=BuildTask.ALL)
         artifacts = _collect_artifacts(
             build_result,
-            scenario_id=scenario.scenario_id,
+            scenario=scenario,
+            label="base",
             output_format=output_format,
         )
         _mark_end(timings.build)
     except Exception as exc:  # noqa: BLE001
         _mark_end(timings.build)
+        errors = [
+            f"build failed: {exc}",
+            f"log dir: {base_run_dir}",
+        ]
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
             scenario_base_id=scenario.scenario_base_id,
             seed=scenario.seed,
-            scale=scenario.scale,
-            begin_filter=scenario.begin_filter,
-            end_time=scenario.end_time,
+            warmup_seconds=scenario.warmup_seconds,
+            unsat_seconds=scenario.unsat_seconds,
+            sat_seconds=scenario.sat_seconds,
+            ped_unsat_scale=scenario.ped_unsat_scale,
+            ped_sat_scale=scenario.ped_sat_scale,
+            veh_unsat_scale=scenario.veh_unsat_scale,
+            veh_sat_scale=scenario.veh_sat_scale,
             demand_dir=scenario.demand_dir,
             tripinfo=TripinfoMetrics(),
             queue=base_queue_metrics,
             scale_probe=probe_result,
+            waiting_p95_sat=None,
             fcd_note="build failed",
-            error=str(exc),
+            error="; ".join(errors),
+            error_messages=errors,
             worker_id=scenario_worker,
             timings=timings,
         )
 
     try:
-        sumo_scale = 1.0 if scenario.scale_mode == ScaleMode.VEH_ONLY else scenario.scale
         _mark_start(timings.sumo)
         _send_status(
             status_queue,
             worker_id=worker_id,
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
-            scale=scenario.scale,
+            scale=scenario.veh_unsat_scale,
             affinity_cpu=affinity_cpu,
             phase=WorkerPhase.SUMO,
             label="sumo",
         )
-        tripinfo_metrics, queue_metrics = _run_for_scale(
+        tripinfo_metrics, queue_metrics, waiting_p95_sat = _run_for_scale(
             artifacts,
             scenario,
             queue_config=queue_config,
             output_format=output_format,
-            scale=scenario.scale,
-            sumo_scale=sumo_scale,
+            scale=scenario.veh_unsat_scale,
+            sumo_scale=1.0,
             affinity_cpu=affinity_cpu,
             collect_tripinfo=True,
             status_queue=status_queue,
@@ -1444,76 +1625,58 @@ def run_scenario(
             use_pty=use_pty,
             metrics_trace=metrics_trace,
             sumo_timing=timings.sumo,
-            postprocess_timing=timings.postprocess,
+            metrics_timing=timings.metrics,
             metrics_phase=WorkerPhase.PARSE,
             metrics_label="post",
+            compute_queue_metrics=scale_probe.enabled,
         )
         if timings.sumo.end is None:
             _mark_end(timings.sumo)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         _mark_end(timings.sumo)
+        errors = [
+            f"sumo failed: {getattr(exc, 'stderr', None) or str(exc)}",
+            f"log: {artifacts.sumo_log}",
+        ]
         return ScenarioResult(
             scenario_id=scenario.scenario_id,
             scenario_base_id=scenario.scenario_base_id,
             seed=scenario.seed,
-            scale=scenario.scale,
-            begin_filter=scenario.begin_filter,
-            end_time=scenario.end_time,
+            warmup_seconds=scenario.warmup_seconds,
+            unsat_seconds=scenario.unsat_seconds,
+            sat_seconds=scenario.sat_seconds,
+            ped_unsat_scale=scenario.ped_unsat_scale,
+            ped_sat_scale=scenario.ped_sat_scale,
+            veh_unsat_scale=scenario.veh_unsat_scale,
+            veh_sat_scale=scenario.veh_sat_scale,
             demand_dir=scenario.demand_dir,
             tripinfo=TripinfoMetrics(),
             queue=base_queue_metrics,
-            scale_probe=ScaleProbeResult(
-                enabled=scale_probe.enabled,
-                max_durable_scale=None,
-                attempts=1,
-            ),
+            scale_probe=probe_result,
+            waiting_p95_sat=None,
             fcd_note="sumo failed",
-            error=getattr(exc, "stderr", None) or str(exc),
+            error="; ".join(errors),
+            error_messages=errors,
             worker_id=scenario_worker,
             timings=timings,
         )
-
-    fine_step = scale_probe.fine_step if scale_probe.fine_step > 0 else 0.1
-    base_scale_key = _normalize_scale(scenario.scale, fine_step)
-    queue_cache: Dict[float, QueueDurabilityMetrics] = {base_scale_key: queue_metrics}
-    probe_result = ScaleProbeResult(
-        enabled=scale_probe.enabled,
-        max_durable_scale=None,
-        attempts=1,
-    )
-    if scale_probe.enabled:
-        _mark_start(timings.probe)
-        probe_result = _probe_scale_durability(
-            artifacts,
-            scenario,
-            queue_config=queue_config,
-            scale_probe=scale_probe,
-            output_format=output_format,
-            affinity_cpu=affinity_cpu,
-            queue_cache=queue_cache,
-            attempts=1,
-            status_queue=status_queue,
-            worker_id=worker_id,
-            use_pty=use_pty,
-            metrics_trace=metrics_trace,
-            output_root=output_root,
-            scale_mode=scenario.scale_mode,
-            base_network=artifacts.network,
-            timings=timings,
-        )
-        _mark_end(timings.probe)
 
     result = ScenarioResult(
         scenario_id=scenario.scenario_id,
         scenario_base_id=scenario.scenario_base_id,
         seed=scenario.seed,
-        scale=scenario.scale,
-        begin_filter=scenario.begin_filter,
-        end_time=scenario.end_time,
+        warmup_seconds=scenario.warmup_seconds,
+        unsat_seconds=scenario.unsat_seconds,
+        sat_seconds=scenario.sat_seconds,
+        ped_unsat_scale=scenario.ped_unsat_scale,
+        ped_sat_scale=scenario.ped_sat_scale,
+        veh_unsat_scale=scenario.veh_unsat_scale,
+        veh_sat_scale=scenario.veh_sat_scale,
         demand_dir=scenario.demand_dir,
         tripinfo=tripinfo_metrics,
         queue=queue_metrics,
         scale_probe=probe_result,
+        waiting_p95_sat=waiting_p95_sat,
         fcd_note="n/a",
         error=None,
         worker_id=scenario_worker,
@@ -1524,7 +1687,7 @@ def run_scenario(
         worker_id=worker_id,
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
-        scale=scenario.scale,
+        scale=scenario.veh_unsat_scale,
         affinity_cpu=affinity_cpu,
         phase=WorkerPhase.DONE,
         label="done",
@@ -1547,7 +1710,7 @@ def run_batch(
     scale_probe: ScaleProbeConfig,
     results_csv: Path,
     max_workers: int = DEFAULT_MAX_WORKERS,
-    use_pty: bool | None = None,
+    use_pty: bool = False,
     metrics_trace: bool = False,
     output_format: OutputFormat = OutputFormat(),
 ) -> None:
@@ -1556,8 +1719,6 @@ def run_batch(
     if not scenario_list:
         return
 
-    if use_pty is None:
-        use_pty = bool(os.environ.get("SUMO_BATCH_USE_PTY", "").strip())
     workers = min(max_workers, len(scenario_list))
     affinity = _affinity_plan(workers)
     results: List[ScenarioResult] = []
@@ -1571,7 +1732,7 @@ def run_batch(
             worker_id=idx % workers,
             scenario_id=scenario.scenario_id,
             seed=scenario.seed,
-            scale=scenario.scale,
+            scale=scenario.veh_unsat_scale,
             affinity_cpu=affinity[idx % workers],
             phase=WorkerPhase.IDLE,
             label="queued",
@@ -1624,7 +1785,7 @@ def run_batch(
                     worker_id=worker_slot,
                     scenario_id=result.scenario_id,
                     seed=result.seed,
-                    scale=result.scale,
+                    scale=result.veh_unsat_scale,
                     affinity_cpu=affinity[worker_slot],
                     phase=WorkerPhase.ERROR,
                     label="error",
@@ -1649,12 +1810,23 @@ def run_batch(
 def _append_results(path: Path, results: Sequence[ScenarioResult]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     header_needed = not path.exists()
+    probe_enabled = any(r.scale_probe.enabled for r in results)
+    columns = RESULT_COLUMNS_PROBE if probe_enabled else RESULT_COLUMNS_NO_PROBE
     with path.open("a", newline="", encoding="utf-8") as fp:
-        writer = csv.DictWriter(fp, fieldnames=RESULT_COLUMNS)
+        writer = csv.DictWriter(fp, fieldnames=columns)
         if header_needed:
             writer.writeheader()
         for result in results:
-            writer.writerow(_result_to_row(result))
+            row = _result_to_row(result, include_probe_columns=probe_enabled)
+            writer.writerow(row)
+
+
+def _format_error_field(result: ScenarioResult) -> str:
+    errors: List[str] = []
+    errors.extend([msg for msg in result.error_messages if msg])
+    if result.error and result.error not in errors:
+        errors.append(result.error)
+    return "; ".join(errors)
 
 
 def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path | None) -> None:
@@ -1695,43 +1867,57 @@ def _compress_artifacts(artifacts: RunArtifacts, *, level: int, log_path: Path |
             _debug_log(log_path, f"[compress] failed {src.name}: {exc}")
 
 
-def _result_to_row(result: ScenarioResult) -> dict:
+def _result_to_row(result: ScenarioResult, *, include_probe_columns: bool) -> dict:
     build_start, build_end = _timing_to_strings(result.timings.build)
     sumo_start, sumo_end = _timing_to_strings(result.timings.sumo)
-    postprocess_start, postprocess_end = _timing_to_strings(result.timings.postprocess)
+    metrics_start, metrics_end = _timing_to_strings(result.timings.metrics)
     probe_start, probe_end = _timing_to_strings(result.timings.probe)
-    return {
+    row = {
         "scenario_id": result.scenario_id,
         "scenario_base_id": result.scenario_base_id,
         "seed": result.seed,
-        "scale": result.scale,
-        "begin_filter": result.begin_filter,
-        "end_time": result.end_time,
+        "warmup_seconds": _fmt(result.warmup_seconds),
+        "unsat_seconds": _fmt(result.unsat_seconds),
+        "sat_seconds": _fmt(result.sat_seconds),
+        "ped_unsat_scale": _fmt(result.ped_unsat_scale),
+        "ped_sat_scale": _fmt(result.ped_sat_scale),
+        "veh_unsat_scale": _fmt(result.veh_unsat_scale),
+        "veh_sat_scale": _fmt(result.veh_sat_scale),
         "demand_dir": str(result.demand_dir),
         "vehicle_count": result.tripinfo.vehicle_count,
         "person_count": result.tripinfo.person_count,
         "vehicle_mean_timeLoss": _fmt(result.tripinfo.vehicle_mean_time_loss),
         "person_mean_timeLoss": _fmt(result.tripinfo.person_mean_time_loss),
         "person_mean_routeLength": _fmt(result.tripinfo.person_mean_route_length),
-        "queue_threshold_steps": result.queue.threshold_steps,
-        "queue_threshold_length": _fmt(result.queue.threshold_length),
-        "queue_first_over_saturation_time": _fmt(result.queue.first_failure_time),
-        "queue_is_durable": "True" if result.queue.is_durable else "False",
-        "scale_probe_enabled": str(result.scale_probe.enabled),
-        "scale_probe_max_durable_scale": _fmt(result.scale_probe.max_durable_scale),
-        "scale_probe_attempts": result.scale_probe.attempts,
-        "fcd_note": result.fcd_note,
-        "error_note": result.error or "",
+        "waiting_p95_sat": _fmt(result.waiting_p95_sat),
         "worker_id": result.worker_id if result.worker_id is not None else "",
         "build_start": build_start,
         "build_end": build_end,
         "sumo_start": sumo_start,
         "sumo_end": sumo_end,
-        "postprocess_start": postprocess_start,
-        "postprocess_end": postprocess_end,
-        "probe_start": probe_start,
-        "probe_end": probe_end,
+        "metrics_start": metrics_start,
+        "metrics_end": metrics_end,
+        "error": _format_error_field(result),
     }
+    if include_probe_columns:
+        if result.scale_probe.enabled:
+            row.update(
+                {
+                    "queue_threshold_steps": result.queue.threshold_steps,
+                    "queue_threshold_length": _fmt(result.queue.threshold_length),
+                    "queue_first_over_saturation_time": _fmt(result.queue.first_failure_time),
+                    "queue_is_durable": "True" if result.queue.is_durable else "False",
+                    "scale_probe_enabled": str(result.scale_probe.enabled),
+                    "scale_probe_max_durable_scale": _fmt(result.scale_probe.max_durable_scale),
+                    "scale_probe_attempts": result.scale_probe.attempts,
+                    "probe_start": probe_start,
+                    "probe_end": probe_end,
+                }
+            )
+        else:
+            for key in QUEUE_PROBE_COLUMNS:
+                row[key] = ""
+    return row
 
 
 def _fmt(value) -> str | float:
